@@ -1,0 +1,47 @@
+[package]
+name = "eth-wallet-core"
+description = "Core wallet logic — keyring, provider, router, explainer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+txguard = { path = "../txguard" }
+
+# Ethereum
+alloy-primitives = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-transport-http = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
+alloy-network = { workspace = true }
+alloy-consensus = { workspace = true }
+alloy-signer = { workspace = true }
+alloy-signer-local = { workspace = true }
+alloy-chains = { workspace = true }
+alloy-eips = { workspace = true }
+
+# Crypto (key encryption)
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+
+# Async
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
