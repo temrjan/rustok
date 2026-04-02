@@ -1,4 +1,4 @@
-//! # eth-wallet-core
+//! # qallet-core
 //!
 //! Core wallet logic: provider, keyring, router, explainer.
 //!

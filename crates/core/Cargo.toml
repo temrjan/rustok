@@ -1,5 +1,5 @@
 [package]
-name = "eth-wallet-core"
+name = "qallet-core"
 description = "Core wallet logic — keyring, provider, router, explainer"
 version.workspace = true
 edition.workspace = true

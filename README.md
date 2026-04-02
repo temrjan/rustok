@@ -21,7 +21,7 @@ cargo build
 cargo test
 
 # CLI help
-cargo run -p eth-wallet-cli -- --help
+cargo run -p qallet -- --help
 ```
 
 ## CLI Examples

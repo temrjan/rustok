@@ -1,6 +1,6 @@
 [package]
-name = "eth-wallet-api"
-description = "HTTP API server for txguard and eth-wallet"
+name = "qallet-api"
+description = "HTTP API server for txguard and qallet wallet"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

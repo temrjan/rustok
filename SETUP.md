@@ -103,7 +103,7 @@ qallet/
    - CLI: `qallet wallet send --to 0x... --amount 0.1 --keystore wallet.json --password pwd`
    - Safety: txguard check mandatory, `--testnet` по умолчанию
 
-2. **Переименовать crates** — `eth-wallet-cli` → `qallet`, `eth-wallet-core` → `qallet-core`
+2. ~~**Переименовать crates**~~ — DONE (`qallet`, `qallet-core`, `qallet-api`)
 
 ### Потом
 3. **HTTP API** (axum) — POST /analyze, POST /send, GET /balance

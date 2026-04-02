@@ -157,7 +157,7 @@ fn cmd_analyze(to: &str, data: &str, value: &str) {
 // ─── wallet commands ────────────────────────────────────────────────
 
 fn cmd_wallet_new(password: &str, output: Option<&str>) {
-    let keyring = eth_wallet_core::keyring::LocalKeyring::generate(password)
+    let keyring = qallet_core::keyring::LocalKeyring::generate(password)
         .unwrap_or_else(|e| exit_error(&format!("Key generation failed: {e}")));
 
     let address = keyring.address();
@@ -187,7 +187,7 @@ fn cmd_wallet_new(password: &str, output: Option<&str>) {
 }
 
 async fn cmd_wallet_balance(address_str: &str, include_testnet: bool) {
-    use eth_wallet_core::provider::MultiProvider;
+    use qallet_core::provider::MultiProvider;
 
     let address = address_str
         .parse::<alloy_primitives::Address>()
@@ -218,7 +218,7 @@ fn cmd_wallet_info(keystore_path: &str, password: &str) {
     let encrypted = alloy_primitives::hex::decode(encrypted_hex)
         .unwrap_or_else(|e| exit_error(&format!("Invalid hex: {e}")));
 
-    let keyring = eth_wallet_core::keyring::LocalKeyring::from_encrypted(&encrypted, password)
+    let keyring = qallet_core::keyring::LocalKeyring::from_encrypted(&encrypted, password)
         .unwrap_or_else(|e| exit_error(&format!("Decryption failed: {e}")));
 
     let info = serde_json::json!({
