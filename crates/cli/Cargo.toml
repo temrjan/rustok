@@ -17,6 +17,7 @@ alloy-provider = { workspace = true }
 alloy-network = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 reqwest = { workspace = true }
+rpassword = "7"
 clap = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }

@@ -3,10 +3,10 @@
 //! Usage:
 //!   qallet decode  --to 0x... --data 0x...                              # Parse calldata
 //!   qallet analyze --to 0x... --data 0x...                              # Security analysis
-//!   qallet wallet new --password <pwd>                                   # Generate wallet
-//!   qallet wallet balance <address>                                      # Unified balance
-//!   qallet wallet info --keystore <path> --password <pwd>                # Show wallet info
-//!   qallet wallet send --keystore <path> --password <pwd> --to 0x... --amount 0.1  # Send ETH
+//!   qallet wallet new                                                     # Generate wallet
+//!   qallet wallet balance <address>                                       # Unified balance
+//!   qallet wallet info --keystore <path>                                  # Show wallet info
+//!   qallet wallet send --keystore <path> --to 0x... --amount 0.1          # Send ETH
 
 use alloy_provider::Provider;
 use clap::{Parser, Subcommand};
@@ -57,9 +57,9 @@ enum Commands {
 enum WalletAction {
     /// Generate a new wallet (encrypted keystore).
     New {
-        /// Password for encrypting the private key.
+        /// Password (if omitted, prompts interactively; env: QALLET_PASSWORD).
         #[arg(long)]
-        password: String,
+        password: Option<String>,
         /// Output keystore file path (default: ./<address>.json).
         #[arg(long)]
         output: Option<String>,
@@ -79,9 +79,9 @@ enum WalletAction {
         /// Path to keystore JSON file.
         #[arg(long)]
         keystore: String,
-        /// Password to decrypt the keystore.
+        /// Password (if omitted, prompts interactively; env: QALLET_PASSWORD).
         #[arg(long)]
-        password: String,
+        password: Option<String>,
     },
 
     /// Send ETH to an address (txguard check mandatory).
@@ -89,9 +89,9 @@ enum WalletAction {
         /// Path to keystore JSON file.
         #[arg(long)]
         keystore: String,
-        /// Password to decrypt the keystore.
+        /// Password (if omitted, prompts interactively; env: QALLET_PASSWORD).
         #[arg(long)]
-        password: String,
+        password: Option<String>,
         /// Recipient address (0x...).
         #[arg(long)]
         to: String,
@@ -116,11 +116,17 @@ async fn main() {
         Commands::Decode { to, data, value } => cmd_decode(&to, &data, &value),
         Commands::Analyze { to, data, value } => cmd_analyze(&to, &data, &value),
         Commands::Wallet { action } => match action {
-            WalletAction::New { password, output } => cmd_wallet_new(&password, output.as_deref()),
+            WalletAction::New { password, output } => {
+                let pwd = resolve_password_new(password);
+                cmd_wallet_new(&pwd, output.as_deref());
+            }
             WalletAction::Balance { address, testnet } => {
                 cmd_wallet_balance(&address, testnet).await;
             }
-            WalletAction::Info { keystore, password } => cmd_wallet_info(&keystore, &password),
+            WalletAction::Info { keystore, password } => {
+                let pwd = resolve_password(password);
+                cmd_wallet_info(&keystore, &pwd);
+            }
             WalletAction::Send {
                 keystore,
                 password,
@@ -129,7 +135,8 @@ async fn main() {
                 chain_id,
                 testnet,
             } => {
-                cmd_wallet_send(&keystore, &password, &to, &amount, chain_id, testnet).await;
+                let pwd = resolve_password(password);
+                cmd_wallet_send(&keystore, &pwd, &to, &amount, chain_id, testnet).await;
             }
         },
     }
@@ -464,6 +471,47 @@ fn parse_eth_amount(amount: &str) -> alloy_primitives::U256 {
         }
         _ => exit_error("Invalid amount format (expected e.g., '0.1' or '1')"),
     }
+}
+
+// ─── password resolution ────────────────────────────────────────────
+
+/// Resolve password from: CLI arg → QALLET_PASSWORD env → interactive prompt.
+fn resolve_password(arg: Option<String>) -> String {
+    if let Some(p) = arg {
+        return p;
+    }
+
+    if let Ok(env_pwd) = std::env::var("QALLET_PASSWORD") {
+        if !env_pwd.is_empty() {
+            return env_pwd;
+        }
+    }
+
+    rpassword::prompt_password("Enter password: ")
+        .unwrap_or_else(|e| exit_error(&format!("failed to read password: {e}\nUse --password or QALLET_PASSWORD env")))
+}
+
+/// Resolve password for wallet creation (prompts twice for confirmation).
+fn resolve_password_new(arg: Option<String>) -> String {
+    if let Some(p) = arg {
+        return p;
+    }
+
+    if let Ok(env_pwd) = std::env::var("QALLET_PASSWORD") {
+        if !env_pwd.is_empty() {
+            return env_pwd;
+        }
+    }
+
+    let p1 = rpassword::prompt_password("Enter password: ")
+        .unwrap_or_else(|e| exit_error(&format!("failed to read password: {e}")));
+    let p2 = rpassword::prompt_password("Confirm password: ")
+        .unwrap_or_else(|e| exit_error(&format!("failed to read password: {e}")));
+
+    if p1 != p2 {
+        exit_error("passwords do not match");
+    }
+    p1
 }
 
 // ─── helpers ────────────────────────────────────────────────────────
