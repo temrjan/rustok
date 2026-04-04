@@ -62,12 +62,8 @@ fn check_send_to_contract_address(parsed: &ParsedTransaction, _findings: &mut Ve
     if !matches!(parsed.action, TransactionAction::NativeTransfer) {
         return;
     }
-    if parsed.value.is_zero() {
-        return;
-    }
-
-    // We can't check if it's a contract without RPC access (Phase 2).
-    // Placeholder: will be enhanced with provider-based contract detection.
+    // Skip zero-value transfers — nothing at risk.
+    // Non-zero value: contract detection requires RPC access (Phase 2 placeholder).
 }
 
 #[cfg(test)]
