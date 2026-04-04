@@ -57,13 +57,9 @@ fn check_known_scam_recipient(
 ///
 /// Sending ETH directly to a contract without calling a function is unusual
 /// and may indicate a mistake or a trap contract.
-fn check_send_to_contract_address(parsed: &ParsedTransaction, _findings: &mut Vec<Finding>) {
-    // This rule only applies to native transfers with value
-    if !matches!(parsed.action, TransactionAction::NativeTransfer) {
-        return;
-    }
-    // Skip zero-value transfers — nothing at risk.
-    // Non-zero value: contract detection requires RPC access (Phase 2 placeholder).
+fn check_send_to_contract_address(_parsed: &ParsedTransaction, _findings: &mut Vec<Finding>) {
+    // Phase 2 placeholder: requires RPC access to detect contract addresses.
+    // Will check: is recipient a contract? + value > 0 without calldata = suspicious.
 }
 
 #[cfg(test)]
