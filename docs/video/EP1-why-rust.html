@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EP1: Зачем писать кошелёк с нуля на Rust?</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro', 'Segoe UI', sans-serif; background: #0a0a0a; color: #e0e0e0; line-height: 1.6; padding: 40px 20px; }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  .ep-header { border-bottom: 1px solid #222; padding-bottom: 32px; margin-bottom: 40px; }
+  .ep-number { font-size: 13px; letter-spacing: 2px; color: #666; text-transform: uppercase; margin-bottom: 8px; }
+  .ep-title { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 16px; }
+  .ep-meta { display: flex; gap: 24px; flex-wrap: wrap; }
+  .ep-meta-item { font-size: 13px; color: #888; }
+  .ep-meta-item span { color: #c0c0c0; }
+
+  .scene { background: #111; border: 1px solid #1a1a1a; border-radius: 12px; padding: 28px; margin-bottom: 24px; }
+  .scene:hover { border-color: #333; }
+  .scene-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .scene-id { font-size: 11px; letter-spacing: 1.5px; color: #555; text-transform: uppercase; }
+  .scene-time { font-size: 13px; font-family: 'SF Mono', 'Fira Code', monospace; color: #4a9eff; background: #0d1f3c; padding: 4px 10px; border-radius: 6px; }
+  .scene-title { font-size: 20px; font-weight: 600; color: #fff; margin-bottom: 20px; }
+
+  .scene-section { margin-bottom: 16px; }
+  .scene-section:last-child { margin-bottom: 0; }
+  .section-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .label-screen { color: #4a9eff; }
+  .label-camera { color: #ff6b6b; }
+  .label-voice { color: #51cf66; }
+  .label-action { color: #cc5de8; }
+  .section-content { font-size: 15px; color: #bbb; }
+
+  pre { background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 8px; padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; color: #a0d0ff; overflow-x: auto; margin: 8px 0; }
+  .voice-text { background: #0a1a0a; border-left: 3px solid #2d6a2d; padding: 12px 16px; border-radius: 0 8px 8px 0; font-size: 15px; color: #c0e0c0; font-style: italic; }
+  .slide-ref { display: inline-block; background: #1a0a2a; border: 1px solid #2a1a3a; color: #cc5de8; font-size: 12px; padding: 2px 10px; border-radius: 4px; font-family: 'SF Mono', monospace; }
+
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .dot-blue { background: #4a9eff; }
+  .dot-red { background: #ff6b6b; }
+  .dot-green { background: #51cf66; }
+  .dot-purple { background: #cc5de8; }
+
+  .notes { background: #111; border: 1px solid #1a1a1a; border-radius: 12px; padding: 28px; margin-top: 40px; }
+  .notes h2 { font-size: 18px; color: #fff; margin-bottom: 20px; }
+  .notes h3 { font-size: 14px; color: #888; margin-top: 16px; margin-bottom: 8px; }
+  .notes ul { list-style: none; padding: 0; }
+  .notes li { padding: 4px 0; font-size: 14px; color: #999; }
+  .notes li::before { content: ""; display: inline-block; width: 6px; height: 6px; background: #333; border-radius: 50%; margin-right: 10px; vertical-align: middle; }
+
+  .legend { display: flex; gap: 20px; margin-bottom: 32px; flex-wrap: wrap; }
+  .legend-item { font-size: 12px; color: #666; display: flex; align-items: center; gap: 6px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- HEADER -->
+  <div class="ep-header">
+    <div class="ep-number">Episode 1 of 5</div>
+    <h1 class="ep-title">Зачем писать кошелёк с нуля на Rust?</h1>
+    <div class="ep-meta">
+      <div class="ep-meta-item">Фича: <span>Первый open-source Rust Ethereum wallet</span></div>
+      <div class="ep-meta-item">Хронометраж: <span>2:30 – 3:00</span></div>
+      <div class="ep-meta-item">Платформа: <span>LinkedIn + YouTube (16:9)</span></div>
+    </div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="legend-item"><span class="dot dot-blue"></span> Экран</div>
+    <div class="legend-item"><span class="dot dot-red"></span> Кружок автора</div>
+    <div class="legend-item"><span class="dot dot-green"></span> Озвучка</div>
+    <div class="legend-item"><span class="dot dot-purple"></span> Действие</div>
+    <div class="legend-item"><span class="slide-ref">slides.html #N</span> = открыть слайд N в презентации</div>
+  </div>
+
+  <!-- КАДР 1 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 1 — Hook</div>
+      <div class="scene-time">0:00 – 0:08</div>
+    </div>
+    <div class="scene-title">Зацепка</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">Открыть <span class="slide-ref">slides.html #1</span> — Title слайд на полный экран (F11 в браузере)</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">
+        Слайд: <strong>Qallet</strong> — "Chain abstraction + transaction security engine" — "100% Rust. Zero Compromise."
+      </div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Смотришь в камеру, пауза, лёгкий кивок.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">В мире нет ни одного open-source Ethereum кошелька на Rust. Ни одного. Мы его пишем.</div>
+    </div>
+  </div>
+
+  <!-- КАДР 2 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 2 — Проблема</div>
+      <div class="scene-time">0:08 – 0:22</div>
+    </div>
+    <div class="scene-title">Зачем это нужно</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">Переключить на <span class="slide-ref">slides.html #2</span> — Problem (4 карточки)</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">Слайд с 4 проблемами: Fragmented balance, Manual bridges, Blind signing, Seed phrases.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Говоришь серьёзно, жест рукой на экран.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">Ethereum в 2026 — это десятки L2 сетей. Баланс раскидан, мосты ручные, пользователь не понимает что подписывает, а seed-фразы на бумажке. Ни один кошелёк не решает все четыре проблемы одновременно.</div>
+    </div>
+  </div>
+
+  <!-- КАДР 3 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 3 — Intro проекта</div>
+      <div class="scene-time">0:22 – 0:38</div>
+    </div>
+    <div class="scene-title">Что за проект</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">Переключиться на браузер → GitHub repo <code>temrjan/qallet</code>. Медленный скролл по README.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">GitHub: README с архитектурой, списком команд, таблицей security rules.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Говоришь, жесты руками.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">Это Qallet — Ethereum кошелёк с chain abstraction и встроенным security engine. 100% Rust. Один разработчик. Я пишу его вместе с Claude Code — AI-ассистентом от Anthropic — по системе стандартов, которую мы называем Codex.</div>
+    </div>
+  </div>
+
+  <!-- КАДР 4 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 4 — Архитектура + Стек</div>
+      <div class="scene-time">0:38 – 1:00</div>
+    </div>
+    <div class="scene-title">4 crates, серьёзный стек</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">
+        Переключить на <span class="slide-ref">slides.html #5</span> — Architecture (4 crates)<br>
+        Через 10 сек переключить на <span class="slide-ref">slides.html #4</span> — Tech Stack (pills)
+      </div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">Сначала 4 карточки крейтов, потом цветные pills с технологиями.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Комментируешь каждый крейт, потом технологии.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">4 крейта в workspace. txguard — движок безопасности, самостоятельная библиотека. core — кошелёк: ключи, провайдер, роутер. cli — командная строка. api — HTTP сервер. Стек: alloy-rs, revm для EVM симуляции, AES-256-GCM и Argon2 для криптографии, tokio для async. Больше 4000 строк Rust кода.</div>
+    </div>
+  </div>
+
+  <!-- КАДР 5 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 5 — Тесты + CLI</div>
+      <div class="scene-time">1:00 – 1:25</div>
+    </div>
+    <div class="scene-title">Рабочий продукт</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">Переключиться на терминал (Cmd+Tab). Выполнить 2 команды.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">
+        Терминал. Команда 1:
+        <pre>cargo test --workspace</pre>
+        Тесты бегут → <code>69 passed; 0 failed</code>
+        <br><br>
+        Команда 2:
+        <pre>cargo run -p qallet -- --help</pre>
+        Список команд: decode, analyze, wallet.
+      </div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Доволен после тестов. Указываешь на экран при help.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">69 тестов. Ноль фейлов. Реальные данные — адреса USDT, Uniswap Router, known scam адреса. CLI уже рабочий: декодирование, анализ безопасности, кошелёк — создать, баланс, отправить.</div>
+    </div>
+  </div>
+
+  <!-- КАДР 6 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 6 — txguard Demo</div>
+      <div class="scene-time">1:25 – 2:05</div>
+    </div>
+    <div class="scene-title">Security engine в действии</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">Остаёмся в терминале. Две команды подряд. Между ними пауза 2 сек.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">
+        <strong>Команда 1 — безопасный transfer (1 ETH на адрес Виталика):</strong>
+        <pre>cargo run -p qallet -- analyze \
+  --to 0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045 \
+  --value 1000000000000000000</pre>
+        Результат: <code>"action": "allow"</code>, <code>"risk_score": 0</code>
+        <br><br>
+        <em style="color:#666;">Пауза 2 сек.</em>
+        <br><br>
+        <strong>Команда 2 — unlimited approval на USDT (опасно):</strong>
+        <pre>cargo run -p qallet -- analyze \
+  --to 0xdAC17F958D2ee523a2206206994597C13D831ec7 \
+  --data 0x095ea7b3000000000000000000000000000000000000000000000000000000000000deadffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff</pre>
+        Результат: <code>"action": "warn"</code>, <code>"risk_score": 27</code>, finding: <code>unlimited_approval</code>
+      </div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Спокойно на allow. Серьёзное лицо на warn — поднять бровь.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">Обычный перевод — allow, risk score ноль. Всё чисто. А вот это — approve на бесконечную сумму USDT токенов. txguard ловит: warn, risk score 27, finding — unlimited approval. Если бы это был scam адрес — транзакция была бы заблокирована полностью.</div>
+    </div>
+  </div>
+
+  <!-- КАДР 7 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 7 — Сравнение с конкурентами</div>
+      <div class="scene-time">2:05 – 2:35</div>
+    </div>
+    <div class="scene-title">Почему Rust, почему open source</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">Переключить на <span class="slide-ref">slides.html #9</span> — Competitive Landscape (таблица)</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">Таблица: MetaMask vs Rabby vs Particle vs Qallet. Колонка Qallet подсвечена синим.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Ключевой момент. Говоришь уверенно, смотришь в камеру.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">MetaMask использует Blockaid — закрытый сервис. Rabby отправляет данные на сервер DeBank. Наш txguard работает локально. Открытый исходный код. Любой кошелёк сможет подключить его как Rust библиотеку — одной строкой в Cargo.toml. И главное — это Rust. Не JavaScript. Memory safety без garbage collector. Для приложения которое хранит приватные ключи — это не бонус, это необходимость.</div>
+    </div>
+  </div>
+
+  <!-- КАДР 8 -->
+  <div class="scene">
+    <div class="scene-header">
+      <div class="scene-id">Кадр 8 — Tagline</div>
+      <div class="scene-time">2:35 – 2:45</div>
+    </div>
+    <div class="scene-title">Закрытие</div>
+
+    <div class="scene-section">
+      <div class="section-label label-action"><span class="dot dot-purple"></span>Действие</div>
+      <div class="section-content">Переключить на <span class="slide-ref">slides.html #11</span> — Closing</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-screen"><span class="dot dot-blue"></span>Экран</div>
+      <div class="section-content">Большая "Q", "Qallet", "100% Rust. Open Source. One Developer.", github ссылка.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-camera"><span class="dot dot-red"></span>Кружок автора</div>
+      <div class="section-content">Смотришь в камеру, кивок.</div>
+    </div>
+
+    <div class="scene-section">
+      <div class="section-label label-voice"><span class="dot dot-green"></span>Озвучка (RU)</div>
+      <div class="voice-text">Qallet. 100% Rust. Zero compromise. Ссылка на GitHub в описании.</div>
+    </div>
+  </div>
+
+  <!-- ПОРЯДОК ПЕРЕКЛЮЧЕНИЙ -->
+  <div class="notes">
+    <h2>Порядок переключений экрана</h2>
+    <ul>
+      <li><strong>0:00</strong> — slides.html слайд #1 (Title) — полный экран F11</li>
+      <li><strong>0:08</strong> — slides.html слайд #2 (Problem)</li>
+      <li><strong>0:22</strong> — Cmd+Tab → браузер GitHub repo temrjan/qallet</li>
+      <li><strong>0:38</strong> — slides.html слайд #5 (Architecture)</li>
+      <li><strong>0:48</strong> — slides.html слайд #4 (Tech Stack)</li>
+      <li><strong>1:00</strong> — Cmd+Tab → терминал → cargo test</li>
+      <li><strong>1:15</strong> — терминал → cargo run -p qallet -- --help</li>
+      <li><strong>1:25</strong> — терминал → analyze (safe transfer)</li>
+      <li><strong>1:45</strong> — терминал → analyze (unlimited approval)</li>
+      <li><strong>2:05</strong> — Cmd+Tab → slides.html слайд #9 (Comparison)</li>
+      <li><strong>2:35</strong> — slides.html слайд #11 (Closing)</li>
+    </ul>
+
+    <h2>Подготовка перед записью</h2>
+
+    <h3>Окна (подготовить заранее)</h3>
+    <ul>
+      <li>Браузер 1: slides.html на слайде #1, полный экран (F11)</li>
+      <li>Браузер 2: github.com/temrjan/qallet (отдельная вкладка или окно)</li>
+      <li>Терминал: шрифт 16-18pt, тёмная тема, cd в /Users/avangard/Workspace/projects/qallet</li>
+    </ul>
+
+    <h3>Терминал: команды подготовить заранее</h3>
+    <ul>
+      <li>Предварительно <code>cargo build --workspace</code> — чтобы не ждать компиляцию</li>
+      <li>Скопировать 4 команды в файл — вставлять через Cmd+V, не набирать</li>
+    </ul>
+
+    <h3>OBS настройки</h3>
+    <ul>
+      <li>Display Capture — весь экран</li>
+      <li>Webcam — кружок, правый нижний угол, 15-20% экрана</li>
+      <li>Audio — микрофон</li>
+      <li>Запись: 1920x1080, 30fps, mkv (потом ремукс в mp4)</li>
+    </ul>
+
+    <h3>Монтаж</h3>
+    <ul>
+      <li>Jump cut между переключениями окон (убрать Cmd+Tab)</li>
+      <li>Jump cut на cargo test (убрать время компиляции, оставить бегущие тесты + результат)</li>
+      <li>JSON output: можно замедлить или подсветить ключевые поля</li>
+    </ul>
+
+    <h3>Музыка</h3>
+    <ul>
+      <li>Лёгкий ambient/electronic на фоне</li>
+      <li>Громче в hook (кадр 1) и tagline (кадр 8)</li>
+      <li>Тише во время озвучки</li>
+    </ul>
+  </div>
+
+</div>
+</body>
+</html>

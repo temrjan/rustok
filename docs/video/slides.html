@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qallet — Presentation</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif; background: #050505; color: #e0e0e0; overflow: hidden; height: 100vh; width: 100vw; }
+
+  /* Slide container */
+  .deck { position: relative; width: 100vw; height: 100vh; }
+  .slide { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 60px 80px; opacity: 0; visibility: hidden; transition: opacity 0.5s ease, transform 0.5s ease; transform: translateX(40px); }
+  .slide.active { opacity: 1; visibility: visible; transform: translateX(0); }
+  .slide.prev { opacity: 0; transform: translateX(-40px); }
+
+  /* Navigation */
+  .nav { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; z-index: 100; }
+  .nav-dots { display: flex; gap: 8px; }
+  .nav-dot { width: 8px; height: 8px; border-radius: 50%; background: #333; cursor: pointer; transition: all 0.3s; border: none; }
+  .nav-dot.active { background: #4a9eff; width: 24px; border-radius: 4px; }
+  .nav-dot:hover { background: #555; }
+  .nav-counter { font-size: 12px; color: #555; font-family: 'SF Mono', monospace; margin-left: 12px; }
+
+  /* Keyboard hint */
+  .hint { position: fixed; bottom: 32px; right: 40px; font-size: 11px; color: #333; z-index: 100; }
+  .hint kbd { background: #1a1a1a; border: 1px solid #333; border-radius: 4px; padding: 2px 6px; font-family: 'SF Mono', monospace; font-size: 10px; }
+
+  /* Common slide elements */
+  .slide-label { font-size: 12px; letter-spacing: 3px; color: #4a9eff; text-transform: uppercase; margin-bottom: 20px; }
+  .slide-title { font-size: 56px; font-weight: 700; color: #fff; text-align: center; line-height: 1.2; margin-bottom: 16px; }
+  .slide-subtitle { font-size: 22px; color: #888; text-align: center; font-weight: 300; max-width: 700px; }
+  .slide-large { font-size: 120px; font-weight: 800; color: #fff; line-height: 1; }
+  .slide-body { font-size: 20px; color: #aaa; text-align: center; max-width: 700px; line-height: 1.7; }
+
+  /* Accent colors */
+  .accent { color: #4a9eff; }
+  .accent-green { color: #51cf66; }
+  .accent-orange { color: #ff922b; }
+  .accent-red { color: #ff6b6b; }
+  .accent-dim { color: #555; }
+
+  /* Grid layouts */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; width: 100%; max-width: 900px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 32px; width: 100%; max-width: 1000px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; width: 100%; max-width: 900px; }
+
+  /* Card */
+  .card { background: #0e0e0e; border: 1px solid #1a1a1a; border-radius: 16px; padding: 32px; text-align: left; }
+  .card:hover { border-color: #252525; }
+  .card-icon { font-size: 32px; margin-bottom: 16px; }
+  .card-title { font-size: 18px; font-weight: 600; color: #fff; margin-bottom: 8px; }
+  .card-desc { font-size: 14px; color: #777; line-height: 1.5; }
+
+  /* Stat */
+  .stat { text-align: center; }
+  .stat-value { font-size: 64px; font-weight: 800; color: #fff; line-height: 1; }
+  .stat-label { font-size: 14px; color: #666; margin-top: 8px; letter-spacing: 1px; text-transform: uppercase; }
+
+  /* Comparison table */
+  .comp-table { width: 100%; max-width: 850px; border-collapse: collapse; }
+  .comp-table th { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #555; padding: 12px 20px; text-align: left; border-bottom: 1px solid #1a1a1a; }
+  .comp-table td { padding: 16px 20px; font-size: 16px; color: #888; border-bottom: 1px solid #111; }
+  .comp-table td.win { color: #4a9eff; font-weight: 600; }
+  .comp-table tr:last-child td { border-bottom: none; }
+  .comp-table .col-label { color: #555; font-size: 14px; }
+
+  /* Tech stack pills */
+  .pills { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; max-width: 800px; }
+  .pill { background: #111; border: 1px solid #222; border-radius: 100px; padding: 10px 22px; font-size: 15px; color: #ccc; display: flex; align-items: center; gap: 8px; }
+  .pill-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .pill-core { background: #4a9eff; }
+  .pill-crypto { background: #ff922b; }
+  .pill-infra { background: #51cf66; }
+  .pill-tool { background: #cc5de8; }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: center; gap: 0; max-width: 900px; }
+  .flow-step { background: #111; border: 1px solid #222; border-radius: 12px; padding: 20px 24px; text-align: center; flex: 1; }
+  .flow-step-title { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+  .flow-step-desc { font-size: 12px; color: #666; }
+  .flow-arrow { color: #333; font-size: 20px; padding: 0 4px; flex-shrink: 0; }
+
+  /* Security rules */
+  .rule-list { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 700px; }
+  .rule { display: flex; align-items: center; gap: 16px; background: #0e0e0e; border: 1px solid #1a1a1a; border-radius: 10px; padding: 16px 20px; }
+  .rule-severity { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; font-weight: 700; width: 80px; text-align: center; padding: 4px 0; border-radius: 4px; }
+  .sev-forbidden { background: #2a0a0a; color: #ff6b6b; }
+  .sev-danger { background: #2a1a0a; color: #ff922b; }
+  .sev-warning { background: #2a2a0a; color: #ffd43b; }
+  .sev-info { background: #0a1a2a; color: #4a9eff; }
+  .rule-name { font-size: 15px; color: #ccc; font-family: 'SF Mono', monospace; }
+  .rule-desc { font-size: 13px; color: #666; margin-left: auto; }
+
+  /* Tagline */
+  .tagline { font-size: 18px; letter-spacing: 4px; color: #333; text-transform: uppercase; margin-top: 32px; }
+
+  /* Logo */
+  .logo-q { font-size: 200px; font-weight: 900; color: #fff; line-height: 1; opacity: 0.05; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+
+  /* Arrow buttons */
+  .arrow { position: fixed; top: 50%; transform: translateY(-50%); z-index: 100; background: none; border: 1px solid #222; color: #888; font-size: 48px; width: 64px; height: 64px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; line-height: 1; padding: 0 0 4px 0; }
+  .arrow:hover { border-color: #4a9eff; color: #4a9eff; background: rgba(74,158,255,0.05); }
+  .arrow-left { left: 24px; }
+  .arrow-right { right: 24px; }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+  <!-- SLIDE 1: Title -->
+  <div class="slide active" data-slide="1">
+    <div class="slide-label">Open Source Ethereum Wallet</div>
+    <div class="slide-title">Qallet</div>
+    <div class="slide-subtitle">Chain abstraction + transaction security engine</div>
+    <div class="tagline">100% Rust &middot; Zero Compromise</div>
+  </div>
+
+  <!-- SLIDE 2: Problem -->
+  <div class="slide" data-slide="2">
+    <div class="slide-label">The Problem</div>
+    <div class="slide-title" style="font-size:42px;">Ethereum in 2026 is<br><span class="accent">fragmented</span></div>
+    <div style="height:40px"></div>
+    <div class="grid-4">
+      <div class="card">
+        <div class="card-icon">💸</div>
+        <div class="card-title">Fragmented balance</div>
+        <div class="card-desc">0.3 ETH on Ethereum, 0.5 on Arbitrum, 0.2 on Base. Formally 1 ETH — practically three wallets.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🌉</div>
+        <div class="card-title">Manual bridges</div>
+        <div class="card-desc">Want to spend on Base? Find a bridge, pay fees, wait 10 minutes.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">🔏</div>
+        <div class="card-title">Blind signing</div>
+        <div class="card-desc">Users don't understand what they sign. Unlimited approvals, permit phishing, drainer contracts.</div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📝</div>
+        <div class="card-title">Seed phrases</div>
+        <div class="card-desc">12 words on paper. Lost it — lost everything. Wrote it wrong — lost everything.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Stats -->
+  <div class="slide" data-slide="3">
+    <div class="slide-label">Current State</div>
+    <div style="height:20px"></div>
+    <div class="grid-3">
+      <div class="stat">
+        <div class="stat-value">4400<span class="accent">+</span></div>
+        <div class="stat-label">Lines of Rust</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">69</div>
+        <div class="stat-label">Tests passing</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">4</div>
+        <div class="stat-label">CI Jobs (parallel)</div>
+      </div>
+    </div>
+    <div style="height:40px"></div>
+    <div class="grid-3">
+      <div class="stat">
+        <div class="stat-value">8</div>
+        <div class="stat-label">Security Rules</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">6</div>
+        <div class="stat-label">Chains Supported</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">1</div>
+        <div class="stat-label">Developer</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Tech Stack -->
+  <div class="slide" data-slide="4">
+    <div class="slide-label">Tech Stack</div>
+    <div class="slide-title" style="font-size:36px; margin-bottom:40px;">Built with the best in class</div>
+    <div class="pills">
+      <div class="pill"><span class="pill-dot pill-core"></span>Rust (Edition 2024)</div>
+      <div class="pill"><span class="pill-dot pill-core"></span>alloy-rs 1.8</div>
+      <div class="pill"><span class="pill-dot pill-core"></span>revm v36</div>
+      <div class="pill"><span class="pill-dot pill-core"></span>tokio</div>
+      <div class="pill"><span class="pill-dot pill-crypto"></span>AES-256-GCM</div>
+      <div class="pill"><span class="pill-dot pill-crypto"></span>Argon2id</div>
+      <div class="pill"><span class="pill-dot pill-crypto"></span>secp256k1</div>
+      <div class="pill"><span class="pill-dot pill-crypto"></span>zeroize</div>
+      <div class="pill"><span class="pill-dot pill-infra"></span>axum</div>
+      <div class="pill"><span class="pill-dot pill-infra"></span>clap v4</div>
+      <div class="pill"><span class="pill-dot pill-infra"></span>GitHub Actions</div>
+      <div class="pill"><span class="pill-dot pill-tool"></span>Claude Code</div>
+      <div class="pill"><span class="pill-dot pill-tool"></span>Codex Standards</div>
+    </div>
+    <div style="height:32px"></div>
+    <div style="font-size:13px; color:#444; letter-spacing:1px;">
+      <span style="display:inline-flex;align-items:center;gap:6px;margin-right:20px;"><span class="pill-dot pill-core" style="width:6px;height:6px;display:inline-block;border-radius:50%;"></span> Core</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;margin-right:20px;"><span class="pill-dot pill-crypto" style="width:6px;height:6px;display:inline-block;border-radius:50%;"></span> Crypto</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;margin-right:20px;"><span class="pill-dot pill-infra" style="width:6px;height:6px;display:inline-block;border-radius:50%;"></span> Infrastructure</span>
+      <span style="display:inline-flex;align-items:center;gap:6px;"><span class="pill-dot pill-tool" style="width:6px;height:6px;display:inline-block;border-radius:50%;"></span> Workflow</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Architecture -->
+  <div class="slide" data-slide="5">
+    <div class="slide-label">Architecture</div>
+    <div class="slide-title" style="font-size:36px; margin-bottom:40px;">4 crates, clean separation</div>
+    <div class="grid-4">
+      <div class="card" style="border-color:#1a2a3a;">
+        <div class="card-title"><span class="accent">txguard</span></div>
+        <div class="card-desc" style="color:#aaa;">Transaction security engine. Parser, rules, simulator, enrichment. Independent crate — any wallet can use it.</div>
+      </div>
+      <div class="card" style="border-color:#1a2a1a;">
+        <div class="card-title"><span class="accent-green">qallet-core</span></div>
+        <div class="card-desc" style="color:#aaa;">Wallet logic. Encrypted keyring (AES-256-GCM + Argon2id), multi-chain provider, smart router, explainer.</div>
+      </div>
+      <div class="card" style="border-color:#2a2a1a;">
+        <div class="card-title"><span class="accent-orange">qallet (CLI)</span></div>
+        <div class="card-desc" style="color:#aaa;">Command-line interface. decode, analyze, wallet new/balance/info/send. Thin wrapper over core + txguard.</div>
+      </div>
+      <div class="card" style="border-color:#1a1a1a;">
+        <div class="card-title"><span class="accent-dim">qallet-api</span></div>
+        <div class="card-desc" style="color:#666;">HTTP API server (axum). POST /analyze, POST /send, GET /balance. Coming soon.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: txguard Flow -->
+  <div class="slide" data-slide="6">
+    <div class="slide-label">txguard — Transaction Firewall</div>
+    <div class="slide-title" style="font-size:32px; margin-bottom:40px;">Analyze before you sign</div>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-step-title">Parse</div>
+        <div class="flow-step-desc">Raw hex → action, token, amount, recipient</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-title">Rules</div>
+        <div class="flow-step-desc">8 security checks, risk score 0–100</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-title">Simulate</div>
+        <div class="flow-step-desc">revm fork — see what happens before signing</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-title">Enrich</div>
+        <div class="flow-step-desc">GoPlus threat intel — honeypots, scams</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color:#2a3a1a;">
+        <div class="flow-step-title" style="color:#51cf66;">Verdict</div>
+        <div class="flow-step-desc">Allow / Warn / Block</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Security Rules -->
+  <div class="slide" data-slide="7">
+    <div class="slide-label">Security Rules</div>
+    <div class="slide-title" style="font-size:32px; margin-bottom:32px;">8 rules, 4 severity levels</div>
+    <div class="rule-list">
+      <div class="rule">
+        <div class="rule-severity sev-forbidden">Forbidden</div>
+        <div class="rule-name">known_scam</div>
+        <div class="rule-desc">Address in scam database</div>
+      </div>
+      <div class="rule">
+        <div class="rule-severity sev-danger">Danger</div>
+        <div class="rule-name">permit_to_unknown</div>
+        <div class="rule-desc">EIP-2612 permit to unknown spender</div>
+      </div>
+      <div class="rule">
+        <div class="rule-severity sev-warning">Warning</div>
+        <div class="rule-name">unlimited_approval</div>
+        <div class="rule-desc">approve(spender, type(uint256).max)</div>
+      </div>
+      <div class="rule">
+        <div class="rule-severity sev-warning">Warning</div>
+        <div class="rule-name">set_approval_for_all</div>
+        <div class="rule-desc">NFT collection full access</div>
+      </div>
+      <div class="rule">
+        <div class="rule-severity sev-warning">Warning</div>
+        <div class="rule-name">permit_unlimited</div>
+        <div class="rule-desc">Permit with max value</div>
+      </div>
+      <div class="rule">
+        <div class="rule-severity sev-warning">Warning</div>
+        <div class="rule-name">unknown_function</div>
+        <div class="rule-desc">Unrecognized function selector</div>
+      </div>
+      <div class="rule">
+        <div class="rule-severity sev-info">Info</div>
+        <div class="rule-name">value_with_calldata</div>
+        <div class="rule-desc">ETH sent with contract call</div>
+      </div>
+      <div class="rule">
+        <div class="rule-severity sev-info">Info</div>
+        <div class="rule-name">send_to_contract</div>
+        <div class="rule-desc">Transfer to contract address</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Chains -->
+  <div class="slide" data-slide="8">
+    <div class="slide-label">Chain Abstraction</div>
+    <div class="slide-title" style="font-size:36px; margin-bottom:12px;">One balance. All chains.</div>
+    <div class="slide-subtitle" style="margin-bottom:40px;">User sees 1.0 ETH — not three lines on three networks.</div>
+    <div class="grid-3">
+      <div class="card" style="text-align:center;">
+        <div class="card-title">Ethereum</div>
+        <div class="card-desc">Chain ID: 1</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div class="card-title">Arbitrum One</div>
+        <div class="card-desc">Chain ID: 42161</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div class="card-title">Base</div>
+        <div class="card-desc">Chain ID: 8453</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div class="card-title">Optimism</div>
+        <div class="card-desc">Chain ID: 10</div>
+      </div>
+      <div class="card" style="text-align:center;">
+        <div class="card-title">zkSync Era</div>
+        <div class="card-desc">Chain ID: 324</div>
+      </div>
+      <div class="card" style="text-align:center; border-style:dashed;">
+        <div class="card-title" style="color:#666;">Sepolia</div>
+        <div class="card-desc">Testnet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Comparison -->
+  <div class="slide" data-slide="9">
+    <div class="slide-label">Competitive Landscape</div>
+    <div style="height:20px"></div>
+    <table class="comp-table">
+      <tr><th></th><th>MetaMask</th><th>Rabby</th><th>Particle</th><th>Qallet</th></tr>
+      <tr><td class="col-label">Unified Balance</td><td>No</td><td>Display only</td><td>Yes</td><td class="win">Yes</td></tr>
+      <tr><td class="col-label">Cross-chain</td><td>No</td><td>No</td><td>Yes</td><td class="win">Yes (planned)</td></tr>
+      <tr><td class="col-label">Tx Protection</td><td>Blockaid (closed)</td><td>DeBank (server)</td><td>No</td><td class="win">txguard (open, local)</td></tr>
+      <tr><td class="col-label">Open Source</td><td>Yes (JS)</td><td>Yes (JS)</td><td>No</td><td class="win">Yes (Rust)</td></tr>
+      <tr><td class="col-label">Language</td><td>JavaScript</td><td>JavaScript</td><td>JavaScript</td><td class="win">Rust</td></tr>
+      <tr><td class="col-label">No Seed Phrase</td><td>No</td><td>No</td><td>Yes</td><td class="win">Planned</td></tr>
+    </table>
+  </div>
+
+  <!-- SLIDE 10: Workflow -->
+  <div class="slide" data-slide="10">
+    <div class="slide-label">AI-Driven Development</div>
+    <div class="slide-title" style="font-size:32px; margin-bottom:40px;">Human sets WHAT → AI implements HOW → CI guarantees quality</div>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-step-title">/codex</div>
+        <div class="flow-step-desc">Load standards</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-title">Plan</div>
+        <div class="flow-step-desc">Design approach</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-title">Code</div>
+        <div class="flow-step-desc">Implement</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-title">/check</div>
+        <div class="flow-step-desc">Self-critique</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-title">/review</div>
+        <div class="flow-step-desc">Code review</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step" style="border-color:#1a2a1a;">
+        <div class="flow-step-title" style="color:#51cf66;">CI ✓</div>
+        <div class="flow-step-desc">fmt+clippy+test+doc</div>
+      </div>
+    </div>
+    <div style="height:40px"></div>
+    <div class="pills">
+      <div class="pill"><span class="pill-dot pill-tool"></span>Claude Code (Opus)</div>
+      <div class="pill"><span class="pill-dot pill-tool"></span>Codex — 17 standard files</div>
+      <div class="pill"><span class="pill-dot pill-tool"></span>Sequential Thinking</div>
+      <div class="pill"><span class="pill-dot pill-infra"></span>GitHub Actions</div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Closing -->
+  <div class="slide" data-slide="11">
+    <div class="logo-q">Q</div>
+    <div class="slide-title" style="font-size:64px;">Qallet</div>
+    <div class="slide-subtitle" style="font-size:24px; color:#aaa; margin-bottom:8px;">Ethereum wallet with chain abstraction + txguard security engine</div>
+    <div style="height:24px"></div>
+    <div style="font-size:18px; letter-spacing:6px; color:#4a9eff; text-transform:uppercase;">100% Rust &middot; Open Source &middot; One Developer</div>
+    <div style="height:32px"></div>
+    <div style="font-size:16px; color:#444;">github.com/temrjan/qallet</div>
+    <div class="tagline">Zero Compromise</div>
+  </div>
+
+</div>
+
+<!-- Arrow buttons -->
+<button class="arrow arrow-left" id="btnPrev" aria-label="Previous slide">&#8249;</button>
+<button class="arrow arrow-right" id="btnNext" aria-label="Next slide">&#8250;</button>
+
+<!-- Navigation -->
+<div class="nav">
+  <div class="nav-dots" id="dots"></div>
+  <div class="nav-counter" id="counter">1 / 11</div>
+</div>
+
+<script>
+  const slides = document.querySelectorAll('.slide');
+  const dotsContainer = document.getElementById('dots');
+  const counter = document.getElementById('counter');
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+  let current = 0;
+
+  // Create dots
+  slides.forEach((_, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'nav-dot' + (i === 0 ? ' active' : '');
+    dot.addEventListener('click', () => goTo(i));
+    dotsContainer.appendChild(dot);
+  });
+
+  function goTo(index) {
+    if (index < 0 || index >= slides.length || index === current) return;
+
+    const old = current;
+    current = index;
+
+    // Remove all states, then set new
+    slides.forEach((s, i) => {
+      s.classList.remove('active', 'prev');
+    });
+    slides[current].classList.add('active');
+
+    // Update dots
+    document.querySelectorAll('.nav-dot').forEach((d, i) => {
+      d.classList.toggle('active', i === current);
+    });
+
+    // Update counter
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+
+    // Update arrow visibility
+    btnPrev.style.opacity = current === 0 ? '0.2' : '1';
+    btnNext.style.opacity = current === slides.length - 1 ? '0.2' : '1';
+  }
+
+  function next() { goTo(current + 1); }
+  function prev() { goTo(current - 1); }
+
+  // Arrow buttons
+  btnPrev.addEventListener('click', (e) => { e.stopPropagation(); prev(); });
+  btnNext.addEventListener('click', (e) => { e.stopPropagation(); next(); });
+
+  // Keyboard
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+    if (e.key === 'Home') { e.preventDefault(); goTo(0); }
+    if (e.key === 'End') { e.preventDefault(); goTo(slides.length - 1); }
+  });
+
+  // Init arrow state
+  btnPrev.style.opacity = '0.2';
+</script>
+</body>
+</html>
