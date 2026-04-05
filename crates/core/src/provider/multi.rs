@@ -61,13 +61,16 @@ pub struct ChainBalance {
 }
 
 /// Unified balance across all chains.
+///
+/// **Note:** `total` is an approximate portfolio view — ETH on different
+/// chains is not fungible without bridging.
 #[derive(Debug, Clone, Serialize)]
 pub struct UnifiedBalance {
-    /// Total balance across all chains (in wei).
+    /// Approximate total across all chains (in wei). Not fungible — see struct docs.
     #[serde(serialize_with = "serialize_u256")]
     pub total: U256,
-    /// Total formatted (e.g., "2.5 ETH").
-    pub total_formatted: String,
+    /// Approximate total formatted (e.g., "~2.5 ETH").
+    pub approximate_total_formatted: String,
     /// Breakdown per chain.
     pub chains: Vec<ChainBalance>,
     /// Chains that failed to query (non-fatal).
@@ -161,7 +164,7 @@ impl MultiProvider {
 
         UnifiedBalance {
             total,
-            total_formatted: format_wei(total, 18),
+            approximate_total_formatted: format!("~{}", format_wei(total, 18)),
             chains,
             errors,
         }

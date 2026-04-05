@@ -61,9 +61,6 @@ enum Commands {
 enum WalletAction {
     /// Generate a new wallet (encrypted keystore).
     New {
-        /// Password (if omitted, prompts interactively; env: QALLET_PASSWORD).
-        #[arg(long)]
-        password: Option<String>,
         /// Output keystore file path (default: ./<address>.json).
         #[arg(long)]
         output: Option<String>,
@@ -83,9 +80,6 @@ enum WalletAction {
         /// Path to keystore JSON file.
         #[arg(long)]
         keystore: String,
-        /// Password (if omitted, prompts interactively; env: QALLET_PASSWORD).
-        #[arg(long)]
-        password: Option<String>,
     },
 
     /// Send ETH to an address (txguard check mandatory).
@@ -93,9 +87,6 @@ enum WalletAction {
         /// Path to keystore JSON file.
         #[arg(long)]
         keystore: String,
-        /// Password (if omitted, prompts interactively; env: QALLET_PASSWORD).
-        #[arg(long)]
-        password: Option<String>,
         /// Recipient address (0x...).
         #[arg(long)]
         to: String,
@@ -120,26 +111,25 @@ async fn main() {
         Commands::Decode { to, data, value } => cmd_decode(&to, &data, &value),
         Commands::Analyze { to, data, value } => cmd_analyze(&to, &data, &value),
         Commands::Wallet { action } => match action {
-            WalletAction::New { password, output } => {
-                let pwd = resolve_password_new(password);
+            WalletAction::New { output } => {
+                let pwd = resolve_password_new();
                 cmd_wallet_new(&pwd, output.as_deref());
             }
             WalletAction::Balance { address, testnet } => {
                 cmd_wallet_balance(&address, testnet).await;
             }
-            WalletAction::Info { keystore, password } => {
-                let pwd = resolve_password(password);
+            WalletAction::Info { keystore } => {
+                let pwd = resolve_password();
                 cmd_wallet_info(&keystore, &pwd);
             }
             WalletAction::Send {
                 keystore,
-                password,
                 to,
                 amount,
                 chain_id,
                 testnet,
             } => {
-                let pwd = resolve_password(password);
+                let pwd = resolve_password();
                 cmd_wallet_send(&keystore, &pwd, &to, &amount, chain_id, testnet).await;
             }
         },
@@ -485,12 +475,9 @@ fn parse_eth_amount(amount: &str) -> alloy_primitives::U256 {
 
 // ─── password resolution ────────────────────────────────────────────
 
-/// Resolve password from: CLI arg → QALLET_PASSWORD env → interactive prompt.
-fn resolve_password(arg: Option<String>) -> String {
-    if let Some(p) = arg {
-        return p;
-    }
-
+/// Resolve password: env QALLET_PASSWORD → interactive prompt.
+/// Password is never accepted via CLI args (visible in `ps aux`).
+fn resolve_password() -> String {
     if let Ok(env_pwd) = std::env::var("QALLET_PASSWORD") {
         if !env_pwd.is_empty() {
             return env_pwd;
@@ -499,17 +486,14 @@ fn resolve_password(arg: Option<String>) -> String {
 
     rpassword::prompt_password("Enter password: ").unwrap_or_else(|e| {
         exit_error(&format!(
-            "failed to read password: {e}\nUse --password or QALLET_PASSWORD env"
+            "failed to read password: {e}\nSet QALLET_PASSWORD env or run interactively"
         ))
     })
 }
 
 /// Resolve password for wallet creation (prompts twice for confirmation).
-fn resolve_password_new(arg: Option<String>) -> String {
-    if let Some(p) = arg {
-        return p;
-    }
-
+/// Password is never accepted via CLI args (visible in `ps aux`).
+fn resolve_password_new() -> String {
     if let Ok(env_pwd) = std::env::var("QALLET_PASSWORD") {
         if !env_pwd.is_empty() {
             return env_pwd;

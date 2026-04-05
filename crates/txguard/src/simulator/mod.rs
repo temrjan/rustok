@@ -125,7 +125,9 @@ pub async fn simulate(
 
     let inspector = &evm.inspector;
 
-    // ETH change = inflow from internal calls - outflow from tx value
+    // ETH change = inflow from internal calls - outflow from tx value.
+    // i128::MAX ≈ 1.7×10³⁸ wei ≈ 170 billion ETH — far exceeds total supply (~120M ETH).
+    // Values above this cap (impossible in practice) saturate to i128::MAX.
     let value_i128: i128 = value.try_into().unwrap_or(i128::MAX);
     let eth_change = inspector.eth_inflow.saturating_sub(value_i128);
 
