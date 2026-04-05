@@ -16,6 +16,7 @@ pub fn run() {
             commands::analyze_transaction,
             commands::create_wallet,
             commands::get_current_address,
+            commands::get_wallet_qr_svg,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

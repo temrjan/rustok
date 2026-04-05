@@ -115,6 +115,31 @@ pub async fn create_wallet(
 }
 
 #[tauri::command]
+pub async fn get_wallet_qr_svg(state: State<'_, AppState>) -> Result<String, String> {
+    let wallet_lock = state
+        .wallet
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    let wallet = wallet_lock
+        .as_ref()
+        .ok_or_else(|| "no wallet loaded".to_string())?;
+
+    let address = format!("{}", wallet.keyring.address());
+    let code =
+        qrcode::QrCode::new(address.as_bytes()).map_err(|e| format!("qr generation: {e}"))?;
+
+    let svg = code
+        .render::<qrcode::render::svg::Color<'_>>()
+        .dark_color(qrcode::render::svg::Color("#E2E8F0"))
+        .light_color(qrcode::render::svg::Color("#13131D"))
+        .quiet_zone(true)
+        .min_dimensions(200, 200)
+        .build();
+
+    Ok(svg)
+}
+
+#[tauri::command]
 pub async fn get_current_address(state: State<'_, AppState>) -> Result<Option<String>, String> {
     let wallet_lock = state
         .wallet
