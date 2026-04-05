@@ -5,10 +5,27 @@
 all-features = true
 
 [advisories]
-# Tauri pulls GTK/GLib/ATK bindings marked "unmaintained" — all transitive, no action from us.
-unmaintained = "warn"
 ignore = [
-    { id = "RUSTSEC-2024-0436", reason = "paste is transitive dep via revm, no alternative yet" },
+    { id = "RUSTSEC-2024-0436", reason = "paste — transitive dep via revm" },
+    # Tauri transitive deps: GTK/GLib/ATK bindings marked "unmaintained".
+    # Not security vulnerabilities. Tauri team aware.
+    { id = "RUSTSEC-2024-0370", reason = "Tauri transitive dep (proc-macro-error)" },
+    { id = "RUSTSEC-2024-0411", reason = "Tauri transitive dep (gio)" },
+    { id = "RUSTSEC-2024-0412", reason = "Tauri transitive dep (gdk)" },
+    { id = "RUSTSEC-2024-0413", reason = "Tauri transitive dep (atk)" },
+    { id = "RUSTSEC-2024-0414", reason = "Tauri transitive dep (pango)" },
+    { id = "RUSTSEC-2024-0415", reason = "Tauri transitive dep (glib)" },
+    { id = "RUSTSEC-2024-0416", reason = "Tauri transitive dep (atk-sys)" },
+    { id = "RUSTSEC-2024-0417", reason = "Tauri transitive dep (gio-sys)" },
+    { id = "RUSTSEC-2024-0418", reason = "Tauri transitive dep (gdk-sys)" },
+    { id = "RUSTSEC-2024-0419", reason = "Tauri transitive dep (gtk-sys)" },
+    { id = "RUSTSEC-2024-0420", reason = "Tauri transitive dep (gtk)" },
+    { id = "RUSTSEC-2025-0057", reason = "Tauri transitive dep (fxhash)" },
+    { id = "RUSTSEC-2025-0075", reason = "Tauri transitive dep (gdk-pixbuf)" },
+    { id = "RUSTSEC-2025-0080", reason = "Tauri transitive dep (cairo)" },
+    { id = "RUSTSEC-2025-0081", reason = "Tauri transitive dep (pango-sys)" },
+    { id = "RUSTSEC-2025-0098", reason = "Tauri transitive dep (gobject-sys)" },
+    { id = "RUSTSEC-2025-0100", reason = "Tauri transitive dep (glib-sys)" },
 ]
 
 [licenses]
