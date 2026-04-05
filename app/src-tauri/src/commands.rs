@@ -71,7 +71,9 @@ pub async fn get_balance(
     address: String,
     state: State<'_, AppState>,
 ) -> Result<UnifiedBalance, String> {
-    let addr = address.parse().map_err(|e| format!("invalid address: {e}"))?;
+    let addr = address
+        .parse()
+        .map_err(|e| format!("invalid address: {e}"))?;
     let balance = state.provider.unified_balance(addr).await;
     Ok(balance.into())
 }
@@ -117,8 +119,7 @@ pub async fn create_wallet(
         .path()
         .app_data_dir()
         .map_err(|e| format!("no app data dir: {e}"))?;
-    std::fs::create_dir_all(&data_dir)
-        .map_err(|e| format!("failed to create data dir: {e}"))?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| format!("failed to create data dir: {e}"))?;
 
     let filename = format!("{address}.json");
     let keystore_path = data_dir.join(&filename);
@@ -131,8 +132,7 @@ pub async fn create_wallet(
     });
     let json = serde_json::to_string_pretty(&export)
         .map_err(|e| format!("failed to serialize keystore: {e}"))?;
-    std::fs::write(&keystore_path, &json)
-        .map_err(|e| format!("failed to save keystore: {e}"))?;
+    std::fs::write(&keystore_path, &json).map_err(|e| format!("failed to save keystore: {e}"))?;
 
     // Restrict keystore file permissions to owner-only (0600).
     #[cfg(unix)]
@@ -215,7 +215,10 @@ mod tests {
     #[test]
     fn parse_value_valid_decimal() {
         let v = parse_tx_value(Some("1000000000000000000")).unwrap();
-        assert_eq!(v, alloy_primitives::U256::from(1_000_000_000_000_000_000u128));
+        assert_eq!(
+            v,
+            alloy_primitives::U256::from(1_000_000_000_000_000_000u128)
+        );
     }
 
     #[test]

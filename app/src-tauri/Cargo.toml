@@ -4,6 +4,7 @@ version = "0.1.0"
 # edition 2021: Tauri 2 macros not yet tested with edition 2024
 edition = "2021"
 rust-version = "1.85"
+license = "AGPL-3.0-or-later"
 publish = false
 
 # App crate — inherit core safety lints but relax docs/visibility (not a library)
