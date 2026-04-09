@@ -381,14 +381,17 @@ pub async fn enable_biometric_unlock(
     password: String,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm, Nonce,
+    };
     use rand::RngCore;
 
     let mut nonce_bytes = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
 
-    let cipher = Aes256Gcm::new_from_slice(BIOMETRIC_KEY)
-        .map_err(|e| format!("cipher init: {e}"))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(BIOMETRIC_KEY).map_err(|e| format!("cipher init: {e}"))?;
     let nonce = Nonce::from(nonce_bytes);
     let ciphertext = cipher
         .encrypt(&nonce, password.as_bytes())
@@ -437,7 +440,10 @@ pub async fn biometric_unlock_wallet(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<WalletInfo, String> {
-    use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+    use aes_gcm::{
+        aead::{Aead, KeyInit},
+        Aes256Gcm, Nonce,
+    };
 
     // 1. Read biometric.dat.
     let data_dir = app_handle
@@ -452,15 +458,15 @@ pub async fn biometric_unlock_wallet(
     }
 
     // 2. Decrypt password.
-    let nonce = Nonce::from(<[u8; 12]>::try_from(&blob[..12])
-        .map_err(|_| "invalid nonce".to_string())?);
-    let cipher = Aes256Gcm::new_from_slice(BIOMETRIC_KEY)
-        .map_err(|e| format!("cipher init: {e}"))?;
+    let nonce =
+        Nonce::from(<[u8; 12]>::try_from(&blob[..12]).map_err(|_| "invalid nonce".to_string())?);
+    let cipher =
+        Aes256Gcm::new_from_slice(BIOMETRIC_KEY).map_err(|e| format!("cipher init: {e}"))?;
     let password_bytes = cipher
         .decrypt(&nonce, &blob[12..])
         .map_err(|_| "failed to decrypt biometric data — re-enable biometric".to_string())?;
-    let password = String::from_utf8(password_bytes)
-        .map_err(|_| "corrupted password data".to_string())?;
+    let password =
+        String::from_utf8(password_bytes).map_err(|_| "corrupted password data".to_string())?;
 
     // 3. Unlock wallet with decrypted password.
     unlock_with_password(&password, &data_dir, &state)
