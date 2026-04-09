@@ -29,7 +29,7 @@
 
 ```
 crates/txguard  — движок безопасности транзакций (самостоятельный crate)
-crates/core     — кошелёк (keyring, provider, router, explainer)
+crates/core     — кошелёк (keyring, provider, router, send, amount, explainer)
 crates/types    — shared DTO для core ↔ frontend (Serialize + Deserialize)
 crates/cli      — CLI обёртка
 app/src-tauri   — Tauri backend (tauri::command → core)
@@ -40,7 +40,7 @@ app/src         — Leptos UI (WASM, вызывает backend через invoke(
 
 - Phase 1: txguard + core + CLI ✅ DONE
 - Phase 2: Desktop app (Tauri 2.0 + Leptos) ✅ DONE
-- Phase 3: Mobile (iOS + Android, кросс-компиляция) ← IN PROGRESS (iOS spike done)
+- Phase 3: Mobile (iOS + Android) ← IN PROGRESS (iOS spike done, Send flow done, UI redesign done)
 - Phase 4: Cross-chain (Across Protocol)
 - Phase 5: AI + Polish
 

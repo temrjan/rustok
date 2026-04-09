@@ -83,9 +83,12 @@ rustok/
 | core provider + gas_fees/estimate | DONE | 11 |
 | core router | DONE | 1 |
 | core explainer | DONE | 9 |
-| CLI decode + analyze | DONE | - |
-| CLI wallet new/balance/info | DONE | - |
-| **Итого** | | **69 тестов** |
+| core amount | DONE | 12 |
+| core convert | DONE | 4 |
+| desktop commands | DONE | 8 |
+| CLI decode + analyze + send | DONE | - |
+| doc-tests | DONE | 2 |
+| **Итого** | | **93 тестов** |
 
 ### Версии
 
@@ -97,19 +100,16 @@ rustok/
 ## 5. TODO (по приоритету)
 
 ### Следующая сессия
-1. **wallet send** — end-to-end транзакция:
-   - Provider: добавить `send_raw_transaction()`, `get_nonce()` уже есть
-   - Build EIP-1559 tx → txguard analyze → show verdict + explain → keyring sign → broadcast → tx hash
-   - CLI: `rustok wallet send --to 0x... --amount 0.1 --keystore wallet.json --password pwd`
-   - Safety: txguard check mandatory, `--testnet` по умолчанию
-
-2. ~~**Переименовать crates**~~ — DONE (`rustok`, `rustok-core`, `rustok-api`)
+1. ~~**wallet send**~~ — DONE. core::send (preview_send + execute_send), 3-step UI, CLI send
+2. ~~**UI redesign**~~ — DONE. Bottom tab bar, Home page, Send/Receive/Scan actions
+3. ~~**Unlock wallet**~~ — DONE. unlock_wallet command, keystore persistence
+4. **Android build** — Tauri android init + spike
+5. **Transaction history** — Activity tab (needs tx indexer or Etherscan API)
 
 ### Потом
-3. **HTTP API** (axum) — POST /analyze, POST /send, GET /balance
-4. **Web UI** — Leptos или React+WASM
-5. **Cross-chain bridging** — Across Protocol SpokePool.depositV3()
-6. **Passkey auth** — WebAuthn + ERC-4337 (без seed-фраз)
+6. **HTTP API** (axum) — POST /analyze, POST /send, GET /balance
+7. **Cross-chain bridging** — Across Protocol SpokePool.depositV3()
+8. **Passkey auth** — WebAuthn + ERC-4337 (без seed-фраз)
 
 ## 6. Правила разработки
 

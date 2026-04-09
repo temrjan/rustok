@@ -41,7 +41,11 @@ pub fn finding_to_dto(f: Finding) -> FindingDto {
 
 /// Convert a `SendPreview` into a frontend-safe `SendPreviewDto`.
 #[must_use]
-pub fn preview_to_dto(p: SendPreview, to: alloy_primitives::Address, amount_wei: alloy_primitives::U256) -> SendPreviewDto {
+pub fn preview_to_dto(
+    p: SendPreview,
+    to: alloy_primitives::Address,
+    amount_wei: alloy_primitives::U256,
+) -> SendPreviewDto {
     SendPreviewDto {
         action: match p.verdict.action {
             Action::Allow => "allow",

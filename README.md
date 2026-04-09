@@ -2,13 +2,13 @@
 
 Ethereum wallet with chain abstraction and transaction security engine.
 
-**Status:** Alpha — Phase 3 in progress (iOS running in Simulator)
+**Status:** Alpha — Phase 3 in progress (Send flow + UI redesign done, iOS running in Simulator)
 
 ## What is this?
 
 Ethereum wallet with chain abstraction and transaction protection:
 
-- **Desktop app** — Tauri 2.0 + Leptos (full Rust). Balance, Analyze, Wallet, Receive with QR.
+- **Desktop app** — Tauri 2.0 + Leptos (full Rust). Home (auto-balance), Send (3-step with txguard), Receive (QR), Analyze, Settings. Bottom tab bar navigation.
 - **txguard** — Rust crate that analyzes EVM transactions before signing. Decodes calldata, runs security rules, simulates via revm, enriches with GoPlus threat intel.
 - **rustok core** — Multi-chain wallet with unified balance across L1/L2, encrypted keyring (AES-256-GCM + Argon2id), and CLI interface.
 
@@ -72,6 +72,8 @@ rustok/
 │   │   ├── keyring/      AES-256-GCM + Argon2id encrypted keys
 │   │   ├── provider/     Multi-chain RPC + EIP-1559 gas estimation
 │   │   ├── router/       Cheapest chain selection for transactions
+│   │   ├── send/         Send orchestration (preview + execute)
+│   │   ├── amount/       ETH amount parsing (decimal → wei)
 │   │   ├── explainer/    Human-readable transaction descriptions
 │   │   └── convert/      DTO conversions (core types → frontend types)
 │   ├── types/      # Shared DTO types (core ↔ frontend, no crypto deps)
@@ -119,7 +121,8 @@ cargo install tauri-cli --version "^2.10" --locked
 cargo tauri dev
 ```
 
-Pages: Balance (multi-chain), Analyze (txguard), Wallet (create/persist), Receive (QR code).
+Pages: Home (auto-balance + actions), Send (3-step: input → preview → result), Receive (QR), Analyze (txguard), Activity (placeholder), Settings, Unlock.
+Navigation: bottom tab bar (Home / Activity / Settings). Send/Receive/Scan — fullscreen from Home action buttons.
 
 ## iOS App
 
@@ -132,7 +135,7 @@ rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 cargo tauri ios dev
 ```
 
-Same 4 pages as desktop, with safe area insets for iPhone notch/Dynamic Island.
+Same pages as desktop, with safe area insets for iPhone notch/Dynamic Island.
 
 ## Tech Stack
 
@@ -147,9 +150,9 @@ Same 4 pages as desktop, with safe area insets for iPhone notch/Dynamic Island.
 ## Tests
 
 ```
-81 tests, 0 failures
+93 tests, 0 failures
  - txguard: 38 tests (parser, rules, types, simulator inspector)
- - core: 33 tests (keyring, provider, router, explainer, convert)
+ - core: 45 tests (keyring, provider, router, explainer, convert, amount)
  - desktop: 8 tests (password validation, value parsing, QR generation)
  - doc-tests: 2
 ```

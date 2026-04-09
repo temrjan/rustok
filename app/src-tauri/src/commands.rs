@@ -5,9 +5,7 @@ use std::sync::Mutex;
 use rustok_core::convert::{preview_to_dto, send_result_to_dto, verdict_to_dto};
 use rustok_core::keyring::LocalKeyring;
 use rustok_core::provider::MultiProvider;
-use rustok_types::{
-    AnalysisResponse, SendPreviewDto, SendResponseDto, UnifiedBalance, WalletInfo,
-};
+use rustok_types::{AnalysisResponse, SendPreviewDto, SendResponseDto, UnifiedBalance, WalletInfo};
 use tauri::{Manager, State};
 
 /// Shared application state across all commands.
@@ -202,7 +200,10 @@ pub async fn has_wallet(app_handle: tauri::AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 pub async fn is_wallet_unlocked(state: State<'_, AppState>) -> Result<bool, String> {
-    let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+    let lock = state
+        .wallet
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
     Ok(lock.is_some())
 }
 
@@ -233,8 +234,8 @@ pub async fn unlock_wallet(
     let encrypted_hex = export["encrypted_key"]
         .as_str()
         .ok_or("missing encrypted_key in keystore")?;
-    let encrypted = alloy_primitives::hex::decode(encrypted_hex)
-        .map_err(|e| format!("invalid hex: {e}"))?;
+    let encrypted =
+        alloy_primitives::hex::decode(encrypted_hex).map_err(|e| format!("invalid hex: {e}"))?;
 
     // 3. Decrypt keyring.
     let keyring = LocalKeyring::from_encrypted(&encrypted, &password)
@@ -257,11 +258,12 @@ pub async fn unlock_wallet(
 // ─── Balance from wallet state ─────────────────────────────────────
 
 #[tauri::command]
-pub async fn get_wallet_balance(
-    state: State<'_, AppState>,
-) -> Result<UnifiedBalance, String> {
+pub async fn get_wallet_balance(state: State<'_, AppState>) -> Result<UnifiedBalance, String> {
     let addr = {
-        let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+        let lock = state
+            .wallet
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?;
         let w = lock.as_ref().ok_or("wallet not unlocked")?;
         w.keyring.address()
     };
@@ -279,17 +281,18 @@ pub async fn preview_send(
 ) -> Result<SendPreviewDto, String> {
     // 1. Get sender address from wallet (short lock).
     let from = {
-        let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+        let lock = state
+            .wallet
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?;
         let w = lock.as_ref().ok_or("wallet not unlocked")?;
         w.keyring.address()
     };
 
     // 2. Parse inputs.
-    let to_addr: alloy_primitives::Address = to
-        .parse()
-        .map_err(|e| format!("invalid address: {e}"))?;
-    let amount_wei = rustok_core::amount::parse_eth_amount(&amount)
-        .map_err(|e| e.to_string())?;
+    let to_addr: alloy_primitives::Address =
+        to.parse().map_err(|e| format!("invalid address: {e}"))?;
+    let amount_wei = rustok_core::amount::parse_eth_amount(&amount).map_err(|e| e.to_string())?;
 
     // 3. Run preview.
     let preview = rustok_core::send::preview_send(&state.provider, from, to_addr, amount_wei)
@@ -307,7 +310,10 @@ pub async fn send_eth(
 ) -> Result<SendResponseDto, String> {
     // 1. Clone signer (short lock, then drop).
     let signer = {
-        let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+        let lock = state
+            .wallet
+            .lock()
+            .map_err(|e| format!("state lock: {e}"))?;
         let w = lock.as_ref().ok_or("wallet not unlocked")?;
         w.keyring.signer().clone()
     };
@@ -315,11 +321,9 @@ pub async fn send_eth(
     let from = signer.address();
 
     // 2. Parse inputs.
-    let to_addr: alloy_primitives::Address = to
-        .parse()
-        .map_err(|e| format!("invalid address: {e}"))?;
-    let amount_wei = rustok_core::amount::parse_eth_amount(&amount)
-        .map_err(|e| e.to_string())?;
+    let to_addr: alloy_primitives::Address =
+        to.parse().map_err(|e| format!("invalid address: {e}"))?;
+    let amount_wei = rustok_core::amount::parse_eth_amount(&amount).map_err(|e| e.to_string())?;
 
     // 3. Preview first (txguard + routing).
     let preview = rustok_core::send::preview_send(&state.provider, from, to_addr, amount_wei)
