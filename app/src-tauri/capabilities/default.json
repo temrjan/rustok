@@ -3,6 +3,7 @@
   "description": "Default capabilities for Rustok",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "biometric:default"
   ]
 }

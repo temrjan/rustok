@@ -6,7 +6,10 @@ use std::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_biometric::init());
+    builder
         .manage(AppState {
             provider: MultiProvider::mainnets_only(),
             wallet: Mutex::new(None),
@@ -23,6 +26,10 @@ pub fn run() {
             commands::get_wallet_balance,
             commands::preview_send,
             commands::send_eth,
+            commands::is_biometric_enabled,
+            commands::enable_biometric_unlock,
+            commands::disable_biometric_unlock,
+            commands::biometric_unlock_wallet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

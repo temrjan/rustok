@@ -70,6 +70,8 @@
 - Phase 3: Balance shows "~0 ETH" not "~0", consistent formatting
 - Phase 3: Per-package opt-level=3 for argon2+blake2 — dev unlock ~12ms instead of ~1-2min
 - Phase 3: Mobile touch targets (44pt min), iOS zoom prevention, .block/.inline-block bug fix
+- Phase 3: Biometric unlock (Face ID) — tauri-plugin-biometric, frontend-driven auth, AES-GCM password storage
+- Phase 3: Extracted unlock_with_password helper — DRY between password and biometric unlock
 
 ---
 
@@ -85,8 +87,9 @@
    - ~~iOS UX polish~~ ✅ Done (navigation, keyboard scroll, button consistency)
    - ~~Optimize Argon2id in dev profile~~ ✅ Done (per-package opt-level=3 for argon2+blake2, ~12ms per derive_key)
    - ~~Mobile UI tweaks~~ ✅ Done (44pt touch targets, iOS zoom prevention, missing .block/.inline-block)
+   - ~~Biometric unlock~~ ✅ Done (tauri-plugin-biometric, Face ID, encrypted password storage)
    - Android build (Tauri android init + spike)
-   - Passkey auth (WebAuthn), biometric unlock
+   - Passkey auth (WebAuthn)
    - Code signing + TestFlight
 2. Добавить overflow-checks в release profile (Consider #2)
 3. Добавить custom Drop для LocalKeyring (zeroize on drop) (Consider #6)

@@ -181,6 +181,48 @@ pub async fn get_current_address(state: State<'_, AppState>) -> Result<Option<St
         .map(|w| format!("{}", w.keyring.address())))
 }
 
+// ─── Wallet lifecycle helpers ──────────────────────────────────────
+
+/// Unlock the wallet from the keystore file using the given password.
+/// Shared between `unlock_wallet` and `biometric_unlock_wallet`.
+fn unlock_with_password(
+    password: &str,
+    data_dir: &std::path::Path,
+    state: &AppState,
+) -> Result<WalletInfo, String> {
+    let keystore_path = std::fs::read_dir(data_dir)
+        .map_err(|e| format!("cannot read data dir: {e}"))?
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+        .ok_or("no wallet found — create one first")?
+        .path();
+
+    let json = std::fs::read_to_string(&keystore_path)
+        .map_err(|e| format!("cannot read keystore: {e}"))?;
+    let export: serde_json::Value =
+        serde_json::from_str(&json).map_err(|e| format!("invalid keystore JSON: {e}"))?;
+    let encrypted_hex = export["encrypted_key"]
+        .as_str()
+        .ok_or("missing encrypted_key in keystore")?;
+    let encrypted =
+        alloy_primitives::hex::decode(encrypted_hex).map_err(|e| format!("invalid hex: {e}"))?;
+
+    let keyring = LocalKeyring::from_encrypted(&encrypted, password)
+        .map_err(|e| format!("wrong password or corrupted keystore: {e}"))?;
+    let address = format!("{}", keyring.address());
+
+    let mut wallet_lock = state
+        .wallet
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    *wallet_lock = Some(WalletState {
+        keyring,
+        keystore_path,
+    });
+
+    Ok(WalletInfo { address })
+}
+
 // ─── Wallet lifecycle commands ──────────────────────────────────────
 
 #[tauri::command]
@@ -213,46 +255,11 @@ pub async fn unlock_wallet(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<WalletInfo, String> {
-    // 1. Find keystore file in app data directory.
     let data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("no app data dir: {e}"))?;
-
-    let keystore_path = std::fs::read_dir(&data_dir)
-        .map_err(|e| format!("cannot read data dir: {e}"))?
-        .filter_map(|e| e.ok())
-        .find(|e| e.path().extension().is_some_and(|ext| ext == "json"))
-        .ok_or("no wallet found — create one first")?
-        .path();
-
-    // 2. Read and parse keystore JSON.
-    let json = std::fs::read_to_string(&keystore_path)
-        .map_err(|e| format!("cannot read keystore: {e}"))?;
-    let export: serde_json::Value =
-        serde_json::from_str(&json).map_err(|e| format!("invalid keystore JSON: {e}"))?;
-    let encrypted_hex = export["encrypted_key"]
-        .as_str()
-        .ok_or("missing encrypted_key in keystore")?;
-    let encrypted =
-        alloy_primitives::hex::decode(encrypted_hex).map_err(|e| format!("invalid hex: {e}"))?;
-
-    // 3. Decrypt keyring.
-    let keyring = LocalKeyring::from_encrypted(&encrypted, &password)
-        .map_err(|e| format!("wrong password or corrupted keystore: {e}"))?;
-    let address = format!("{}", keyring.address());
-
-    // 4. Store in app state.
-    let mut wallet_lock = state
-        .wallet
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?;
-    *wallet_lock = Some(WalletState {
-        keyring,
-        keystore_path,
-    });
-
-    Ok(WalletInfo { address })
+    unlock_with_password(&password, &data_dir, &state)
 }
 
 // ─── Balance from wallet state ─────────────────────────────────────
@@ -342,6 +349,121 @@ pub async fn send_eth(
     .map_err(|e| e.to_string())?;
 
     Ok(send_result_to_dto(result))
+}
+
+// ─── Biometric unlock ─────────────────────────────────────────────
+//
+// Security model:
+// - iOS app sandbox prevents other apps from reading biometric.dat.
+// - Biometric prompt (Face ID / Touch ID) prevents unauthorized local access.
+// - AES-256-GCM provides at-rest obfuscation, NOT a cryptographic boundary.
+//   The key is app-static — the real protection is the sandbox + biometric.
+
+/// Static obfuscation key for biometric password storage.
+/// NOT a security boundary — see module-level comment.
+const BIOMETRIC_KEY: &[u8; 32] = b"rustok-biometric-storage-key-v1!";
+const BIOMETRIC_FILE: &str = "biometric.dat";
+
+/// Check if biometric unlock is enabled (stored password file exists).
+#[tauri::command]
+pub async fn is_biometric_enabled(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data dir: {e}"))?;
+    Ok(data_dir.join(BIOMETRIC_FILE).exists())
+}
+
+/// Store encrypted password for biometric unlock.
+/// Called after user successfully unlocks with password + confirms biometric.
+#[tauri::command]
+pub async fn enable_biometric_unlock(
+    password: String,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+    use rand::RngCore;
+
+    let mut nonce_bytes = [0u8; 12];
+    rand::thread_rng().fill_bytes(&mut nonce_bytes);
+
+    let cipher = Aes256Gcm::new_from_slice(BIOMETRIC_KEY)
+        .map_err(|e| format!("cipher init: {e}"))?;
+    let nonce = Nonce::from(nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(&nonce, password.as_bytes())
+        .map_err(|e| format!("encrypt: {e}"))?;
+
+    let mut blob = Vec::with_capacity(12 + ciphertext.len());
+    blob.extend_from_slice(&nonce_bytes);
+    blob.extend_from_slice(&ciphertext);
+
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data dir: {e}"))?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| format!("create dir: {e}"))?;
+
+    let path = data_dir.join(BIOMETRIC_FILE);
+    std::fs::write(&path, &blob).map_err(|e| format!("write biometric.dat: {e}"))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
+    }
+
+    Ok(())
+}
+
+/// Remove stored biometric password.
+#[tauri::command]
+pub async fn disable_biometric_unlock(app_handle: tauri::AppHandle) -> Result<(), String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data dir: {e}"))?;
+    let path = data_dir.join(BIOMETRIC_FILE);
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("remove biometric.dat: {e}"))?;
+    }
+    Ok(())
+}
+
+/// Unlock wallet using stored biometric password.
+/// Frontend must call plugin:biometric|authenticate BEFORE this command.
+#[tauri::command]
+pub async fn biometric_unlock_wallet(
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WalletInfo, String> {
+    use aes_gcm::{Aes256Gcm, Nonce, aead::{Aead, KeyInit}};
+
+    // 1. Read biometric.dat.
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data dir: {e}"))?;
+    let blob = std::fs::read(data_dir.join(BIOMETRIC_FILE))
+        .map_err(|_| "biometric not enabled — unlock with password first".to_string())?;
+
+    if blob.len() < 13 {
+        return Err("corrupted biometric data".into());
+    }
+
+    // 2. Decrypt password.
+    let nonce = Nonce::from(<[u8; 12]>::try_from(&blob[..12])
+        .map_err(|_| "invalid nonce".to_string())?);
+    let cipher = Aes256Gcm::new_from_slice(BIOMETRIC_KEY)
+        .map_err(|e| format!("cipher init: {e}"))?;
+    let password_bytes = cipher
+        .decrypt(&nonce, &blob[12..])
+        .map_err(|_| "failed to decrypt biometric data — re-enable biometric".to_string())?;
+    let password = String::from_utf8(password_bytes)
+        .map_err(|_| "corrupted password data".to_string())?;
+
+    // 3. Unlock wallet with decrypted password.
+    unlock_with_password(&password, &data_dir, &state)
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────
