@@ -2,10 +2,12 @@
 
 use std::sync::Mutex;
 
-use rustok_core::convert::verdict_to_dto;
+use rustok_core::convert::{preview_to_dto, send_result_to_dto, verdict_to_dto};
 use rustok_core::keyring::LocalKeyring;
 use rustok_core::provider::MultiProvider;
-use rustok_types::{AnalysisResponse, UnifiedBalance, WalletInfo};
+use rustok_types::{
+    AnalysisResponse, SendPreviewDto, SendResponseDto, UnifiedBalance, WalletInfo,
+};
 use tauri::{Manager, State};
 
 /// Shared application state across all commands.
@@ -179,6 +181,163 @@ pub async fn get_current_address(state: State<'_, AppState>) -> Result<Option<St
     Ok(wallet_lock
         .as_ref()
         .map(|w| format!("{}", w.keyring.address())))
+}
+
+// ─── Wallet lifecycle commands ──────────────────────────────────────
+
+#[tauri::command]
+pub async fn has_wallet(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data dir: {e}"))?;
+    Ok(std::fs::read_dir(&data_dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .any(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+        })
+        .unwrap_or(false))
+}
+
+#[tauri::command]
+pub async fn is_wallet_unlocked(state: State<'_, AppState>) -> Result<bool, String> {
+    let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+    Ok(lock.is_some())
+}
+
+#[tauri::command]
+pub async fn unlock_wallet(
+    password: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WalletInfo, String> {
+    // 1. Find keystore file in app data directory.
+    let data_dir = app_handle
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data dir: {e}"))?;
+
+    let keystore_path = std::fs::read_dir(&data_dir)
+        .map_err(|e| format!("cannot read data dir: {e}"))?
+        .filter_map(|e| e.ok())
+        .find(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+        .ok_or("no wallet found — create one first")?
+        .path();
+
+    // 2. Read and parse keystore JSON.
+    let json = std::fs::read_to_string(&keystore_path)
+        .map_err(|e| format!("cannot read keystore: {e}"))?;
+    let export: serde_json::Value =
+        serde_json::from_str(&json).map_err(|e| format!("invalid keystore JSON: {e}"))?;
+    let encrypted_hex = export["encrypted_key"]
+        .as_str()
+        .ok_or("missing encrypted_key in keystore")?;
+    let encrypted = alloy_primitives::hex::decode(encrypted_hex)
+        .map_err(|e| format!("invalid hex: {e}"))?;
+
+    // 3. Decrypt keyring.
+    let keyring = LocalKeyring::from_encrypted(&encrypted, &password)
+        .map_err(|e| format!("wrong password or corrupted keystore: {e}"))?;
+    let address = format!("{}", keyring.address());
+
+    // 4. Store in app state.
+    let mut wallet_lock = state
+        .wallet
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+    *wallet_lock = Some(WalletState {
+        keyring,
+        keystore_path,
+    });
+
+    Ok(WalletInfo { address })
+}
+
+// ─── Balance from wallet state ─────────────────────────────────────
+
+#[tauri::command]
+pub async fn get_wallet_balance(
+    state: State<'_, AppState>,
+) -> Result<UnifiedBalance, String> {
+    let addr = {
+        let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+        let w = lock.as_ref().ok_or("wallet not unlocked")?;
+        w.keyring.address()
+    };
+    let balance = state.provider.unified_balance(addr).await;
+    Ok(balance.into())
+}
+
+// ─── Send commands ─────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn preview_send(
+    to: String,
+    amount: String,
+    state: State<'_, AppState>,
+) -> Result<SendPreviewDto, String> {
+    // 1. Get sender address from wallet (short lock).
+    let from = {
+        let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+        let w = lock.as_ref().ok_or("wallet not unlocked")?;
+        w.keyring.address()
+    };
+
+    // 2. Parse inputs.
+    let to_addr: alloy_primitives::Address = to
+        .parse()
+        .map_err(|e| format!("invalid address: {e}"))?;
+    let amount_wei = rustok_core::amount::parse_eth_amount(&amount)
+        .map_err(|e| e.to_string())?;
+
+    // 3. Run preview.
+    let preview = rustok_core::send::preview_send(&state.provider, from, to_addr, amount_wei)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    Ok(preview_to_dto(preview, to_addr, amount_wei))
+}
+
+#[tauri::command]
+pub async fn send_eth(
+    to: String,
+    amount: String,
+    state: State<'_, AppState>,
+) -> Result<SendResponseDto, String> {
+    // 1. Clone signer (short lock, then drop).
+    let signer = {
+        let lock = state.wallet.lock().map_err(|e| format!("state lock: {e}"))?;
+        let w = lock.as_ref().ok_or("wallet not unlocked")?;
+        w.keyring.signer().clone()
+    };
+    // Lock dropped — safe to .await below.
+    let from = signer.address();
+
+    // 2. Parse inputs.
+    let to_addr: alloy_primitives::Address = to
+        .parse()
+        .map_err(|e| format!("invalid address: {e}"))?;
+    let amount_wei = rustok_core::amount::parse_eth_amount(&amount)
+        .map_err(|e| e.to_string())?;
+
+    // 3. Preview first (txguard + routing).
+    let preview = rustok_core::send::preview_send(&state.provider, from, to_addr, amount_wei)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // 4. Execute send.
+    let result = rustok_core::send::execute_send(
+        &state.provider,
+        signer,
+        to_addr,
+        amount_wei,
+        &preview.route,
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(send_result_to_dto(result))
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────

@@ -436,41 +436,8 @@ fn load_keyring(keystore_path: &str, password: &str) -> rustok_core::keyring::Lo
 
 /// Parse ETH amount string (e.g., "0.1", "1.5") to wei (U256).
 fn parse_eth_amount(amount: &str) -> alloy_primitives::U256 {
-    let parts: Vec<&str> = amount.split('.').collect();
-    match parts.len() {
-        1 => {
-            // Whole number of ETH
-            let eth: u128 = parts[0]
-                .parse()
-                .unwrap_or_else(|e| exit_error(&format!("Invalid amount: {e}")));
-            alloy_primitives::U256::from(eth)
-                .saturating_mul(alloy_primitives::U256::from(1_000_000_000_000_000_000u128))
-        }
-        2 => {
-            // Decimal ETH (e.g., "0.1" → 100_000_000_000_000_000 wei)
-            let whole: u128 = if parts[0].is_empty() {
-                0
-            } else {
-                parts[0]
-                    .parse()
-                    .unwrap_or_else(|e| exit_error(&format!("Invalid amount: {e}")))
-            };
-
-            let decimal_str = parts[1];
-            if decimal_str.len() > 18 {
-                exit_error("Too many decimal places (max 18)");
-            }
-            let padded = format!("{:0<18}", decimal_str);
-            let decimal_wei: u128 = padded
-                .parse()
-                .unwrap_or_else(|e| exit_error(&format!("Invalid decimal: {e}")));
-
-            let whole_wei = alloy_primitives::U256::from(whole)
-                .saturating_mul(alloy_primitives::U256::from(1_000_000_000_000_000_000u128));
-            whole_wei.saturating_add(alloy_primitives::U256::from(decimal_wei))
-        }
-        _ => exit_error("Invalid amount format (expected e.g., '0.1' or '1')"),
-    }
+    rustok_core::amount::parse_eth_amount(amount)
+        .unwrap_or_else(|e| exit_error(&format!("Invalid amount: {e}")))
 }
 
 // ─── password resolution ────────────────────────────────────────────

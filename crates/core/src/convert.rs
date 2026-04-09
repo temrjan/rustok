@@ -1,7 +1,11 @@
-//! DTO conversions from txguard types to shared frontend types.
+//! DTO conversions from core/txguard types to shared frontend types.
 
-use rustok_types::{AnalysisResponse, FindingDto};
+use rustok_types::{AnalysisResponse, FindingDto, SendPreviewDto, SendResponseDto};
 use txguard::types::{Action, Finding, Severity, Verdict};
+
+use crate::explainer;
+use crate::provider::format_wei;
+use crate::send::{SendPreview, SendResult};
 
 /// Convert a txguard `Verdict` into a frontend-safe `AnalysisResponse`.
 #[must_use]
@@ -32,6 +36,39 @@ pub fn finding_to_dto(f: Finding) -> FindingDto {
         }
         .to_string(),
         description: f.description,
+    }
+}
+
+/// Convert a `SendPreview` into a frontend-safe `SendPreviewDto`.
+#[must_use]
+pub fn preview_to_dto(p: SendPreview, to: alloy_primitives::Address, amount_wei: alloy_primitives::U256) -> SendPreviewDto {
+    SendPreviewDto {
+        action: match p.verdict.action {
+            Action::Allow => "allow",
+            Action::Warn => "warn",
+            Action::Block => "block",
+        }
+        .to_string(),
+        risk_score: p.verdict.risk_score,
+        explanation: p.explanation,
+        chain_name: p.route.chain_name,
+        gas_cost_formatted: format_wei(p.route.estimated_cost, 18),
+        amount_formatted: format!("{} ETH", explainer::format_eth(amount_wei)),
+        to_short: explainer::short_addr(to),
+    }
+}
+
+/// Convert a `SendResult` into a frontend-safe `SendResponseDto`.
+#[must_use]
+pub fn send_result_to_dto(r: SendResult) -> SendResponseDto {
+    SendResponseDto {
+        tx_hash: format!("{:#x}", r.tx_hash),
+        chain_name: r.chain_name,
+        chain_id: r.chain_id,
+        from: format!("{}", r.from),
+        to: format!("{}", r.to),
+        amount_formatted: format!("{} ETH", explainer::format_eth(r.amount_wei)),
+        gas_cost_formatted: format_wei(r.estimated_gas_cost, 18),
     }
 }
 

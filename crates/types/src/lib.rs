@@ -64,3 +64,43 @@ pub struct WalletInfo {
     /// Ethereum address (0x-prefixed, checksummed).
     pub address: String,
 }
+
+/// Preview of a send operation (DTO).
+///
+/// Returned by `preview_send` for user confirmation before broadcasting.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendPreviewDto {
+    /// Recommended action: "allow", "warn", or "block".
+    pub action: String,
+    /// Risk score (0-100).
+    pub risk_score: u8,
+    /// Human-readable explanation of the transaction.
+    pub explanation: String,
+    /// Chain name selected by router.
+    pub chain_name: String,
+    /// Estimated gas cost formatted (e.g., "0.000021").
+    pub gas_cost_formatted: String,
+    /// Amount formatted (e.g., "0.1 ETH").
+    pub amount_formatted: String,
+    /// Recipient address shortened (e.g., "0xd8dA...6045").
+    pub to_short: String,
+}
+
+/// Result of a successful send (DTO).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SendResponseDto {
+    /// Transaction hash (0x-prefixed).
+    pub tx_hash: String,
+    /// Chain name used.
+    pub chain_name: String,
+    /// Chain ID used.
+    pub chain_id: u64,
+    /// Sender address.
+    pub from: String,
+    /// Recipient address.
+    pub to: String,
+    /// Amount sent formatted (e.g., "0.1 ETH").
+    pub amount_formatted: String,
+    /// Estimated gas cost formatted.
+    pub gas_cost_formatted: String,
+}

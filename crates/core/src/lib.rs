@@ -12,8 +12,10 @@
 //!                     → explainer (human language)
 //! ```
 
+pub mod amount;
 pub mod convert;
 pub mod explainer;
 pub mod keyring;
 pub mod provider;
 pub mod router;
+pub mod send;
