@@ -1,8 +1,8 @@
 # Code Review — Rustok Full Codebase
-> Date: 2026-04-10 (updated)
-> Previous review: 2026-04-09
+> Date: 2026-04-11 (updated)
+> Previous review: 2026-04-10
 > Standard: Codex rust.md v1.0 + architecture.md v1.1
-> Status: Phase 3 IN PROGRESS (103 tests, 0 must-fix). Transaction history done.
+> Status: Phase 3 IN PROGRESS (103 tests, 0 must-fix). Send ETH verified on Sepolia.
 
 ---
 
@@ -21,16 +21,22 @@
 | ~~M1~~ | `--password` в CLI args | Убран. `resolve_password()` через env/rpassword (коммит af31c52) |
 | ~~M2~~ | i128 cap без документации | Задокументирован комментарием (simulator/mod.rs:129-130, коммит af31c52) |
 | ~~M3~~ | `total_formatted` вводит в заблуждение | Переименован в `approximate_total_formatted` (multi.rs:73, коммит af31c52) |
+| ~~E1~~ | InsufficientBalance показывал только value | Теперь value + gas через min_total_needed (router/mod.rs, коммит 040de39) |
+| ~~E2~~ | Нет Copy кнопки на Receive | Добавлена с execCommand fallback (коммит 6f92a76, 4c82267) |
+| ~~E3~~ | use_navigate() не работает в iOS WKWebView | Заменён на window.location.href (коммит a90dd92) |
+| ~~E4~~ | Sepolia не в dev-сборках | cfg(debug_assertions) → default_chains (коммит 795cfba) |
+| ~~E5~~ | Sepolia RPC единственный и ненадёжный | Добавлены fallback RPCs (коммит df53695) |
+| ~~E6~~ | Etherscan V1 API deprecated | Мигрировано на Blockscout (коммит 76c01fa) |
 
 ---
 
 ## Must fix (0 remaining)
 
-Все must-fix закрыты. Phase 1 + Phase 2 чисты.
+Все must-fix закрыты.
 
 ---
 
-## Consider (6 remaining)
+## Consider (8 remaining)
 
 1. **multi.rs** — Дупликация fetch_gas_fees/fetch_estimate_gas/fetch_nonce. Вынести helper `with_provider()`
 2. **Cargo.toml** — Нет `overflow-checks = true` в `[profile.release]`
@@ -38,6 +44,8 @@
 4. **txguard/Cargo.toml** — Heavy deps (revm, reqwest) без feature gates. Parser-only consumer тянет EVM
 5. **router/mod.rs** — `expect()` в library code. Заменить на proper error
 6. **keyring/local.rs** — Нет custom Drop для LocalKeyring (zeroize on drop). `Zeroizing` покрывает `generate()`, но `decrypt_key` flow и `signer` field — нет.
+7. **commands.rs** — Создание второго кошелька не удаляет первый. `unlock_wallet` берёт первый найденный `.json` — недетерминированный выбор.
+8. **analyze.rs** — Нет кнопки "Scan Again" — нужно уходить на другую страницу и возвращаться для сброса.
 
 ---
 
@@ -46,7 +54,7 @@
 - Архитектура: workspace layout по Codex (txguard lib, core domain, cli thin, api placeholder)
 - Error handling: thiserror последовательно, proper variants, #[from], lowercase messages
 - Type design: TransactionAction enum, Severity::weight(), Verdict, #[must_use]
-- Тесты: 93 тест (txguard 38, core 45, desktop 8, doctests 2)
+- Тесты: 103 тест (txguard 38, core 55, desktop 8, doctests 2)
 - Saturating arithmetic в финансовых расчётах
 - Custom Debug для LocalKeyring скрывает signer internals
 - GoPlus client: чистое разделение raw/public types
@@ -72,7 +80,12 @@
 - Phase 3: Mobile touch targets (44pt min), iOS zoom prevention, .block/.inline-block bug fix
 - Phase 3: Biometric unlock (Face ID) — tauri-plugin-biometric, frontend-driven auth, AES-GCM password storage
 - Phase 3: Extracted unlock_with_password helper — DRY between password and biometric unlock
-- Phase 3: Transaction history — ExplorerClient (Etherscan API), 5 chains parallel, Activity page with direction/amount/chain/time
+- Phase 3: Transaction history — ExplorerClient (Blockscout API), 5 chains parallel, Activity page with direction/amount/chain/time
+- Phase 3: **Send ETH verified on Sepolia** — 0.001 ETH sent, confirmed on-chain (tx 0xac2391...a075ab)
+- Phase 3: Copy Address button with execCommand fallback for iOS WKWebView
+- Phase 3: navigate_to() helper — reliable programmatic navigation in iOS WebView
+- Phase 3: Sepolia fallback RPCs (publicnode, drpc) — resilient balance fetching
+- Phase 3: Blockscout API migration — free, no API key required, Etherscan-compatible
 
 ---
 
@@ -89,7 +102,11 @@
    - ~~Optimize Argon2id in dev profile~~ ✅ Done (per-package opt-level=3 for argon2+blake2, ~12ms per derive_key)
    - ~~Mobile UI tweaks~~ ✅ Done (44pt touch targets, iOS zoom prevention, missing .block/.inline-block)
    - ~~Biometric unlock~~ ✅ Done (tauri-plugin-biometric, Face ID, encrypted password storage)
-   - ~~Transaction history~~ ✅ Done (ExplorerClient, Etherscan API, 5 chains parallel, Activity page UI)
+   - ~~Transaction history~~ ✅ Done (ExplorerClient, Blockscout API, 5 chains parallel, Activity page UI)
+   - ~~E2E testing on Sepolia~~ ✅ Done (Send 0.001 ETH verified on-chain)
+   - Fix: multiple keystores → single wallet management (Consider #7)
+   - Fix: "Scan Again" button on Analyze page (Consider #8)
+   - Biometric testing (Face ID enrollment in Simulator)
    - Android build (Tauri android init + spike)
    - Passkey auth (WebAuthn)
    - Code signing + TestFlight
