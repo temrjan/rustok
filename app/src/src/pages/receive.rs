@@ -2,7 +2,7 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde::Serialize;
 
-use crate::bridge::tauri_invoke;
+use crate::bridge::{copy_to_clipboard, tauri_invoke};
 
 #[derive(Serialize)]
 struct EmptyArgs {}
@@ -11,6 +11,7 @@ struct EmptyArgs {}
 pub fn ReceivePage() -> impl IntoView {
     let (address, set_address) = signal(None::<String>);
     let (qr_svg, set_qr_svg) = signal(None::<String>);
+    let (copied, set_copied) = signal(false);
 
     // Fetch address and QR on mount.
     spawn_local(async move {
@@ -24,6 +25,21 @@ pub fn ReceivePage() -> impl IntoView {
         }
     });
 
+    let on_copy = move |_| {
+        if let Some(addr) = address.get() {
+            spawn_local(async move {
+                if copy_to_clipboard(&addr).await.is_ok() {
+                    set_copied.set(true);
+                    // Reset after 2 seconds
+                    gloo_timers::callback::Timeout::new(2_000, move || {
+                        set_copied.set(false);
+                    })
+                    .forget();
+                }
+            });
+        }
+    };
+
     view! {
         <div>
             <h1 class="text-2xl font-bold mb-4">"Receive"</h1>
@@ -34,12 +50,18 @@ pub fn ReceivePage() -> impl IntoView {
                         // SAFETY: SVG generated server-side from validated Ethereum address
                         <div class="qr-container" inner_html=svg />
                         <p class="font-mono text-sm break-all bg-gray-800 p-4 rounded mt-4">{addr}</p>
+                        <button class="copy-btn mt-4" on:click=on_copy>
+                            {move || if copied.get() { "Copied!" } else { "Copy Address" }}
+                        </button>
                     </div>
                 }.into_any(),
                 (Some(addr), None) => view! {
                     <div class="text-center">
                         <p class="text-gray-400 mb-2">"Share this address to receive ETH:"</p>
                         <p class="font-mono text-lg break-all bg-gray-800 p-4 rounded">{addr}</p>
+                        <button class="copy-btn mt-4" on:click=on_copy>
+                            {move || if copied.get() { "Copied!" } else { "Copy Address" }}
+                        </button>
                     </div>
                 }.into_any(),
                 _ => view! {

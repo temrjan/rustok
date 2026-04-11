@@ -7,6 +7,17 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], catch)]
     async fn invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
+
+    #[wasm_bindgen(js_namespace = ["navigator", "clipboard"], catch)]
+    async fn writeText(text: &str) -> Result<JsValue, JsValue>;
+}
+
+/// Copy text to the system clipboard.
+pub async fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    writeText(text)
+        .await
+        .map_err(|e| format!("clipboard: {e:?}"))?;
+    Ok(())
 }
 
 /// Type-safe invoke wrapper for calling tauri::command from WASM.

@@ -104,6 +104,22 @@ button:disabled {
     height: 100%;
 }
 
+.copy-btn {
+    background: #13131D;
+    border: 1px solid #2A2A3C;
+    border-radius: 0.5rem;
+    color: #CBD5E1;
+    padding: 0.625rem 1.5rem;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.copy-btn:hover {
+    border-color: #6366F160;
+    color: #E2E8F0;
+}
+
 input:focus {
     outline: 1px solid #6366F140;
     border-color: #6366F160;
