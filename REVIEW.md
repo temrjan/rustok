@@ -36,15 +36,15 @@
 
 ---
 
-## Consider (8 remaining)
+## Consider (5 remaining)
 
 1. **multi.rs** — Дупликация fetch_gas_fees/fetch_estimate_gas/fetch_nonce. Вынести helper `with_provider()`
-2. **Cargo.toml** — Нет `overflow-checks = true` в `[profile.release]`
+2. ~~**Cargo.toml** — Нет `overflow-checks = true` в `[profile.release]`~~ ✅ Fixed (Cargo.toml:85, коммит be96017)
 3. **Cargo.toml** — Нет clippy restriction lints (unwrap_used, indexing_slicing, panic)
 4. **txguard/Cargo.toml** — Heavy deps (revm, reqwest) без feature gates. Parser-only consumer тянет EVM
 5. **router/mod.rs** — `expect()` в library code. Заменить на proper error
-6. **keyring/local.rs** — Нет custom Drop для LocalKeyring (zeroize on drop). `Zeroizing` покрывает `generate()`, но `decrypt_key` flow и `signer` field — нет.
-7. **commands.rs** — Создание второго кошелька не удаляет первый. `unlock_wallet` берёт первый найденный `.json` — недетерминированный выбор.
+6. ~~**keyring/local.rs** — Нет custom Drop для LocalKeyring~~ ✅ Fixed (local.rs:44-50, коммит d22641c)
+7. ~~**commands.rs** — Создание второго кошелька не удаляет первый~~ ✅ Fixed (commands.rs:129-136, коммит dd4a364)
 8. **analyze.rs** — Нет кнопки "Scan Again" — нужно уходить на другую страницу и возвращаться для сброса.
 
 ---
@@ -104,11 +104,11 @@
    - ~~Biometric unlock~~ ✅ Done (tauri-plugin-biometric, Face ID, encrypted password storage)
    - ~~Transaction history~~ ✅ Done (ExplorerClient, Blockscout API, 5 chains parallel, Activity page UI)
    - ~~E2E testing on Sepolia~~ ✅ Done (Send 0.001 ETH verified on-chain)
-   - Fix: multiple keystores → single wallet management (Consider #7)
+   - ~~Fix: multiple keystores → single wallet management (Consider #7)~~ ✅ Fixed
    - Fix: "Scan Again" button on Analyze page (Consider #8)
    - Biometric testing (Face ID enrollment in Simulator)
    - Android build (Tauri android init + spike)
    - Passkey auth (WebAuthn)
    - Code signing + TestFlight
-2. Добавить overflow-checks в release profile (Consider #2)
-3. Добавить custom Drop для LocalKeyring (zeroize on drop) (Consider #6)
+2. ~~Добавить overflow-checks в release profile (Consider #2)~~ ✅ Fixed
+3. ~~Добавить custom Drop для LocalKeyring (zeroize on drop) (Consider #6)~~ ✅ Fixed

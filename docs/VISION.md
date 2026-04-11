@@ -92,8 +92,8 @@ Ethereum в 2026 — это десятки L2/L3 сетей. Для пользо
 | App shell | Tauri 2.0 | Один Rust core → iOS, Android, Desktop |
 | UI | Leptos 0.7 (Rust → WASM) | Full Rust stack, shared types с core без маппинга |
 | CLI | clap | Для разработчиков |
-| Key storage | Passkey + MPC | Без seed-фраз |
-| Cross-chain | Across Protocol (intents) | Open source, intent-based |
+| Key storage | AES-256-GCM + Argon2id (Phase 5: Passkey + MPC) | Без seed-фраз |
+| Cross-chain | Phase 4: Across Protocol (intents) | Open source, intent-based |
 
 ---
 
@@ -151,7 +151,7 @@ Tauri app для macOS. Leptos 0.7 UI (Rust → WASM) + Rust core через tau
 
 **Phase 3 — Мобильное приложение (iOS + Android)** 🔄 IN PROGRESS
 103 теста, CI зелёный, 0 must-fix.
-Done: iOS spike, UI redesign, Send flow, Biometric unlock (Face ID), Transaction history (Etherscan API, 5 chains).
+Done: iOS spike, UI redesign, Send flow, Biometric unlock (Face ID), Transaction history (Blockscout API, 5 chains).
 Remaining: Android build, Passkey auth (WebAuthn), Code signing + TestFlight.
 
 **Phase 4 — Cross-chain**
@@ -184,11 +184,13 @@ NLP команды, AI-объяснения транзакций, полноце
 rustok/
 ├── crates/
 │   ├── txguard/    — движок безопасности (самостоятельный crate)
-│   ├── core/       — wallet core (keyring, provider, router, explainer)
-│   └── cli/        — CLI для разработчиков
+│   ├── core/       — wallet core (keyring, provider, router, explainer, explorer)
+│   ├── types/      — shared DTO для core ↔ frontend (без U256 в WASM)
+│   ├── cli/        — CLI для разработчиков
+│   └── api/        — HTTP API (Phase 3, stub)
 ├── app/
-│   ├── src-tauri/  — Tauri backend (tauri::command → wallet-core)
-│   └── src/        — Leptos UI (вызывает core через invoke())
+│   ├── src-tauri/  — Tauri backend (tauri::command → core)
+│   └── src/        — Leptos 0.7 UI (Rust → WASM, вызывает core через invoke())
 ```
 
 Leptos UI компилируется в WASM и работает в Tauri webview.
