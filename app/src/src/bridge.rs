@@ -7,17 +7,20 @@ use wasm_bindgen::prelude::*;
 extern "C" {
     #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"], catch)]
     async fn invoke(cmd: &str, args: JsValue) -> Result<JsValue, JsValue>;
-
-    #[wasm_bindgen(js_namespace = ["navigator", "clipboard"], catch)]
-    async fn writeText(text: &str) -> Result<JsValue, JsValue>;
 }
 
 /// Copy text to the system clipboard.
-pub async fn copy_to_clipboard(text: &str) -> Result<(), String> {
-    writeText(text)
-        .await
-        .map_err(|e| format!("clipboard: {e:?}"))?;
-    Ok(())
+///
+/// Uses `document.execCommand('copy')` via a temporary textarea — works in
+/// iOS WKWebView where `navigator.clipboard` is unavailable.
+pub fn copy_to_clipboard(text: &str) -> bool {
+    let code = format!(
+        r#"(function(){{var e=document.createElement('textarea');e.value="{}";e.setAttribute('readonly','');e.style.position='absolute';e.style.left='-9999px';document.body.appendChild(e);e.select();var r=document.execCommand('copy');document.body.removeChild(e);return r;}})()"#,
+        text.replace('\\', "\\\\").replace('"', "\\\"")
+    );
+    js_sys::eval(&code)
+        .map(|v| v.as_bool().unwrap_or(false))
+        .unwrap_or(false)
 }
 
 /// Type-safe invoke wrapper for calling tauri::command from WASM.

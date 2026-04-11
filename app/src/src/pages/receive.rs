@@ -27,16 +27,13 @@ pub fn ReceivePage() -> impl IntoView {
 
     let on_copy = move |_| {
         if let Some(addr) = address.get() {
-            spawn_local(async move {
-                if copy_to_clipboard(&addr).await.is_ok() {
-                    set_copied.set(true);
-                    // Reset after 2 seconds
-                    gloo_timers::callback::Timeout::new(2_000, move || {
-                        set_copied.set(false);
-                    })
-                    .forget();
-                }
-            });
+            if copy_to_clipboard(&addr) {
+                set_copied.set(true);
+                gloo_timers::callback::Timeout::new(2_000, move || {
+                    set_copied.set(false);
+                })
+                .forget();
+            }
         }
     };
 
