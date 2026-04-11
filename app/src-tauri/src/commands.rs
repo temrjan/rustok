@@ -126,6 +126,15 @@ pub async fn create_wallet(
         .map_err(|e| format!("no app data dir: {e}"))?;
     std::fs::create_dir_all(&data_dir).map_err(|e| format!("failed to create data dir: {e}"))?;
 
+    // Remove old keystore files — single-wallet design, only one active at a time.
+    if let Ok(entries) = std::fs::read_dir(&data_dir) {
+        for entry in entries.flatten() {
+            if entry.path().extension().is_some_and(|ext| ext == "json") {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+
     let filename = format!("{address}.json");
     let keystore_path = data_dir.join(&filename);
 
