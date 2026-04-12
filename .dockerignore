@@ -1,5 +1,7 @@
 target/
-app/
+app/src/
+app/src-tauri/src/
+app/src-tauri/gen/
 docs/
 .git/
 *.md
