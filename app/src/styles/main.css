@@ -152,11 +152,11 @@ input:focus {
     right: 0;
     display: flex;
     justify-content: space-around;
-    align-items: center;
-    height: 56px;
+    align-items: flex-end;
+    padding-top: 8px;
+    padding-bottom: calc(env(safe-area-inset-bottom, 20px) + 8px);
     background: #1A1A1A;
     border-top: 1px solid #2A2A2A;
-    padding-bottom: env(safe-area-inset-bottom);
     z-index: 100;
 }
 
@@ -164,14 +164,24 @@ input:focus {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 2px;
-    font-size: 0.75rem;
+    gap: 3px;
+    font-size: 0.625rem;
     color: #8A8A8A;
-    padding: 8px 16px;
+    padding: 6px 16px;
     min-height: 48px;
+    min-width: 64px;
     justify-content: center;
     text-decoration: none;
     transition: color 0.15s;
+}
+
+.tab-icon {
+    width: 24px;
+    height: 24px;
+}
+
+.tab-label {
+    font-weight: 500;
 }
 
 .tab-bar a[aria-current="page"] {
@@ -184,7 +194,7 @@ input:focus {
 
 .app-content {
     padding: 1.5rem;
-    padding-bottom: 80px;
+    padding-bottom: calc(80px + env(safe-area-inset-bottom, 20px));
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     max-width: 480px;
