@@ -1,8 +1,8 @@
 # Code Review — Rustok Full Codebase
-> Date: 2026-04-11 (updated)
-> Previous review: 2026-04-10
+> Date: 2026-04-12 (updated)
+> Previous review: 2026-04-11
 > Standard: Codex rust.md v1.0 + architecture.md v1.1
-> Status: Phase 3 IN PROGRESS (103 tests, 0 must-fix). Send ETH verified on Sepolia.
+> Status: Phase 3 IN PROGRESS (103 tests, 0 must-fix). Send ETH verified on Sepolia. txguard API live. Landing live.
 
 ---
 
@@ -86,6 +86,11 @@
 - Phase 3: navigate_to() helper — reliable programmatic navigation in iOS WebView
 - Phase 3: Sepolia fallback RPCs (publicnode, drpc) — resilient balance fetching
 - Phase 3: Blockscout API migration — free, no API key required, Etherscan-compatible
+- Promotion: txguard API live at api.rustokwallet.com — axum, 3 endpoints (/health, /check-address, /decode), Docker + Caddy
+- Promotion: Landing page live at rustokwallet.com — Astro + Tailwind, deployed on Vercel
+- Promotion: X account @rustokwallet, first post published
+- Branding: amber palette (#f59e0b), neutral dark bg (#0D0D0D), SVG tab bar icons, 3D amber Ethereum diamond logo
+- Deploy: dedicated server 185.197.195.191, Docker + Caddy configuration in deploy/
 
 ---
 
@@ -105,6 +110,10 @@
    - ~~Transaction history~~ ✅ Done (ExplorerClient, Blockscout API, 5 chains parallel, Activity page UI)
    - ~~E2E testing on Sepolia~~ ✅ Done (Send 0.001 ETH verified on-chain)
    - ~~Fix: multiple keystores → single wallet management (Consider #7)~~ ✅ Fixed
+   - ~~UI rebranding~~ ✅ Done (amber palette, neutral dark bg, SVG tab bar icons, 3D logo)
+   - ~~txguard API~~ ✅ Done (axum, 3 endpoints, Docker + Caddy, live at api.rustokwallet.com)
+   - ~~Landing page~~ ✅ Done (Astro + Tailwind, Vercel, live at rustokwallet.com)
+   - ~~X account~~ ✅ Done (@rustokwallet, first post published)
    - Fix: "Scan Again" button on Analyze page (Consider #8)
    - Biometric testing (Face ID enrollment in Simulator)
    - Android build (Tauri android init + spike)

@@ -1,12 +1,16 @@
-# Следующая сессия — Phase 3 завершение
+# Следующая сессия — Phase 3 завершение + Promotion follow-up
 
-## Статус (после сессии 2026-04-11)
+## Статус (после сессии 2026-04-12)
 
 - **103 теста**, все зелёные
 - **CI**: 5/5 jobs green (Test, Format, Clippy, Docs, Deny)
-- **REVIEW.md**: 0 must-fix, 6 consider (все SHOULD/NICE)
+- **REVIEW.md**: 0 must-fix, 5 consider (все SHOULD/NICE)
 - **Send ETH**: подтверждён on-chain (Sepolia, tx 0xac2391...a075ab)
-- **11 багов** найдено и исправлено за сессию (clipboard, navigation, RPC, Etherscan→Blockscout, keystore, zeroize, overflow-checks)
+- **txguard API**: live at api.rustokwallet.com (3 endpoints: /health, /check-address, /decode)
+- **Landing**: live at rustokwallet.com (Astro + Tailwind, Vercel)
+- **X**: @rustokwallet, first post published
+- **Server**: 185.197.195.191 dedicated for Rustok, Docker + Caddy
+- **UI rebranded**: amber palette (#f59e0b), neutral dark bg (#0D0D0D), SVG tab bar icons, 3D amber logo
 
 ## Что сделано в Phase 3
 
@@ -48,7 +52,13 @@
 
 На Analyze page нет способа сбросить результат без навигации. Добавить кнопку "Scan Again" после результата анализа.
 
-### 4. Решение: Android или TestFlight?
+### 4. Promotion follow-up
+
+- Мониторинг API uptime (api.rustokwallet.com/health)
+- Второй пост в X — demo GIF или curl примеры
+- Landing: добавить scanner widget (вызывает /decode и /check-address)
+
+### 5. Решение: Android или TestFlight?
 
 После завершения iOS тестов — выбрать следующий шаг:
 - **Android**: `cargo tauri android init` + spike (2-3 дня)

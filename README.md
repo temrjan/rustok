@@ -2,7 +2,9 @@
 
 Ethereum wallet with chain abstraction and transaction security engine.
 
-**Status:** Alpha — Phase 3 in progress (Send, Biometric unlock, Transaction history done. iOS running in Simulator)
+**Status:** Alpha — Phase 3 in progress (Send, Biometric unlock, Transaction history done. iOS running in Simulator. txguard API live.)
+
+**Website:** [rustokwallet.com](https://rustokwallet.com) | **API:** [api.rustokwallet.com](https://api.rustokwallet.com/health) | **X:** [@rustokwallet](https://x.com/rustokwallet)
 
 ## What is this?
 
@@ -79,7 +81,7 @@ rustok/
 │   │   └── convert/      DTO conversions (core types → frontend types)
 │   ├── types/      # Shared DTO types (core ↔ frontend, no crypto deps)
 │   ├── cli/        # CLI binary
-│   └── api/        # HTTP API (planned)
+│   └── api/        # HTTP API (axum, live at api.rustokwallet.com)
 ├── app/
 │   ├── src-tauri/  # Tauri backend (tauri::command → core)
 │   └── src/        # Leptos frontend (WASM, invokes backend)
@@ -123,7 +125,8 @@ cargo tauri dev
 ```
 
 Pages: Home (auto-balance + actions), Send (3-step: input → preview → result), Receive (QR), Analyze (txguard), Activity (transaction history), Settings, Unlock.
-Navigation: bottom tab bar (Home / Activity / Settings). Send/Receive/Scan — fullscreen from Home action buttons.
+Navigation: bottom tab bar (Home / Activity / Settings) with SVG tab bar icons. Send/Receive/Scan — fullscreen from Home action buttons.
+Branding: amber palette (#f59e0b), neutral dark background (#0D0D0D), 3D amber Ethereum diamond logo.
 
 ## iOS App
 
@@ -137,6 +140,30 @@ cargo tauri ios dev
 ```
 
 Same pages as desktop, with safe area insets for iPhone notch/Dynamic Island.
+
+## txguard API
+
+Public API for transaction security analysis. Live at `api.rustokwallet.com`.
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check |
+| `/check-address` | POST | Address security check via GoPlus (malicious flag, risk level, risks) |
+| `/decode` | POST | Decode and analyze raw EVM transaction (action, risk score, findings) |
+
+```bash
+# Check address
+curl -X POST https://api.rustokwallet.com/check-address \
+  -H "Content-Type: application/json" \
+  -d '{"address": "0xdAC17F958D2ee523a2206206994597C13D831ec7"}'
+
+# Decode transaction
+curl -X POST https://api.rustokwallet.com/decode \
+  -H "Content-Type: application/json" \
+  -d '{"to": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "data": "0x095ea7b3000000000000000000000000000000000000000000000000000000000000dead00000000000000000000000000000000000000000000000000000000000f4240"}'
+```
+
+Deployed via Docker + Caddy on 185.197.195.191 (`deploy/`).
 
 ## Tech Stack
 

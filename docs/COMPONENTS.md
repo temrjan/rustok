@@ -37,7 +37,7 @@
 
 ---
 
-## Workspace crates (5)
+## Workspace crates (5) + deploy
 
 | Crate | Путь | Что делает | Статус |
 |-------|------|-----------|--------|
@@ -45,7 +45,7 @@
 | `rustok-core` | `crates/core/` | Wallet core (keyring, provider, router, send, explorer, explainer) | ✅ Done |
 | `rustok-types` | `crates/types/` | Shared DTO для core ↔ frontend (без U256 в WASM) | ✅ Done |
 | `rustok` (CLI) | `crates/cli/` | CLI: decode, analyze, wallet new/balance/info/send | ✅ Done |
-| `rustok-api` | `crates/api/` | HTTP API сервер | Stub (Phase 3+) |
+| `rustok-api` | `crates/api/` | HTTP API сервер (axum, 3 endpoints) | ✅ Done |
 
 App (не в workspace):
 
@@ -137,11 +137,26 @@ App (не в workspace):
 
 ---
 
-## 5. `rustok-api` — HTTP API (stub)
+## 5. `rustok-api` — HTTP API
 
-**Что делает:** REST API для интеграции. Пока не реализован — `println!("not yet implemented")`.
+**Что делает:** Public REST API для txguard. Живёт на `api.rustokwallet.com` (185.197.195.191). Используется лендингом для scanner widget.
 
-**Зависимости:** txguard, tokio (axum не подключён)
+**Технология:** axum + tower-http (CORS, tracing)
+
+**Endpoints (3):**
+1. `GET /health` — health check, всегда 200
+2. `POST /check-address` — проверка адреса через GoPlus (is_malicious, risk_level, risks)
+3. `POST /decode` — декодирование и анализ транзакции (action, risk_score, description, findings)
+
+**Shared state:** `AppState` с `Arc<GoPlusClient>` (reusable HTTP client)
+
+**Error handling:** `ApiError` enum (BadRequest 400, Upstream 502) → structured JSON
+
+**CORS:** rustokwallet.com, localhost:3000, localhost:4321
+
+**Деплой:** Docker + Caddy (`deploy/docker-compose.yml`, `deploy/Caddyfile`), сервер 185.197.195.191
+
+**Зависимости:** txguard, axum, tower-http, tokio, serde, serde_json, tracing, alloy-primitives
 
 ---
 
@@ -182,7 +197,7 @@ app/src-tauri ──→ rustok-core ──→ txguard
                        │          rustok-types
 rustok (CLI) ────→ rustok-core
                    txguard
-rustok-api ──────→ txguard (stub)
+rustok-api ──────→ txguard (axum server, GoPlus enrichment)
 ```
 
 ---
@@ -195,7 +210,7 @@ rustok-api ──────→ txguard (stub)
 | 2 | rustok-core | crate | ⚡ Средняя | 55 | ✅ Done |
 | 3 | rustok-types | crate | 🟢 Низкая | — | ✅ Done |
 | 4 | rustok (CLI) | crate | 🟢 Низкая | — | ✅ Done |
-| 5 | rustok-api | crate | 🟢 Низкая | — | Stub |
+| 5 | rustok-api | crate | 🟢 Низкая | — | ✅ Done |
 | 6 | rustok-frontend | app | ⚡ Средняя | — | ✅ Done |
 | 7 | app/src-tauri | app | ⚡ Средняя | 8 | ✅ Done |
 
@@ -208,6 +223,5 @@ rustok-api ──────→ txguard (stub)
 - **Scan Again** — кнопка сброса на Analyze page (Consider #8)
 - **Android** — `cargo tauri android init` + spike
 - **TestFlight** — code signing + реальный iPhone
-- **HTTP API** — axum + rustok-core (crate `rustok-api`)
 - **Cross-chain** — Across Protocol (Phase 4)
 - **Passkey + WebAuthn** — замена пароля (Phase 5)
