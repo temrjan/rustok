@@ -163,7 +163,7 @@ pub fn SendPage() -> impl IntoView {
                         </div>
 
                         <button
-                            class="mt-4 bg-indigo-600 text-white px-4 py-3 rounded w-full hover:bg-indigo-700"
+                            class="mt-4 bg-indigo-600 px-4 py-3 rounded w-full hover:bg-indigo-700"
                             on:click=do_preview
                             disabled=move || loading.get()
                         >
@@ -212,7 +212,7 @@ pub fn SendPage() -> impl IntoView {
                                     </div>
 
                                     <button
-                                        class="bg-indigo-600 text-white px-4 py-3 rounded w-full hover:bg-indigo-700"
+                                        class="bg-indigo-600 px-4 py-3 rounded w-full hover:bg-indigo-700"
                                         on:click=do_send
                                         disabled=move || loading.get() || is_blocked
                                     >
@@ -246,7 +246,7 @@ pub fn SendPage() -> impl IntoView {
 
                                 <a
                                     href="/"
-                                    class="mt-6 inline-block bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+                                    class="mt-6 inline-block bg-indigo-600 px-4 py-2 rounded hover:bg-indigo-700"
                                 >
                                     "Done"
                                 </a>

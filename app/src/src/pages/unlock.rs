@@ -151,20 +151,21 @@ pub fn UnlockPage() -> impl IntoView {
     };
 
     view! {
-        <div>
-            <h1 class="text-2xl font-bold mb-4">"Unlock Wallet"</h1>
+        <div class="unlock-hero">
+            <img src="/logo.png" alt="Rustok" class="unlock-logo" />
+            <div class="unlock-title">"Rustok"</div>
+            <div class="unlock-subtitle">"Ethereum Wallet"</div>
 
             // Error display.
             {move || error.get().map(|e| view! { <p class="mt-2 text-red-400">{e}</p> })}
 
             {move || {
                 if show_bio_prompt.get() {
-                    // ─── Biometric enable prompt ───────────────
                     return view! {
-                        <div class="text-center">
+                        <div class="unlock-form">
                             <p class="text-gray-300 mb-4">"Enable Face ID for faster unlocks?"</p>
                             <button
-                                class="bg-indigo-600 text-white px-4 py-3 rounded w-full hover:bg-indigo-700 mb-2"
+                                class="bg-indigo-600 px-4 py-3 rounded-xl w-full hover:bg-indigo-700 mb-2"
                                 on:click=enable_bio
                                 disabled=move || loading.get()
                             >
@@ -180,13 +181,11 @@ pub fn UnlockPage() -> impl IntoView {
                     }.into_any();
                 }
 
-                // ─── Main unlock screen ───────────────────
                 view! {
-                    <div>
-                        // Biometric button (only if available + enabled).
+                    <div class="unlock-form">
                         {(bio_available.get() && bio_enabled.get()).then(|| view! {
                             <button
-                                class="bg-indigo-600 text-white px-4 py-3 rounded w-full hover:bg-indigo-700 mb-4"
+                                class="bg-indigo-600 px-4 py-3 rounded-xl w-full hover:bg-indigo-700 mb-4"
                                 on:click=biometric_unlock
                                 disabled=move || loading.get()
                             >
@@ -197,12 +196,12 @@ pub fn UnlockPage() -> impl IntoView {
 
                         <input
                             type="password"
-                            class="border border-gray-600 rounded p-2 w-full bg-gray-800 text-white"
+                            class="border border-gray-600 rounded-xl p-2 w-full bg-gray-800"
                             placeholder="Password"
                             on:input:target=move |ev| set_password.set(ev.target().value())
                         />
                         <button
-                            class="mt-2 bg-indigo-600 text-white px-4 py-3 rounded w-full hover:bg-indigo-700"
+                            class="mt-2 bg-indigo-600 px-4 py-3 rounded-xl w-full hover:bg-indigo-700"
                             on:click=unlock
                             disabled=move || loading.get()
                         >

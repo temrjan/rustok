@@ -1,4 +1,4 @@
-/* Rustok — Amber palette */
+/* Rustok — Amber on neutral dark (OltinPay-inspired) */
 
 *, *::before, *::after {
     box-sizing: border-box;
@@ -12,7 +12,7 @@ html {
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: #0c0a08;
+    background: #0D0D0D;
     color: #E2E8F0;
     margin: 0;
     min-height: 100%;
@@ -54,31 +54,31 @@ body {
 .border { border-width: 1px; border-style: solid; }
 .border-b { border-bottom-width: 1px; border-bottom-style: solid; }
 
-/* Colors */
-.bg-gray-800 { background: #161412; }
-.bg-gray-900 { background: #0c0a08; }
-.bg-blue-600 { background: #f59e0b; }
+/* Colors — neutral dark + amber accent */
+.bg-gray-800 { background: #1A1A1A; }
+.bg-gray-900 { background: #0D0D0D; }
+.bg-blue-600 { background: #f59e0b; color: #000; }
 .text-white { color: #fff; }
 .text-gray-300 { color: #CBD5E1; }
-.text-gray-400 { color: #6B7280; }
+.text-gray-400 { color: #8A8A8A; }
 .text-green-400 { color: #22c55e; }
 .text-yellow-400 { color: #FBBF24; }
 .text-red-400 { color: #ef4444; }
-.text-blue-400 { color: #fbbf24; }
-.border-gray-600 { border-color: #2A2A3C; }
-.border-gray-700 { border-color: #201c18; }
+.text-blue-400 { color: #f59e0b; }
+.border-gray-600 { border-color: #2A2A2A; }
+.border-gray-700 { border-color: #2A2A2A; }
 
 .hover\:bg-blue-700:hover { background: #d97706; }
-.hover\:text-blue-400:hover { color: #fbbf24; }
+.hover\:text-blue-400:hover { color: #f59e0b; }
 
-a { color: #6B7280; text-decoration: none; transition: color 0.15s; }
-a[aria-current="page"] { color: #fbbf24; }
+a { color: #8A8A8A; text-decoration: none; transition: color 0.15s; }
+a[aria-current="page"] { color: #f59e0b; }
 
 /* ─── Mobile touch targets (Apple HIG: 44pt minimum) ──────────── */
 
 input, select, textarea {
     min-height: 44px;
-    font-size: 16px; /* prevents iOS auto-zoom on focus */
+    font-size: 16px;
 }
 
 button {
@@ -89,6 +89,24 @@ button {
 button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* ─── Primary buttons: amber tinted (matches landing nav-cta) ──── */
+
+.bg-indigo-600,
+.bg-blue-600 {
+    background: rgba(245, 158, 11, 0.15);
+    color: #f59e0b;
+    font-weight: 600;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 0.75rem;
+    transition: background 0.15s, color 0.15s;
+}
+
+.hover\:bg-indigo-700:hover,
+.hover\:bg-blue-700:hover {
+    background: rgba(245, 158, 11, 0.25);
+    color: #f59e0b;
 }
 
 /* QR code */
@@ -105,8 +123,8 @@ button:disabled {
 }
 
 .copy-btn {
-    background: #161412;
-    border: 1px solid #2A2A3C;
+    background: #1A1A1A;
+    border: 1px solid #2A2A2A;
     border-radius: 0.5rem;
     color: #CBD5E1;
     padding: 0.625rem 1.5rem;
@@ -136,8 +154,8 @@ input:focus {
     justify-content: space-around;
     align-items: center;
     height: 56px;
-    background: #121010;
-    border-top: 1px solid #2A2A3C;
+    background: #1A1A1A;
+    border-top: 1px solid #2A2A2A;
     padding-bottom: env(safe-area-inset-bottom);
     z-index: 100;
 }
@@ -148,7 +166,7 @@ input:focus {
     align-items: center;
     gap: 2px;
     font-size: 0.75rem;
-    color: #6B7280;
+    color: #8A8A8A;
     padding: 8px 16px;
     min-height: 48px;
     justify-content: center;
@@ -157,18 +175,20 @@ input:focus {
 }
 
 .tab-bar a[aria-current="page"] {
-    color: #fbbf24;
+    color: #f59e0b;
 }
 
 .tab-bar a:hover {
-    color: #fbbf24;
+    color: #f59e0b;
 }
 
 .app-content {
     padding: 1.5rem;
-    padding-bottom: 80px; /* tab bar height + margin */
+    padding-bottom: 80px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    max-width: 480px;
+    margin: 0 auto;
 }
 
 /* ─── Home Page ─────────────────────────────────────────────────── */
@@ -178,7 +198,7 @@ input:focus {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    color: #6B7280;
+    color: #8A8A8A;
     font-family: ui-monospace, SFMono-Regular, 'SF Mono', monospace;
     font-size: 0.875rem;
     margin-bottom: 1.5rem;
@@ -188,6 +208,7 @@ input:focus {
     text-align: center;
     font-size: 2.5rem;
     font-weight: 700;
+    color: #f59e0b;
     margin-bottom: 0.5rem;
 }
 
@@ -215,8 +236,8 @@ input:focus {
     flex-direction: column;
     align-items: center;
     gap: 0.375rem;
-    background: #161412;
-    border: 1px solid #2A2A3C;
+    background: #1A1A1A;
+    border: 1px solid #2A2A2A;
     border-radius: 1rem;
     padding: 1rem 1.5rem;
     min-width: 90px;
@@ -227,12 +248,47 @@ input:focus {
 }
 
 .action-btn:hover {
-    background: #1e1a16;
+    background: #222222;
     border-color: #f59e0b60;
 }
 
 .action-btn .icon {
     font-size: 1.25rem;
+}
+
+/* ─── Unlock Page — hero layout ───────────────────────────────── */
+
+.unlock-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 160px);
+    text-align: center;
+}
+
+.unlock-logo {
+    width: 120px;
+    height: 120px;
+    margin-bottom: 1.5rem;
+    border-radius: 1.5rem;
+}
+
+.unlock-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+}
+
+.unlock-subtitle {
+    color: #8A8A8A;
+    font-size: 0.875rem;
+    margin-bottom: 2rem;
+}
+
+.unlock-form {
+    width: 100%;
+    max-width: 320px;
 }
 
 /* ─── Send Page ─────────────────────────────────────────────────── */
@@ -241,7 +297,7 @@ input:focus {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
-    color: #fbbf24;
+    color: #f59e0b;
     font-size: 0.875rem;
     margin-bottom: 1rem;
     cursor: pointer;
@@ -259,8 +315,8 @@ input:focus {
 
 .preset-btn {
     flex: 1;
-    background: #161412;
-    border: 1px solid #2A2A3C;
+    background: #1A1A1A;
+    border: 1px solid #2A2A2A;
     border-radius: 0.5rem;
     color: #CBD5E1;
     padding: 0.625rem 0;
@@ -275,8 +331,8 @@ input:focus {
 }
 
 .preview-card {
-    background: #161412;
-    border: 1px solid #2A2A3C;
+    background: #1A1A1A;
+    border: 1px solid #2A2A2A;
     border-radius: 0.75rem;
     padding: 1rem;
     margin: 1rem 0;
@@ -290,7 +346,7 @@ input:focus {
 }
 
 .preview-row .label {
-    color: #6B7280;
+    color: #8A8A8A;
 }
 
 .success-screen {
@@ -316,7 +372,7 @@ input:focus {
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 0;
-    border-bottom: 1px solid #201c18;
+    border-bottom: 1px solid #2A2A2A;
     text-decoration: none;
     color: inherit;
     transition: background 0.15s;
@@ -383,13 +439,13 @@ input:focus {
     display: flex;
     justify-content: space-between;
     font-size: 0.75rem;
-    color: #6B7280;
+    color: #8A8A8A;
     margin-top: 2px;
 }
 
 .tx-chain-badge {
     font-size: 0.625rem;
-    background: #201c18;
+    background: #222222;
     border-radius: 4px;
     padding: 1px 6px;
     color: #CBD5E1;
@@ -410,5 +466,3 @@ input:focus {
 .list-none { list-style: none; padding: 0; margin: 0; }
 .block { display: block; min-height: 44px; line-height: 44px; }
 .inline-block { display: inline-block; }
-.bg-indigo-600 { background: #f59e0b; }
-.hover\:bg-indigo-700:hover { background: #d97706; }

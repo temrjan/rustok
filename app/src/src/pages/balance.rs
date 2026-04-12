@@ -45,7 +45,7 @@ pub fn BalancePage() -> impl IntoView {
                 on:input:target=move |ev| set_address.set(ev.target().value())
             />
             <button
-                class="mt-2 bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700"
+                class="mt-2 bg-blue-600 px-4 py-2 rounded w-full hover:bg-blue-700"
                 on:click=fetch_balance
                 disabled=move || loading.get()
             >

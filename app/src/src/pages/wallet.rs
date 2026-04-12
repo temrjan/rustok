@@ -65,7 +65,7 @@ pub fn WalletPage() -> impl IntoView {
                 on:input:target=move |ev| set_confirm.set(ev.target().value())
             />
             <button
-                class="mt-2 bg-indigo-600 text-white px-4 py-2 rounded w-full hover:bg-indigo-700"
+                class="mt-2 bg-indigo-600 px-4 py-2 rounded w-full hover:bg-indigo-700"
                 on:click=create
                 disabled=move || loading.get()
             >
@@ -82,7 +82,7 @@ pub fn WalletPage() -> impl IntoView {
                     </p>
                     <a
                         href="/"
-                        class="mt-4 inline-block bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
+                        class="mt-4 inline-block bg-indigo-600 px-4 py-2 rounded hover:bg-indigo-700"
                     >
                         "Go to Home"
                     </a>

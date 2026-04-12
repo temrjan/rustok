@@ -50,7 +50,7 @@ pub fn ActivityPage() -> impl IntoView {
                         return view! {
                             <div class="text-center mt-6">
                                 <p class="text-gray-400 mb-4">"Unlock your wallet to see activity"</p>
-                                <a href="/unlock" class="bg-indigo-600 text-white px-4 py-2 rounded">"Unlock"</a>
+                                <a href="/unlock" class="bg-indigo-600 px-4 py-3 rounded-xl" style="display:inline-block;text-align:center;">"Unlock"</a>
                             </div>
                         }.into_any();
                     }

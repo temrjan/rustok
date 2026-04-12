@@ -53,15 +53,19 @@ pub fn HomePage() -> impl IntoView {
 
                 match unlocked.get() {
                     Some(false) | None => {
-                        // Not unlocked — show unlock prompt.
+                        // Not unlocked — show logo + unlock prompt.
                         view! {
-                            <div class="text-center mt-6">
-                                <p class="text-gray-400 mb-4">"Wallet locked"</p>
-                                <a href="/unlock" class="bg-indigo-600 text-white px-4 py-2 rounded">"Unlock Wallet"</a>
-                                <p class="text-gray-400 text-sm mt-4">
-                                    "No wallet? "
-                                    <a href="/wallet/create" class="text-blue-400">"Create one"</a>
-                                </p>
+                            <div class="unlock-hero">
+                                <img src="/logo.png" alt="Rustok" class="unlock-logo" />
+                                <div class="unlock-title">"Rustok"</div>
+                                <div class="unlock-subtitle">"Ethereum Wallet"</div>
+                                <div class="unlock-form">
+                                    <a href="/unlock" class="bg-indigo-600 px-4 py-3 rounded-xl w-full hover:bg-indigo-700" style="display:block;text-align:center;">"Unlock Wallet"</a>
+                                    <p class="text-gray-400 text-sm mt-4 text-center">
+                                        "No wallet? "
+                                        <a href="/wallet/create" class="text-blue-400">"Create one"</a>
+                                    </p>
+                                </div>
                             </div>
                         }.into_any()
                     }
