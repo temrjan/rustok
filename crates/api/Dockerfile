@@ -7,7 +7,9 @@ COPY crates/ crates/
 
 # Stub for workspace member app/src-tauri (not needed for API, but workspace requires it).
 COPY app/src-tauri/Cargo.toml app/src-tauri/Cargo.toml
-RUN mkdir -p app/src-tauri/src && echo "fn main(){}" > app/src-tauri/src/main.rs
+RUN mkdir -p app/src-tauri/src && \
+    echo "fn main(){}" > app/src-tauri/src/main.rs && \
+    echo "" > app/src-tauri/src/lib.rs
 
 # Build only the API binary in release mode.
 RUN cargo build --release -p rustok-api && \
