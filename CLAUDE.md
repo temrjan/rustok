@@ -40,7 +40,7 @@ app/src         — Leptos UI (WASM, вызывает backend через invoke(
 
 - Phase 1: txguard + core + CLI ✅ DONE
 - Phase 2: Desktop app (Tauri 2.0 + Leptos) ✅ DONE
-- Phase 3: Mobile (iOS + Android) ← IN PROGRESS (Send, Biometric, Tx history done. Android + TestFlight next)
+- Phase 3: Mobile (iOS + Android) ← IN PROGRESS (iOS done. Android: APK builds, 2 bugs — unlock button + balance race condition)
 - Phase 4: Cross-chain (Across Protocol)
 - Phase 5: AI + Polish
 

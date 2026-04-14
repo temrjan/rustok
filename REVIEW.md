@@ -2,7 +2,7 @@
 > Date: 2026-04-12 (updated)
 > Previous review: 2026-04-11
 > Standard: Codex rust.md v1.0 + architecture.md v1.1
-> Status: Phase 3 IN PROGRESS (103 tests, 0 must-fix). Send ETH verified on Sepolia. txguard API live. Landing live.
+> Status: Phase 3 IN PROGRESS (103 tests, 0 must-fix). Send ETH verified on Sepolia. txguard API live. Landing live. Android APK builds, 2 bugs remaining.
 
 ---
 
@@ -116,8 +116,12 @@
    - ~~X account~~ ✅ Done (@rustokwallet, first post published)
    - Fix: "Scan Again" button on Analyze page (Consider #8)
    - Biometric testing (Face ID enrollment in Simulator)
-   - Android build (Tauri android init + spike)
+   - ~~Android build (Tauri android init + spike)~~ ✅ Done (APK builds, UI renders, Create Wallet works)
+   - **Android BUG: Unlock button non-functional** (on:click not firing in Android WebView)
+   - **Android BUG: "6 chain(s) failed"** (race condition: rustls JNI init vs first RPC call)
+   - Android: fix input handling for all pages (on:input:target may not work in Android WebView)
    - Passkey auth (WebAuthn)
    - Code signing + TestFlight
+   - Google Play submission (account paid, verification in progress)
 2. ~~Добавить overflow-checks в release profile (Consider #2)~~ ✅ Fixed
 3. ~~Добавить custom Drop для LocalKeyring (zeroize on drop) (Consider #6)~~ ✅ Fixed

@@ -149,8 +149,13 @@ keytool -genkey -v -keystore rustok-release.keystore -alias rustok -keyalg RSA -
 
 ---
 
-## Текущий статус
+## Текущий статус (2026-04-14)
 
-- iOS: работает на iPhone 17 Pro Simulator (iOS 26.4), 7 страниц, Face ID
-- Android: TODO — `cargo tauri android init` + spike
-- Общий код (Rust core + Leptos WASM): кроссплатформенный, изменений не нужно
+- iOS: работает на iPhone 17 Pro Simulator (iOS 26.4), 8 страниц, Face ID
+- Android: APK собирается, UI рендерится, Create Wallet работает
+  - **BUG:** Unlock кнопка не реагирует (on:click не срабатывает в Android WebView)
+  - **BUG:** "6 chain(s) failed" — race condition rustls init vs balance fetch
+  - Требуется: фикс input/click для Android WebView, затем E2E тестирование
+- Общий код (Rust core + Leptos WASM): кроссплатформенный
+- Единственное платформенное изменение: `reqwest` переведён на `rustls-tls` (вместо `native-tls`) для Android кросс-компиляции
+- Android-specific: `rustls-platform-verifier` JNI init в `lib.rs` setup()
