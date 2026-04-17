@@ -30,8 +30,28 @@ pub fn HomePage() -> impl IntoView {
                     set_address.set(Some(addr));
                 }
 
-                // Fetch balance.
+                // Fetch balance (with auto-retry for Android TLS init race).
                 match tauri_invoke::<_, UnifiedBalance>("get_wallet_balance", &EmptyArgs {}).await {
+                    Ok(b) if b.chains.is_empty() && !b.errors.is_empty() => {
+                        // All chains failed — likely rustls not ready yet on Android.
+                        // Retry once after 800ms delay.
+                        gloo_timers::callback::Timeout::new(800, move || {
+                            spawn_local(async move {
+                                match tauri_invoke::<_, UnifiedBalance>(
+                                    "get_wallet_balance",
+                                    &EmptyArgs {},
+                                )
+                                .await
+                                {
+                                    Ok(b2) => set_balance.set(Some(b2)),
+                                    Err(e) => set_error.set(Some(e)),
+                                }
+                                set_loading.set(false);
+                            });
+                        })
+                        .forget();
+                        return;
+                    }
                     Ok(b) => set_balance.set(Some(b)),
                     Err(e) => set_error.set(Some(e)),
                 }
@@ -104,6 +124,26 @@ pub fn HomePage() -> impl IntoView {
                                             <p class="text-yellow-400 text-sm text-center">
                                                 {format!("{} chain(s) failed", b.errors.len())}
                                             </p>
+                                            <button
+                                                class="text-blue-400 text-sm text-center w-full mt-1"
+                                                on:click=move |_| {
+                                                    set_balance.set(None);
+                                                    set_error.set(None);
+                                                    set_loading.set(true);
+                                                    spawn_local(async move {
+                                                        match tauri_invoke::<_, UnifiedBalance>(
+                                                            "get_wallet_balance",
+                                                            &EmptyArgs {},
+                                                        ).await {
+                                                            Ok(b) => set_balance.set(Some(b)),
+                                                            Err(e) => set_error.set(Some(e)),
+                                                        }
+                                                        set_loading.set(false);
+                                                    });
+                                                }
+                                            >
+                                                "Refresh"
+                                            </button>
                                         })}
                                     </div>
                                 })}
