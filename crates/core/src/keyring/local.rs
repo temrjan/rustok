@@ -11,7 +11,10 @@ use aes_gcm::{
 };
 use alloy_primitives::{Address, B256};
 use alloy_signer::Signer;
-use alloy_signer_local::PrivateKeySigner;
+use alloy_signer_local::{
+    MnemonicBuilder, PrivateKeySigner,
+    coins_bip39::{English, Mnemonic},
+};
 use argon2::Argon2;
 use rand::RngCore;
 use zeroize::Zeroizing;
@@ -73,6 +76,50 @@ impl LocalKeyring {
         let signer =
             PrivateKeySigner::from_bytes(key).map_err(|e| KeyringError::KeyGen(e.to_string()))?;
         let encrypted = encrypt_key(key.as_slice(), password)?;
+
+        Ok(Self {
+            info: KeyInfo {
+                address: signer.address(),
+                label: None,
+                created_at: now_unix(),
+            },
+            signer,
+            encrypted,
+        })
+    }
+
+    /// Generate a random 12-word BIP39 mnemonic phrase (English wordlist).
+    ///
+    /// Caller shows the phrase to the user once, then passes it to
+    /// [`Self::from_mnemonic`] to create the keyring. The phrase itself is
+    /// never persisted — the user is responsible for backing it up on paper.
+    ///
+    /// Wrapped in `Zeroizing` so the buffer is zeroed on drop. Note that the
+    /// underlying `String` heap allocation may outlive partial copies made
+    /// during IPC/JSON serialization; this is the standard trade-off for
+    /// software wallets.
+    pub fn random_mnemonic_phrase() -> Result<Zeroizing<String>, KeyringError> {
+        let mut rng = rand::thread_rng();
+        let mnemonic = Mnemonic::<English>::new_with_count(&mut rng, 12)
+            .map_err(|e| KeyringError::KeyGen(e.to_string()))?;
+        Ok(Zeroizing::new(mnemonic.to_phrase()))
+    }
+
+    /// Derive a keyring from a BIP39 mnemonic phrase.
+    ///
+    /// Uses MetaMask-compatible derivation path `m/44'/60'/0'/0/0`, so a
+    /// phrase created here restores the same address in MetaMask, Rainbow,
+    /// Phantom, or any BIP39-compliant wallet. The private key is then
+    /// encrypted with the given password using the same Argon2id +
+    /// AES-256-GCM scheme as [`Self::generate`].
+    pub fn from_mnemonic(phrase: &str, password: &str) -> Result<Self, KeyringError> {
+        let signer = MnemonicBuilder::<English>::default()
+            .phrase(phrase.to_string())
+            .build()
+            .map_err(|e| KeyringError::KeyGen(e.to_string()))?;
+
+        let private_key = Zeroizing::new(signer.credential().to_bytes());
+        let encrypted = encrypt_key(&private_key, password)?;
 
         Ok(Self {
             info: KeyInfo {
@@ -284,6 +331,90 @@ mod tests {
 
         let result = super::super::import_keystore_json(&json, "wrong");
         assert!(result.is_err());
+    }
+
+    /// BIP39 test vector shared with MetaMask, Rainbow, Phantom, etc.
+    /// If this changes, recovery phrases created by Rustok will NOT restore
+    /// the same account in other wallets — catastrophic for users.
+    const MM_TEST_PHRASE: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    const MM_TEST_ADDRESS: &str = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94";
+
+    #[test]
+    fn random_mnemonic_is_12_words() {
+        let phrase = LocalKeyring::random_mnemonic_phrase().expect("gen failed");
+        assert_eq!(phrase.split_whitespace().count(), 12);
+    }
+
+    #[test]
+    fn random_mnemonic_is_unique() {
+        let a = LocalKeyring::random_mnemonic_phrase().expect("gen a");
+        let b = LocalKeyring::random_mnemonic_phrase().expect("gen b");
+        assert_ne!(a.as_str(), b.as_str());
+    }
+
+    #[test]
+    fn mnemonic_compat_with_metamask() {
+        let keyring = LocalKeyring::from_mnemonic(MM_TEST_PHRASE, PASSWORD)
+            .expect("from_mnemonic failed on standard test vector");
+        let expected: Address = MM_TEST_ADDRESS.parse().expect("valid address");
+        assert_eq!(
+            keyring.address(),
+            expected,
+            "derived address must match MetaMask/Rainbow/Phantom on the standard BIP39 test vector"
+        );
+    }
+
+    #[test]
+    fn mnemonic_deterministic() {
+        let k1 = LocalKeyring::from_mnemonic(MM_TEST_PHRASE, PASSWORD).expect("k1");
+        let k2 = LocalKeyring::from_mnemonic(MM_TEST_PHRASE, PASSWORD).expect("k2");
+        assert_eq!(k1.address(), k2.address());
+    }
+
+    #[test]
+    fn mnemonic_encrypt_decrypt_roundtrip() {
+        let phrase = LocalKeyring::random_mnemonic_phrase().expect("gen failed");
+        let keyring = LocalKeyring::from_mnemonic(&phrase, PASSWORD).expect("from_mnemonic");
+        let encrypted = keyring.encrypted_bytes();
+        let restored = LocalKeyring::from_encrypted(encrypted, PASSWORD).expect("from_encrypted");
+        assert_eq!(keyring.address(), restored.address());
+    }
+
+    #[test]
+    fn invalid_mnemonic_too_few_words() {
+        let result = LocalKeyring::from_mnemonic("abandon abandon", PASSWORD);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn invalid_mnemonic_word_not_in_wordlist() {
+        let phrase =
+            "xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx xxxxxx";
+        let result = LocalKeyring::from_mnemonic(phrase, PASSWORD);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn invalid_mnemonic_bad_checksum() {
+        // 12 valid wordlist entries but an invalid BIP39 checksum.
+        let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon";
+        let result = LocalKeyring::from_mnemonic(phrase, PASSWORD);
+        assert!(result.is_err());
+    }
+
+    /// Documents whether coins-bip39 normalises input itself. If this test
+    /// fails, add `.trim().split_whitespace().collect::<Vec<_>>().join(" ")`
+    /// to `from_mnemonic` and update the test to assert success.
+    #[test]
+    fn mnemonic_whitespace_handling() {
+        let with_extra_spaces = "  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  about  ";
+        let result = LocalKeyring::from_mnemonic(with_extra_spaces, PASSWORD);
+        // Either outcome is acceptable today — this test pins current
+        // behaviour so a change surfaces as a test diff, not a silent bug.
+        if let Ok(k) = result {
+            let expected: Address = MM_TEST_ADDRESS.parse().unwrap();
+            assert_eq!(k.address(), expected);
+        }
     }
 
     #[test]

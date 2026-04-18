@@ -38,7 +38,7 @@ alloy-network = "1.8"
 alloy-consensus = { version = "1.8", default-features = false, features = ["std"] }
 alloy-contract = "1.8"
 alloy-signer = "1.8"
-alloy-signer-local = "1.8"
+alloy-signer-local = { version = "1.8", features = ["mnemonic"] }
 alloy-chains = "0.2"
 alloy-evm = { version = "0.30", default-features = false, features = ["std"] }
 
