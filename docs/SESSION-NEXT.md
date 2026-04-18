@@ -1,151 +1,122 @@
-# Следующая сессия — Фикс unlock-архитектуры + решение по seed phrase
+# Следующая сессия — Phase 3 closure
 
 ## Статус (2026-04-18)
 
-- **103 теста зелёные, CI 5/5 green**
-- **Android:** APK собирается (60 MB debug), Create Wallet работает, баланс грузится
-- **Решённые ранее баги:** BUG-1 (Unlock button, CSS visibility), BUG-2 (balance race, 800ms retry) — коммит 527fa7d + bc2cb29
+Phase 3 Mobile **почти закрыта**. За сессию 2026-04-18 закоммичено 6 правок, все CI-green:
 
-## Нерешённые проблемы
+| Коммит | Что |
+|---|---|
+| `8405456` | Auth-gated TabBar + Home route guards (архитектурный фикс UX) |
+| `7a9168c` | Android TLS fix — bundled rustls-platform-verifier classes.jar |
+| `898ced8` | gitignore для Tauri 2 `gen/apple/` |
+| `a433655` | Password dots `text-white` (были чёрные на тёмном) |
+| `b093b98` | Чистый формат invoke error (без `JsValue("...")`) |
+| `ffc483e` | Auto-refresh balance: polling 30s + visibility API |
 
-### Архитектурные (приоритет 1 — эта сессия)
+Проверено:
+- **Android Pixel_8 (API 35):** unlock, chains load, TabBar correct — работает
+- **iOS iPhone 17 Pro Simulator (iOS 26.4):** unlock, chains load, баланс 0.048999 ETH Sepolia — работает
 
-| # | Проблема | Файл | Статус |
-|---|----------|------|--------|
-| A1 | TabBar виден на ВСЕХ роутах, включая Unlock и Create | `app/src/src/app.rs:23` | Ломает security/UX unlock flow |
-| A2 | Home дублирует Unlock-экран (inline unlock-prompt) | `app/src/src/pages/home.rs:75-90` | Путаница "первый экран" |
-| A3 | `navigate_to("/")` не работает на Android WebView | `app/src/src/bridge.rs:35` | 4 вызова в `unlock.rs`. См. `memory/rustok-android-navigate.md` |
+## Что осталось в Phase 3
 
-### Функциональные (приоритет 2 — отдельная фаза)
+### Блокер release — seed phrase (BIP39)
 
-| # | Проблема | Масштаб |
-|---|----------|---------|
-| F1 | **Нет seed phrase / recovery phrase** | Production crypto wallet без recovery — потеря пароля = потеря средств |
-| F2 | Legacy keystore wallets не могут быть мигрированы в seed | Математически невозможно: ключ сгенерён через `PrivateKeySigner::random()` (`keyring/local.rs:56`), не derived |
+**Проблема:** `PrivateKeySigner::random()` в `crates/core/src/keyring/local.rs:56` генерирует random private key. Recovery phrase математически вывести невозможно — ключ не derived из seed.
 
----
+**Последствия:**
+- Потеря пароля = потеря средств (нет recovery)
+- Кошельки на iOS и Android разные (каждая платформа свой keystore.dat)
+- Нет cross-device sync
 
-## Часть 1 — Фикс архитектуры unlock (эта сессия)
+**План:**
 
-**Референс UX:** MyTonWallet — tab bar ТОЛЬКО в authenticated state. Pre-auth flow (welcome / create / unlock) без таб бара.
+1. Добавить `bip39` crate + feature `mnemonic` в `alloy-signer-local`
+2. Create Wallet: 12 слов → BIP32 derivation path `m/44'/60'/0'/0/0` → encrypt + store
+3. Restore Wallet flow: ввод 12 слов с BIP39 checksum
+4. Settings → "Show Recovery Phrase" (re-auth required)
+5. Legacy (random-key) кошельки: **не мигрируются** математически. Предложить export private key и переход на новый seed-based.
 
-### Перед кодом — проверки
+UX референсы: MetaMask backup, Rainbow "protect your wallet" (12 слов, не 24 — MetaMask стандарт, 128 бит энтропии).
 
-1. **context7 `leptos_router` 0.7:**
-   - Точный API `use_navigate()` — работает ли из `spawn_local`?
-   - Есть ли `<Redirect />` компонент в 0.7?
-   - Как навигировать после async операции?
+**НЕ делаем:**
+- TOS-чекбокс, 3-step "backup intro", success screen — лишнее
+- 25-е слово BIP39 passphrase — v2
+- Social recovery / MPC — Phase 5+
 
-2. **grep `app/src-tauri/src/commands.rs`:**
-   - Есть ли `wallet_exists` / `is_wallet_initialized`?
-   - Если нет — нужна новая Tauri команда для различения `Uninit` vs `Locked`
+### Google Play launch
 
-### Правки
+1. Release build + проверить ProGuard keep rule для `org.rustls.platformverifier.**`
+2. Signing key: `gen/android/app/build.gradle.kts` + `keystore.properties`
+3. AAB upload в Internal Testing track (аккаунт оплачен, верификация в процессе)
+4. Privacy policy на `rustokwallet.com`
+5. Listing: иконки, скриншоты, описание
 
-**Правка 1. `app.rs` — условный TabBar**
+### iOS TestFlight
 
-В `App()` завести signal `wallet_state: { Uninit | Locked | Unlocked }`, инициализируемый на старте через существующий `is_wallet_unlocked` + (возможно новый) `wallet_exists`. Рендерить `<TabBar />` ТОЛЬКО при `Unlocked`.
+Требует Apple Developer Program ($99/год) — **не оплачено**. Archive + Upload через Xcode → TestFlight.
 
-**Правка 2. `home.rs` — убрать дубль**
+### Мелкие UX доработки
 
-Удалить ветку `Some(false) | None` (строки 75-90) с inline unlock-prompt. При not unlocked → `Redirect` на `/unlock` (или `/wallet/create` при `Uninit`). Home остаётся чисто authenticated экраном.
+- E2E на реальном ETH (сейчас только Sepolia)
+- Настройка auto-refresh интервала в Settings (опционально)
+- Обработка случая когда auto-refresh падает — сейчас silent (по дизайну, но stale error может остаться)
 
-**Правка 3. `unlock.rs` + `bridge.rs` — починить навигацию**
+## Воркфлоу
 
-Заменить `navigate_to("/")` (4 места: строки 78, 118, 154, 162) на `use_navigate()` из `leptos_router::hooks`.
+```
+LIGHT (конфиг, 1 файл, docs):
+  Изучи → Сделай → /check → Ревью diff → Коммит → Пуш → CI
 
-**Fallback если `use_navigate` не работает в `spawn_local` на Android:**
-менять root signal `wallet_state` из unlock, `<Redirect/>` в layout уведёт с `/unlock` сам.
+FULL (фичи, рефакторинг, security, multi-file):
+  Изучи → /codex → План с pros/cons → /check → Реализуй → Ревью diff → Коммит → Пуш → CI
+```
 
-Если сработает — `navigate_to` из `bridge.rs` удалить.
-
-### Критерий успеха
-
-- Первый экран при запуске без кошелька → `/wallet/create`, без таб бара
-- Первый экран при запуске с кошельком → `/unlock`, без таб бара
-- После успешного unlock → `/`, таб бар появляется
-- На Android переход после unlock работает без `querySelector` хаков
-
----
-
-## Часть 2 — Seed phrase support (ОТДЕЛЬНАЯ фаза, НЕ в этой сессии)
-
-### Reality check
-
-- Текущая схема: `PrivateKeySigner::random()` → Argon2id (19 MiB, 2 iter) → AES-256-GCM → blob `salt(16) || nonce(12) || ciphertext(32+16)` (см. `crates/core/src/keyring/local.rs:1-7`)
-- Recovery = только пароль. Забыл → deposit потерян навсегда
-- Legacy кошельки нельзя мигрировать в seed — ключ рандомный, обратной операции нет
-
-### План v2 (черновик — уточнить после context7 + чтения keyring/mod.rs)
-
-**Backend:**
-- Зависимость: `bip39` crate + включить feature `mnemonic` в `alloy-signer-local = { workspace = true, features = ["mnemonic"] }`
-- Шифрование seed = та же Argon2id + AES-GCM схема, что сейчас для private key. Новый тип `EncryptedSeed` (не keystore v3)
-- Новые Tauri commands: `create_wallet_with_mnemonic(password)`, `import_wallet_from_mnemonic(words, password)`, `reveal_mnemonic(password)`
-- Default derivation path: MetaMask-совместимый `m/44'/60'/0'/0/0` (проверить через context7)
-
-**Legacy обработка:**
-- Миграция в seed НЕ предлагается (невозможна)
-- Settings → "Export Private Key" — для ручного импорта в любой seed-кошелёк (MetaMask/Rabby)
-- Side-by-side: старый keystore-only кошелёк работает до удаления пользователем
-
-**UI минимум:**
-- Create: show 12 words → confirm 3 random words → passcode
-- Import: textarea на 12 слов + BIP39 checksum validation
-- Settings: "Show Recovery Phrase" с запросом пароля
-
-### Что НЕ делаем (лишнее из референса MyTonWallet)
-
-- TOS-чекбокс "Я соглашаюсь использовать ответственно"
-- 3-checkbox backup intro с подтверждениями
-- "Всё готово!" success screen
-- Biometric отдельным экраном (уже встроен в UnlockPage)
-- 24 слова (достаточно 12 — MetaMask стандарт, 128 бит энтропии)
-- Optional BIP39 passphrase (25-е слово) — v2
-- Мульти-derivation paths (Ledger/Trust Wallet) — v2
-- Email recovery (требует custodial — не вяжется с zero-trust Rustok)
-- Social recovery / MPC — вне scope Phase 3
-
----
+Неизменное ядро:
+- `/check` — проверка фактов и edge cases
+- `git diff` перед коммитом
+- Ждём CI-зелёного
 
 ## Контекст для старта
 
 ```bash
 cd /Users/avangard/Workspace/projects/rustok
-cargo test                    # ожидаем 103 зелёных
+cargo test                    # 103 зелёных
 git log --oneline -10
 
 # Android
 source ~/.zshrc               # ANDROID_HOME, JAVA_HOME, NDK_HOME
-adb devices                   # emulator-5554 (Pixel 8)
+adb devices
 adb logcat --pid=$(adb shell pidof com.rustok.app)
+cd app && cargo tauri android build --debug --target aarch64
 
-# Сборка
-cd app
-cargo tauri android build --apk --debug
+# iOS
+xcrun simctl boot "CF2AA2DB-F345-434F-8DAF-6CC4054FA792"  # iPhone 17 Pro
+open -a Simulator
+cd app && cargo tauri ios build --debug --target aarch64-sim
 ```
 
-### Ключевые файлы
+### Ключевые файлы (для seed-фазы)
 
 | Файл | Что там |
 |------|---------|
-| `app/src/src/app.rs:23` | TabBar в корне Router (фикс Правки 1) |
-| `app/src/src/pages/home.rs:75-90` | Дубль unlock-экрана (фикс Правки 2) |
-| `app/src/src/pages/unlock.rs:78,118,154,162` | 4 вызова `navigate_to("/")` (фикс Правки 3) |
-| `app/src/src/bridge.rs:35` | `navigate_to()` — не работает на Android |
-| `app/src/src/pages/wallet.rs` | Create flow — не трогаем в Части 1 |
-| `crates/core/src/keyring/local.rs` | Argon2id+AES-GCM схема — переиспользовать для seed |
-| `crates/core/src/keyring/mod.rs` | Прочитать ДО планирования seed-фазы (есть `export_keystore_json`) |
-| `app/src-tauri/src/commands.rs` | 15 Tauri commands, сюда добавлять seed-related |
+| `crates/core/src/keyring/local.rs` | `PrivateKeySigner::random()` — заменить на `MnemonicBuilder` |
+| `crates/core/src/keyring/mod.rs` | Текущий keystore формат, `export_keystore_json` |
+| `app/src-tauri/src/commands.rs` | 15 Tauri commands, сюда добавить `create_wallet_with_mnemonic`, `import_wallet`, `reveal_mnemonic` |
+| `app/src/src/pages/wallet.rs` | Create flow — добавить 12-word display + confirm step |
+| `app/src/src/pages/unlock.rs` | Добавить "Import existing wallet" CTA |
 
 ### Эмулятор / devices
 
-- **Android AVD:** Pixel_8, Android 15 (API 35), arm64-v8a
-- **iOS:** iPhone 17 Pro Simulator (`0x25B280...1CE91`, ~0.049 ETH Sepolia)
-- **Android wallet:** `0x60EeF04...AECe7`
+- **Android AVD:** Pixel_8, API 35, arm64-v8a. Wallet `0x60Ee...ECe7`
+- **iOS:** iPhone 17 Pro Simulator. Wallet `0x25B2...CE91`, ~0.049 ETH Sepolia
 
-### Правила
+## Debug-заметки
 
-- **Не смешивать Часть 1 и Часть 2 в одном PR.** Таб бар и seed — разные масштабы изменений
-- **CI должен остаться зелёным после каждого коммита** (103 теста minimum)
-- **Перед seed-фазой** — обновить этот документ с результатами context7 по alloy mnemonic API
+- Vault: `ssh 7demo /root/vault/debug/rustok-android-rustls-platform-verifier.md` — TLS fix детали
+- При апгрейде `rustls-platform-verifier-android` crate — перекачать `classes.jar` из AAR в `gen/android/app/libs/rustls-platform-verifier.jar`
+
+## Правила
+
+- Не смешивать seed phrase с другими фичами в одном PR — security-critical
+- CI зелёный после каждого коммита
+- Перед seed-фазой: context7 `alloy-signer-local` MnemonicBuilder API
