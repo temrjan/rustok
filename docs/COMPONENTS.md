@@ -52,7 +52,7 @@ App (не в workspace):
 | Пакет | Путь | Что делает | Статус |
 |-------|------|-----------|--------|
 | `rustok-frontend` | `app/src/` | Leptos 0.7 UI (Rust → WASM) | ✅ Done |
-| `app/src-tauri` | `app/src-tauri/` | Tauri 2.0 backend (15 commands) | ✅ Done |
+| `app/src-tauri` | `app/src-tauri/` | Tauri 2.0 backend (19 commands) | ✅ Done |
 
 ---
 
@@ -80,8 +80,10 @@ App (не в workspace):
 ### Модули:
 
 #### `keyring/` — Управление ключами
-- Генерация случайного 256-bit ECDSA ключа (не мнемоники)
-- Шифрование: AES-256-GCM + Argon2id → 76-byte blob
+- BIP39 seed phrase (12 слов) → ECDSA ключ через derivation path `m/44'/60'/0'/0/0` (совместимо с MetaMask)
+- `LocalKeyring::random_mnemonic_phrase()` — генерация новой фразы
+- `LocalKeyring::from_mnemonic()` — импорт из фразы (нормализация whitespace + case)
+- Шифрование: AES-256-GCM + Argon2id → 76-byte blob (scheme не менялся)
 - Single wallet design (один активный кошелёк)
 - Custom Drop с zeroize на encrypted blob
 - `generate()`, `decrypt_key()`, `import/export_keystore_json()`
@@ -117,13 +119,15 @@ App (не в workspace):
 #### `convert.rs` — Конвертация типов
 
 **Зависимости:** txguard, rustok-types, alloy-*, aes-gcm, argon2, zeroize, reqwest
-**Тесты:** 55
+**Тесты:** 64
 
 ---
 
 ## 3. `rustok-types` — Shared DTO
 
 **Что делает:** Типы для коммуникации core ↔ frontend. Сериализуются через serde без зависимости на alloy (U256 не поддерживается в WASM напрямую).
+
+Ключевые DTO: `WalletInfo`, `WalletInfoWithMnemonic` (возвращает сгенерированную seed-фразу на фронт один раз при создании).
 
 **Зависимости:** serde
 
@@ -166,15 +170,19 @@ App (не в workspace):
 
 **Технология:** Leptos 0.7 (CSR) + leptos_router
 
-**Страницы (8):**
+**Страницы (10):**
 1. `home.rs` — баланс (одна цифра), action buttons (Send/Receive/Scan)
-2. `send.rs` — 3-step flow (input → preview → result), preset % кнопки
-3. `receive.rs` — QR-код + Copy Address
-4. `analyze.rs` — txguard анализ транзакции
-5. `activity.rs` — история транзакций (Blockscout)
-6. `settings.rs` — адрес, версия, Create New Wallet
-7. `wallet.rs` — создание кошелька
-8. `unlock.rs` — разблокировка (пароль / Face ID)
+2. `balance.rs` — детализация баланса по сетям
+3. `send.rs` — 3-step flow (input → preview → result), preset % кнопки
+4. `receive.rs` — QR-код + Copy Address
+5. `analyze.rs` — txguard анализ транзакции
+6. `activity.rs` — история транзакций (Blockscout)
+7. `settings.rs` — адрес, версия, Create New Wallet
+8. `wallet.rs` — 4-step create wizard (ack checkboxes → phrase display → confirm quiz → password)
+9. `restore.rs` — восстановление по BIP39 фразе (маршрут `/wallet/restore`)
+10. `unlock.rs` — разблокировка (пароль / Face ID)
+
+Навигация: только через `use_navigate()` из `leptos_router`. Старый `bridge::navigate_to()` удалён.
 
 **Зависимости:** rustok-types, leptos, wasm-bindgen, web-sys
 
@@ -182,7 +190,9 @@ App (не в workspace):
 
 ## 7. `app/src-tauri` — Tauri backend
 
-**Что делает:** Мост между Leptos UI и rustok-core. 15 tauri::command функций.
+**Что делает:** Мост между Leptos UI и rustok-core. 19 tauri::command функций.
+
+Среди них для BIP39: `generate_mnemonic_phrase`, `create_wallet_with_mnemonic`, `import_wallet_from_mnemonic`.
 
 **Ключевое:** Mutex для thread-safe доступа к keyring, clone signer before .await.
 
@@ -207,21 +217,22 @@ rustok-api ──────→ txguard (axum server, GoPlus enrichment)
 | # | Компонент | Тип | Сложность | Тесты | Статус |
 |---|-----------|-----|-----------|-------|--------|
 | 1 | txguard | crate | 🔴 Высокая | 38 | ✅ Done |
-| 2 | rustok-core | crate | ⚡ Средняя | 55 | ✅ Done |
+| 2 | rustok-core | crate | ⚡ Средняя | 64 | ✅ Done |
 | 3 | rustok-types | crate | 🟢 Низкая | — | ✅ Done |
 | 4 | rustok (CLI) | crate | 🟢 Низкая | — | ✅ Done |
 | 5 | rustok-api | crate | 🟢 Низкая | — | ✅ Done |
 | 6 | rustok-frontend | app | ⚡ Средняя | — | ✅ Done |
 | 7 | app/src-tauri | app | ⚡ Средняя | 8 | ✅ Done |
 
-**Итого:** 103 теста (txguard 38 + core 55 + desktop 8 + doctests 2), CI 5/5 green.
+**Итого:** 112 тестов (txguard 38 + core 64 + desktop 8 + doctests 2), CI 5/5 green.
 
 ---
 
 ## Что дальше (Phase 3+)
 
 - **Scan Again** — кнопка сброса на Analyze page (Consider #8)
-- **Android** — `cargo tauri android init` + spike
-- **TestFlight** — code signing + реальный iPhone
+- **Privacy policy** — публичный URL, требуется для сторов
+- **Google Play Internal Testing** — release signing + upload AAB
+- **TestFlight** — Apple Developer Program ($99, пока не оплачен) + code signing
 - **Cross-chain** — Across Protocol (Phase 4)
 - **Passkey + WebAuthn** — замена пароля (Phase 5)

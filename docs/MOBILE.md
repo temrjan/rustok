@@ -128,7 +128,7 @@ keytool -genkey -v -keystore rustok-release.keystore -alias rustok -keyalg RSA -
 | Файл | Что | Tracked |
 |------|-----|---------|
 | `tauri.conf.json` → `bundle.android` | minSdkVersion, versionCode | Yes |
-| `gen/android/` | Gradle project | No (.gitignore) |
+| `gen/android/` | Gradle project | Yes (tracked, includes `libs/rustls-platform-verifier.jar` + ProGuard keep rule) |
 
 ### Бесплатная дистрибуция (без Google Play)
 
@@ -149,13 +149,15 @@ keytool -genkey -v -keystore rustok-release.keystore -alias rustok -keyalg RSA -
 
 ---
 
-## Текущий статус (2026-04-14)
+## Текущий статус (2026-04-18)
 
-- iOS: работает на iPhone 17 Pro Simulator (iOS 26.4), 8 страниц, Face ID
-- Android: APK собирается, UI рендерится, Create Wallet работает
-  - **BUG:** Unlock кнопка не реагирует (on:click не срабатывает в Android WebView)
-  - **BUG:** "6 chain(s) failed" — race condition rustls init vs balance fetch
-  - Требуется: фикс input/click для Android WebView, затем E2E тестирование
-- Общий код (Rust core + Leptos WASM): кроссплатформенный
-- Единственное платформенное изменение: `reqwest` переведён на `rustls-tls` (вместо `native-tls`) для Android кросс-компиляции
-- Android-specific: `rustls-platform-verifier` JNI init в `lib.rs` setup()
+- Phase 3 Mobile — functionally complete. Проверено на iPhone 17 Pro Simulator (iOS 26.4) + Pixel_8 API 35 emulator: unlock, create wallet (4-step BIP39 wizard), restore wallet from mnemonic, send ETH on Sepolia — все флоу работают на обеих платформах.
+- Cross-device confirmed: одна и та же BIP39 phrase даёт одинаковый address на iOS и Android.
+- Android bugs resolved:
+  - **BUG-1 (unlock button):** CSS visibility — fixed.
+  - **BUG-2 (rustls race):** fixed. Real root cause — `ClassNotFoundException` для `org.rustls.platformverifier.*` Kotlin класса: теперь bundled AAR в `gen/android/app/libs/rustls-platform-verifier.jar` + ProGuard keep rule (`-keep, includedescriptorclasses class org.rustls.platformverifier.** { *; }`). 800ms retry остаётся defense-in-depth, но срабатывает редко.
+  - **Android WebView navigate bug:** fixed. `navigate_to()` JS eval hack в `app/src/src/bridge.rs` удалён полностью; вся навигация — через `leptos_router::hooks::use_navigate()`.
+- Tests: 112 total (core 64, desktop 8, txguard 38, doctests 2).
+- Общий код (Rust core + Leptos WASM): кроссплатформенный.
+- Единственное платформенное изменение: `reqwest` переведён на `rustls-tls` (вместо `native-tls`) для Android кросс-компиляции.
+- Android-specific: `rustls-platform-verifier` JNI init в `lib.rs` setup().

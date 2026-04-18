@@ -2,7 +2,7 @@
 
 Ethereum wallet with chain abstraction and transaction security engine.
 
-**Status:** Alpha — Phase 3 in progress (Send, Biometric unlock, Transaction history done. iOS running in Simulator. txguard API live.)
+**Status:** Alpha — Phase 3 functional — iOS + Android verified on Sepolia, BIP39 seed-phrase with cross-device recovery, Restore from phrase, 4-step create wizard. txguard API live.
 
 **Website:** [rustokwallet.com](https://rustokwallet.com) | **API:** [api.rustokwallet.com](https://api.rustokwallet.com/health) | **X:** [@rustokwallet](https://x.com/rustokwallet)
 
@@ -10,7 +10,7 @@ Ethereum wallet with chain abstraction and transaction security engine.
 
 Ethereum wallet with chain abstraction and transaction protection:
 
-- **Desktop app** — Tauri 2.0 + Leptos (full Rust). Home (auto-balance), Send (3-step with txguard), Receive (QR), Analyze, Settings. Bottom tab bar navigation.
+- **Desktop app** — Tauri 2.0 + Leptos (full Rust). Home (auto-balance), Send (3-step with txguard), Receive (QR), Analyze, Settings, 4-step BIP39 create wizard, Restore from seed phrase. Bottom tab bar navigation.
 - **txguard** — Rust crate that analyzes EVM transactions before signing. Decodes calldata, runs security rules, simulates via revm, enriches with GoPlus threat intel.
 - **rustok core** — Multi-chain wallet with unified balance across L1/L2, encrypted keyring (AES-256-GCM + Argon2id), and CLI interface.
 
@@ -71,12 +71,12 @@ rustok/
 │   │   ├── simulator/    revm v36 fork simulation + Transfer/Approval inspector
 │   │   └── enrichment/   GoPlus API threat intelligence
 │   ├── core/       # Wallet core
-│   │   ├── keyring/      AES-256-GCM + Argon2id encrypted keys
+│   │   ├── keyring/      BIP39 seed (m/44'/60'/0'/0/0, MetaMask-compatible) + AES-256-GCM + Argon2id
 │   │   ├── provider/     Multi-chain RPC + EIP-1559 gas estimation
 │   │   ├── router/       Cheapest chain selection for transactions
 │   │   ├── send/         Send orchestration (preview + execute)
 │   │   ├── amount/       ETH amount parsing (decimal → wei)
-│   │   ├── explorer/     Block explorer API (Etherscan-compatible, 5 chains)
+│   │   ├── explorer.rs   Block explorer API (Etherscan-compatible, 5 chains)
 │   │   ├── explainer/    Human-readable transaction descriptions
 │   │   └── convert/      DTO conversions (core types → frontend types)
 │   ├── types/      # Shared DTO types (core ↔ frontend, no crypto deps)
@@ -124,7 +124,7 @@ cargo install tauri-cli --version "^2.10" --locked
 cargo tauri dev
 ```
 
-Pages: Home (auto-balance + actions), Send (3-step: input → preview → result), Receive (QR), Analyze (txguard), Activity (transaction history), Settings, Unlock.
+Pages: Home (auto-balance + actions), Send (3-step: input → preview → result), Receive (QR), Analyze (txguard), Activity (transaction history), Settings, Wallet (4-step create wizard: ack → phrase → confirm quiz → password), Restore (import from BIP39 phrase), Unlock.
 Navigation: bottom tab bar (Home / Activity / Settings) with SVG tab bar icons. Send/Receive/Scan — fullscreen from Home action buttons.
 Branding: amber palette (#f59e0b), neutral dark background (#0D0D0D), 3D amber Ethereum diamond logo.
 
@@ -171,16 +171,16 @@ Deployed via Docker + Caddy on 185.197.195.191 (`deploy/`).
 - **Desktop:** Tauri 2.0 (native shell) + Leptos 0.7 (WASM UI)
 - **EVM:** revm v36, alloy-evm v0.30
 - **Ethereum:** alloy-rs v1.8 (provider, signer, primitives)
-- **Crypto:** AES-256-GCM, Argon2id, secp256k1
+- **Crypto:** BIP39 (m/44'/60'/0'/0/0), AES-256-GCM, Argon2id, secp256k1
 - **CLI:** clap v4
 - **Async:** tokio
 
 ## Tests
 
 ```
-103 tests, 0 failures
+112 tests, 0 failures
  - txguard: 38 tests (parser, rules, types, simulator inspector)
- - core: 55 tests (keyring, provider, router, explainer, explorer, convert, amount)
+ - core: 64 tests (keyring + BIP39, provider, router, explainer, explorer, convert, amount)
  - desktop: 8 tests (password validation, value parsing, QR generation)
  - doc-tests: 2
 ```

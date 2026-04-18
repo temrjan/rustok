@@ -1,7 +1,7 @@
 # ETH Wallet — Vision Document
 
 > Open-source Rust Ethereum wallet with chain abstraction, AI routing, and transaction protection.
-> "ETH — это просто ETH. Без слоёв, без бриджей, без seed-фраз."
+> "ETH — это просто ETH. Без слоёв, без бриджей, без непонятных транзакций."
 
 ---
 
@@ -12,7 +12,7 @@ Ethereum в 2026 — это десятки L2/L3 сетей. Для пользо
 1. **Фрагментация баланса** — 0.3 ETH на Ethereum, 0.5 на Arbitrum, 0.2 на zkSync. Формально 1 ETH, фактически — три отдельных кошелька.
 2. **Ручные бриджи** — хочешь потратить на Base? Ищи мост, плати комиссию, жди 10 минут.
 3. **Непонятные транзакции** — пользователь не понимает что подписывает. Unlimited approve, permit phishing, drainer контракты.
-4. **Seed-фразы** — 12 слов на бумажке. Потерял — потерял всё. Записал неправильно — потерял всё.
+4. **Seed-фразы как UX-катастрофа** — 12 слов на бумажке без контекста. Стандарт BIP39 хорош технически, но обычный пользователь не понимает что это, куда записать, почему нельзя скринить. Результат — потерянные кошельки и фишинг.
 
 Ни один кошелёк не решает все четыре проблемы одновременно.
 
@@ -92,7 +92,7 @@ Ethereum в 2026 — это десятки L2/L3 сетей. Для пользо
 | App shell | Tauri 2.0 | Один Rust core → iOS, Android, Desktop |
 | UI | Leptos 0.7 (Rust → WASM) | Full Rust stack, shared types с core без маппинга |
 | CLI | clap | Для разработчиков |
-| Key storage | AES-256-GCM + Argon2id (Phase 5: Passkey + MPC) | Без seed-фраз |
+| Key storage | BIP39 seed + AES-256-GCM + Argon2id (Phase 5: Passkey + MPC) | Совместимо с MetaMask, UX-мастер вокруг фразы |
 | Cross-chain | Phase 4: Across Protocol (intents) | Open source, intent-based |
 
 ---
@@ -133,7 +133,7 @@ Open Core:
 | AI роутинг | Нет | Нет | Нет | **Да** |
 | Защита tx | Blockaid (закр.) | Свой (закр.) | Нет | **txguard (open)** |
 | Open source | Да (JS) | Да (JS) | Нет | **Да (Rust)** |
-| Без seed-фраз | Нет | Нет | Да | **Да** |
+| UX вокруг seed-фразы | Голая фраза | Голая фраза | Без фразы (MPC) | **BIP39 + wizard (ack → phrase → quiz → password), Phase 5 Passkey/MPC** |
 | Rust | Нет | Нет | Нет | **Да** |
 | Нативное мобильное | Нет | Нет | Да | **Да (Tauri)** |
 | Verified microkernel | Нет | Нет | Нет | **Phase 6 (seL4)** |
@@ -150,10 +150,10 @@ Parser + Simulator + Rules Engine + CLI (decode, analyze, wallet new/balance/sen
 **Phase 2 — Desktop приложение (Tauri 2.0 + Leptos)** ✅ DONE
 Tauri app для macOS. Leptos 0.7 UI (Rust → WASM) + Rust core через tauri::command.
 
-**Phase 3 — Мобильное приложение (iOS + Android)** 🔄 IN PROGRESS
-103 теста, CI зелёный, 0 must-fix.
-Done: iOS spike, UI redesign, Send flow, Biometric unlock (Face ID), Transaction history (Blockscout API, 5 chains).
-Remaining: Android build, Passkey auth (WebAuthn), Code signing + TestFlight.
+**Phase 3 — Мобильное приложение (iOS + Android)** 🔄 FUNCTIONALLY COMPLETE
+112 тестов (core 64, desktop 8, txguard 38, doctests 2), CI зелёный, 0 must-fix.
+Done: iOS (iPhone 17 Pro Simulator) и Android (Pixel_8 API 35) проверены end-to-end на Sepolia — unlock, create, restore, send. BIP39 seed (`m/44'/60'/0'/0/0`, совместимо с MetaMask), 4-step create wizard (ack → phrase → quiz → password), Restore from phrase. UI redesign, Send flow, Biometric unlock (Face ID), Transaction history (Blockscout API, 5 chains). Одна и та же фраза → один и тот же адрес на обеих платформах.
+Remaining: Privacy policy, release signing + Google Play Internal Testing, Apple Developer Program ($99, пока не оплачен) для TestFlight.
 
 **Phase 4 — Cross-chain**
 Intent-based routing через Across Protocol. Сбор пыли.

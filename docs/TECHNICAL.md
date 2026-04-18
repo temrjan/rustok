@@ -749,6 +749,13 @@ pub fn default_chains() -> Vec<ChainConfig> {
 
 ---
 
+> **Historical note (2026-04-18):** sections 7 and 8 describe the
+> pre-Phase-1 planning timeline. They are retained for context on
+> original scope, not as current roadmap. For live status see
+> `docs/VISION.md` Phase Status and `docs/SESSION-NEXT.md`. Leptos
+> version reference below (`0.8`) is outdated — the project ships
+> on Leptos 0.7.
+
 ## 7. MVP Scope
 
 ### Что входит в MVP
