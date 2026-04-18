@@ -246,7 +246,10 @@ pub async fn get_wallet_qr_svg(state: State<'_, AppState>) -> Result<String, Str
         .ok_or_else(|| "no wallet loaded".to_string())?;
 
     let address = format!("{}", wallet.keyring.address());
-    generate_qr_svg(&address)
+    // EIP-681 URI so camera apps (MetaMask scanner, Rainbow, Google Lens on
+    // supported wallets) recognise the payload as an Ethereum address instead
+    // of treating it as an opaque string.
+    generate_qr_svg(&format!("ethereum:{address}"))
 }
 
 #[tauri::command]
