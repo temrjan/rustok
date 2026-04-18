@@ -106,20 +106,17 @@ pub async fn analyze_transaction(
     Ok(verdict_to_dto(verdict))
 }
 
-#[tauri::command]
-pub async fn create_wallet(
-    password: String,
-    app_handle: tauri::AppHandle,
-    state: State<'_, AppState>,
+/// Persist a keyring to the app data directory and store it in app state.
+///
+/// Single-wallet design: any existing `*.json` keystores are removed before
+/// writing the new one. On Unix the keystore file is chmod'd to `0600`.
+fn persist_keyring(
+    keyring: LocalKeyring,
+    app_handle: &tauri::AppHandle,
+    state: &State<'_, AppState>,
 ) -> Result<WalletInfo, String> {
-    validate_password(&password)?;
-
-    let keyring =
-        LocalKeyring::generate(&password).map_err(|e| format!("failed to create wallet: {e}"))?;
-
     let address = keyring.address();
 
-    // Persist keystore to app data directory.
     let data_dir = app_handle
         .path()
         .app_data_dir()
@@ -135,8 +132,7 @@ pub async fn create_wallet(
         }
     }
 
-    let filename = format!("{address}.json");
-    let keystore_path = data_dir.join(&filename);
+    let keystore_path = data_dir.join(format!("{address}.json"));
 
     // Same format as CLI: { version, address, encrypted_key }
     let export = serde_json::json!({
@@ -148,14 +144,12 @@ pub async fn create_wallet(
         .map_err(|e| format!("failed to serialize keystore: {e}"))?;
     std::fs::write(&keystore_path, &json).map_err(|e| format!("failed to save keystore: {e}"))?;
 
-    // Restrict keystore file permissions to owner-only (0600).
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let _ = std::fs::set_permissions(&keystore_path, std::fs::Permissions::from_mode(0o600));
     }
 
-    // Store in app state for subsequent commands.
     let mut wallet_lock = state
         .wallet
         .lock()
@@ -168,6 +162,20 @@ pub async fn create_wallet(
     Ok(WalletInfo {
         address: format!("{address}"),
     })
+}
+
+#[tauri::command]
+pub async fn create_wallet(
+    password: String,
+    app_handle: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<WalletInfo, String> {
+    validate_password(&password)?;
+
+    let keyring =
+        LocalKeyring::generate(&password).map_err(|e| format!("failed to create wallet: {e}"))?;
+
+    persist_keyring(keyring, &app_handle, &state)
 }
 
 #[tauri::command]
