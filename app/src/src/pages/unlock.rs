@@ -236,7 +236,7 @@ pub fn UnlockPage() -> impl IntoView {
 
                 <input
                     type="password"
-                    class="border border-gray-600 rounded-xl p-2 w-full bg-gray-800"
+                    class="border border-gray-600 rounded-xl p-2 w-full bg-gray-800 text-white"
                     placeholder="Password"
                     node_ref=password_ref
                 />
