@@ -112,9 +112,20 @@ impl LocalKeyring {
     /// Phantom, or any BIP39-compliant wallet. The private key is then
     /// encrypted with the given password using the same Argon2id +
     /// AES-256-GCM scheme as [`Self::generate`].
+    ///
+    /// The phrase is normalised (trim, collapse internal whitespace, lowercase)
+    /// before validation — coins-bip39 does not tolerate leading/trailing
+    /// blanks, tabs, newlines, or mixed case that users often introduce when
+    /// pasting from notes or terminals.
     pub fn from_mnemonic(phrase: &str, password: &str) -> Result<Self, KeyringError> {
+        let normalised: String = phrase
+            .split_whitespace()
+            .map(str::to_lowercase)
+            .collect::<Vec<_>>()
+            .join(" ");
+
         let signer = MnemonicBuilder::<English>::default()
-            .phrase(phrase.to_string())
+            .phrase(normalised)
             .build()
             .map_err(|e| KeyringError::KeyGen(e.to_string()))?;
 
@@ -402,17 +413,24 @@ mod tests {
         assert!(result.is_err());
     }
 
-    /// Documents whether coins-bip39 normalises input itself. If this test
-    /// fails, add `.trim().split_whitespace().collect::<Vec<_>>().join(" ")`
-    /// to `from_mnemonic` and update the test to assert success.
+    /// `from_mnemonic` must normalise pasted input — users typing
+    /// or copy-pasting often introduce leading/trailing spaces, double
+    /// spaces, tabs, newlines, or capitalised first letters.
     #[test]
-    fn mnemonic_whitespace_handling() {
-        let with_extra_spaces = "  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  about  ";
-        let result = LocalKeyring::from_mnemonic(with_extra_spaces, PASSWORD);
-        // Either outcome is acceptable today — this test pins current
-        // behaviour so a change surfaces as a test diff, not a silent bug.
-        if let Ok(k) = result {
-            let expected: Address = MM_TEST_ADDRESS.parse().unwrap();
+    fn mnemonic_normalises_messy_input() {
+        let expected: Address = MM_TEST_ADDRESS.parse().unwrap();
+        let inputs = [
+            // leading/trailing/double spaces
+            "  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  abandon  about  ",
+            // newlines between words
+            "abandon\nabandon\nabandon\nabandon\nabandon\nabandon\nabandon\nabandon\nabandon\nabandon\nabandon\nabout",
+            // tabs + mixed case
+            "\tABANDON\tabandon\tAbAnDoN\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabandon\tabout",
+        ];
+        for input in inputs {
+            let k = LocalKeyring::from_mnemonic(input, PASSWORD).unwrap_or_else(|e| {
+                panic!("from_mnemonic rejected messy input {input:?}: {e}")
+            });
             assert_eq!(k.address(), expected);
         }
     }
