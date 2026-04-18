@@ -16,11 +16,13 @@ struct ImportArgs {
     password: String,
 }
 
-/// Three-step wizard for creating a new wallet with BIP39 recovery phrase.
+/// Four-step wizard for creating a new wallet with BIP39 recovery phrase.
 ///
 /// 1. Backup intro — three acknowledgement checkboxes.
 /// 2. Show 12-word phrase — user writes it down.
-/// 3. Password — derive wallet and persist via `import_wallet_from_mnemonic`.
+/// 3. Confirm quiz — pick three words from the phrase to prove the user
+///    actually wrote it down.
+/// 4. Password — derive wallet and persist via `import_wallet_from_mnemonic`.
 #[component]
 pub fn WalletPage() -> impl IntoView {
     let auth_state = use_context::<RwSignal<WalletState>>()
@@ -31,14 +33,15 @@ pub fn WalletPage() -> impl IntoView {
     let (ack_seen, set_ack_seen) = signal([false, false, false]);
     let (phrase, set_phrase) = signal(None::<String>);
     let (saved_check, set_saved_check) = signal(false);
+    // quiz state: 3 indices into the phrase, 4 options each, user's pick per question.
+    let (quiz_indices, set_quiz_indices) = signal(Vec::<usize>::new());
+    let (quiz_options, set_quiz_options) = signal(Vec::<Vec<String>>::new());
+    let (quiz_selected, set_quiz_selected) = signal(Vec::<Option<String>>::new());
     let (password, set_password) = signal(String::new());
     let (confirm, set_confirm) = signal(String::new());
     let (error, set_error) = signal(None::<String>);
     let (loading, set_loading) = signal(false);
 
-    // Step 1 → 2: generate the phrase on transition so navigating back to
-    // step 1 and forward again produces a fresh phrase (the old one was
-    // shown, so regenerate for safety if user is still in setup).
     let go_to_phrase = move |_| {
         set_error.set(None);
         set_loading.set(true);
@@ -54,9 +57,19 @@ pub fn WalletPage() -> impl IntoView {
         });
     };
 
+    let go_to_quiz = move |_| {
+        set_error.set(None);
+        let Some(p) = phrase.get() else { return };
+        let (indices, options) = build_quiz(&p);
+        set_quiz_indices.set(indices);
+        set_quiz_options.set(options);
+        set_quiz_selected.set(vec![None; 3]);
+        set_step.set(3);
+    };
+
     let go_to_password = move |_| {
         set_error.set(None);
-        set_step.set(3);
+        set_step.set(4);
     };
 
     let create_wallet = {
@@ -110,6 +123,20 @@ pub fn WalletPage() -> impl IntoView {
         if s > 1 {
             set_step.set(s - 1);
         }
+    };
+
+    // Quiz completion: all three picks match the corresponding phrase word.
+    let quiz_complete = move || {
+        let Some(p) = phrase.get() else { return false };
+        let words: Vec<String> = p.split_whitespace().map(String::from).collect();
+        let idxs = quiz_indices.get();
+        let selected = quiz_selected.get();
+        if selected.len() != idxs.len() {
+            return false;
+        }
+        idxs.iter().zip(selected.iter()).all(|(i, sel)| {
+            sel.as_ref().is_some_and(|s| words.get(*i) == Some(s))
+        })
     };
 
     view! {
@@ -187,7 +214,7 @@ pub fn WalletPage() -> impl IntoView {
 
                 <button
                     class="bg-indigo-600 px-4 py-3 rounded-xl w-full hover:bg-indigo-700 mt-4 disabled:bg-gray-700"
-                    on:click=go_to_password
+                    on:click=go_to_quiz
                     disabled=move || !saved_check.get()
                 >
                     "Continue"
@@ -200,8 +227,89 @@ pub fn WalletPage() -> impl IntoView {
                 </button>
             </div>
 
-            // Step 3 — password
+            // Step 3 — confirm quiz
             <div style:display=move || if step.get() == 3 { "" } else { "none" }>
+                <p class="text-gray-300 mb-4 text-center">
+                    "Let's make sure you wrote down the words. Pick the word at each position:"
+                </p>
+
+                {move || {
+                    let idxs = quiz_indices.get();
+                    let options = quiz_options.get();
+                    let selected = quiz_selected.get();
+                    let words: Vec<String> = phrase.get()
+                        .unwrap_or_default()
+                        .split_whitespace()
+                        .map(String::from)
+                        .collect();
+
+                    idxs.into_iter().enumerate().map(|(q, position)| {
+                        let opts = options.get(q).cloned().unwrap_or_default();
+                        let user_pick = selected.get(q).cloned().flatten();
+                        let correct_word = words.get(position).cloned().unwrap_or_default();
+
+                        view! {
+                            <div class="quiz-question">
+                                <div class="quiz-label">
+                                    {format!("Word #{}", position + 1)}
+                                </div>
+                                <div class="quiz-options">
+                                    {opts.into_iter().map(|opt| {
+                                        let user_pick = user_pick.clone();
+                                        let correct_word = correct_word.clone();
+                                        let opt_label = opt.clone();
+                                        let opt_for_click = opt.clone();
+                                        let class = move || {
+                                            match &user_pick {
+                                                Some(picked) if picked == &opt => {
+                                                    if picked == &correct_word {
+                                                        "quiz-option correct"
+                                                    } else {
+                                                        "quiz-option wrong"
+                                                    }
+                                                }
+                                                _ => "quiz-option",
+                                            }
+                                        };
+                                        view! {
+                                            <button
+                                                class=class
+                                                on:click=move |_| {
+                                                    let pick = opt_for_click.clone();
+                                                    set_quiz_selected.update(|s| {
+                                                        if let Some(slot) = s.get_mut(q) {
+                                                            *slot = Some(pick);
+                                                        }
+                                                    });
+                                                }
+                                            >
+                                                {opt_label}
+                                            </button>
+                                        }
+                                    }).collect_view()}
+                                </div>
+                            </div>
+                        }
+                    }).collect_view()
+                }}
+
+                <button
+                    class="bg-indigo-600 px-4 py-3 rounded-xl w-full hover:bg-indigo-700 mt-4 disabled:bg-gray-700"
+                    on:click=go_to_password
+                    disabled=move || !quiz_complete()
+                >
+                    "Continue"
+                </button>
+                <button
+                    class="text-gray-400 text-sm w-full text-center mt-2"
+                    on:click=back
+                >
+                    "← Back"
+                </button>
+            </div>
+
+            // Step 4 — password
+            <div style:display=move || if step.get() == 4 { "" } else { "none" }>
                 <p class="text-gray-300 mb-4 text-center">
                     "Set a password to unlock this wallet on this device."
                 </p>
@@ -232,10 +340,10 @@ pub fn WalletPage() -> impl IntoView {
                 </button>
             </div>
 
-            // Footer — existing wallet? Unlock.
+            // Footer links — existing wallet or restore.
             <p class="text-gray-400 text-sm mt-6 text-center">
-                "Already have a wallet? "
-                <a href="/unlock" class="text-blue-400">"Unlock"</a>
+                "Have a recovery phrase? "
+                <a href="/wallet/restore" class="text-blue-400">"Restore wallet"</a>
             </p>
         </div>
     }
@@ -247,4 +355,51 @@ fn event_target_checked(ev: &leptos::ev::Event) -> bool {
         .and_then(|t| t.dyn_into::<web_sys::HtmlInputElement>().ok())
         .map(|el| el.checked())
         .unwrap_or(false)
+}
+
+/// Build quiz data: three sorted random indices from the phrase, plus a
+/// four-option list for each — correct word + three random distractors
+/// from the other phrase words, all shuffled.
+fn build_quiz(phrase: &str) -> (Vec<usize>, Vec<Vec<String>>) {
+    let words: Vec<String> = phrase.split_whitespace().map(String::from).collect();
+    let n = words.len();
+    if n < 4 {
+        return (Vec::new(), Vec::new());
+    }
+
+    // 3 unique random indices, sorted ascending for display.
+    let mut all: Vec<usize> = (0..n).collect();
+    shuffle(&mut all);
+    let mut indices: Vec<usize> = all.into_iter().take(3).collect();
+    indices.sort_unstable();
+
+    let options: Vec<Vec<String>> = indices
+        .iter()
+        .map(|&i| {
+            let correct = words[i].clone();
+            // Pool = other words, dedup to avoid repeats of the correct word.
+            let mut pool: Vec<String> = words
+                .iter()
+                .filter(|w| **w != correct)
+                .cloned()
+                .collect();
+            shuffle(&mut pool);
+            pool.truncate(3);
+            pool.push(correct);
+            shuffle(&mut pool);
+            pool
+        })
+        .collect();
+
+    (indices, options)
+}
+
+/// Fisher–Yates shuffle using the WebCrypto/JS RNG via `js_sys::Math::random`.
+fn shuffle<T>(v: &mut [T]) {
+    let n = v.len();
+    for i in (1..n).rev() {
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let j = (js_sys::Math::random() * ((i + 1) as f64)).floor() as usize;
+        v.swap(i, j);
+    }
 }

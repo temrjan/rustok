@@ -536,3 +536,65 @@ input:focus {
     font-weight: 600;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
 }
+
+.restore-textarea {
+    width: 100%;
+    background: #1A1A1A;
+    border: 1px solid #2A2A2A;
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    color: #f59e0b;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 100px;
+}
+
+.restore-textarea:focus {
+    outline: none;
+    border-color: #f59e0b;
+}
+
+.quiz-question {
+    background: #1A1A1A;
+    border: 1px solid #2A2A2A;
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
+.quiz-label {
+    color: #8A8A8A;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+}
+
+.quiz-options {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+}
+
+.quiz-option {
+    background: #0D0D0D;
+    border: 1px solid #2A2A2A;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    color: #D0D0D0;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.quiz-option.correct {
+    border-color: #16a34a;
+    background: rgba(22, 163, 74, 0.15);
+    color: #4ade80;
+}
+
+.quiz-option.wrong {
+    border-color: #dc2626;
+    background: rgba(220, 38, 38, 0.15);
+    color: #f87171;
+}

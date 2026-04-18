@@ -3,6 +3,7 @@ pub mod analyze;
 pub mod balance;
 pub mod home;
 pub mod receive;
+pub mod restore;
 pub mod send;
 pub mod settings;
 pub mod unlock;
