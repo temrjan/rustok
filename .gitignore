@@ -7,7 +7,7 @@
 # Tauri / Trunk build artifacts — commit gen/android/ (user-modified Gradle for rustls JNI).
 app/dist/
 app/src-tauri/gen/schemas/
-app/src-tauri/gen/ios/
+app/src-tauri/gen/apple/
 app/src-tauri/gen/android/app/build/
 app/src-tauri/gen/android/.gradle/
 app/src-tauri/gen/android/local.properties
