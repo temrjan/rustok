@@ -91,7 +91,7 @@ pub fn SettingsPage() -> impl IntoView {
             // Actions.
             <div class="mt-4">
                 <a href="/wallet/create" class="block text-blue-400 text-sm mb-4">"Create New Wallet"</a>
-                <a href="/unlock" class="block text-blue-400 text-sm">"Unlock Wallet"</a>
+                <a href="/unlock" class="block text-blue-400 text-sm">"Lock Wallet"</a>
             </div>
 
             // About.
