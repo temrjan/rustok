@@ -36,3 +36,6 @@ play-assets/
 
 # Internal docs (not public)
 docs/internal/
+
+# Node (Cloudflare Worker)
+deploy/rpc-proxy/node_modules/
