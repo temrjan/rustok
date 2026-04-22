@@ -16,6 +16,7 @@ pub mod amount;
 pub mod convert;
 pub mod explainer;
 pub mod explorer;
+pub mod http;
 pub mod keyring;
 pub mod provider;
 pub mod router;

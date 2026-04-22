@@ -34,6 +34,8 @@ qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 tauri-plugin-biometric = "2"
 aes-gcm = "0.10"
 rand = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-rustls-platform-verifier = "0.6"
+paranoid-android = "0.2"

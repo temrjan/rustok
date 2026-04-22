@@ -99,12 +99,7 @@ impl ExplorerClient {
     /// Create a new explorer client with sensible timeouts.
     #[must_use]
     pub fn new() -> Self {
-        let http = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(10))
-            .connect_timeout(std::time::Duration::from_secs(5))
-            .build()
-            .expect("default TLS backend is always available");
-        Self { http }
+        Self { http: crate::http::build_http_client() }
     }
 
     /// Fetch transaction history for an address across all supported chains.
@@ -133,7 +128,10 @@ impl ExplorerClient {
         for result in results {
             match result {
                 Ok(txs) => all_txs.extend(txs),
-                Err(e) => errors.push(e),
+                Err(e) => {
+                    tracing::warn!(error = %e, "explorer fetch failed");
+                    errors.push(e);
+                }
             }
         }
 

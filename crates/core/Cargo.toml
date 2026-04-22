@@ -31,8 +31,12 @@ argon2 = "0.5"
 rand = "0.8"
 zeroize = { version = "1", features = ["derive"] }
 
-# HTTP (shared client for RPC providers — must match alloy-provider's reqwest version)
-reqwest = "0.13"
+# HTTP (shared client for RPC providers — must match alloy-provider's reqwest version).
+# `rustls-no-provider` activates __rustls without auto-installing a platform verifier;
+# we supply webpki-roots + ring via ClientBuilder::use_preconfigured_tls in http.rs.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+webpki-roots = "1"
 
 # Async
 tokio = { workspace = true }

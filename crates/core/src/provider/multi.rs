@@ -88,15 +88,7 @@ pub struct GasFees {
     pub max_priority_fee_per_gas: u128,
 }
 
-/// Build a shared HTTP client with sensible defaults.
-fn build_http_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .connect_timeout(std::time::Duration::from_secs(5))
-        .pool_idle_timeout(std::time::Duration::from_secs(90))
-        .build()
-        .expect("default TLS backend is always available")
-}
+use crate::http::build_http_client;
 
 impl MultiProvider {
     /// Create a new multi-chain provider with the given chains.

@@ -5,42 +5,34 @@ use rustok_core::explorer::ExplorerClient;
 use rustok_core::provider::MultiProvider;
 use std::sync::Mutex;
 
+fn init_tracing() {
+    use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::prelude::*;
+
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new("info,rustok_core=debug,rustok_desktop_lib=debug,reqwest=info,rustls=info")
+    });
+
+    #[cfg(target_os = "android")]
+    let _ = tracing_subscriber::registry()
+        .with(paranoid_android::layer("rustok"))
+        .with(filter)
+        .try_init();
+
+    #[cfg(not(target_os = "android"))]
+    let _ = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer())
+        .with(filter)
+        .try_init();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    init_tracing();
     let builder = tauri::Builder::default();
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_biometric::init());
     builder
-        .setup(|_app| {
-            #[cfg(target_os = "android")]
-            {
-                use tauri::Manager;
-                _app.get_webview_window("main")
-                    .expect("main window")
-                    .with_webview(|webview| {
-                        webview.jni_handle().exec(|env, context, _webview| {
-                            use tauri::wry::prelude::JObject;
-                            let loader = env
-                                .call_method(
-                                    context,
-                                    "getClassLoader",
-                                    "()Ljava/lang/ClassLoader;",
-                                    &[],
-                                )
-                                .expect("getClassLoader");
-                            rustls_platform_verifier::android::init_with_refs(
-                                env.get_java_vm().expect("get_java_vm"),
-                                env.new_global_ref(context).expect("global_ref context"),
-                                env.new_global_ref(
-                                    JObject::try_from(loader).expect("JObject from loader"),
-                                )
-                                .expect("global_ref loader"),
-                            );
-                        });
-                    })?;
-            }
-            Ok(())
-        })
         .manage(AppState {
             provider: MultiProvider::default_chains(),
             explorer: ExplorerClient::new(),

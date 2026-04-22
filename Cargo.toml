@@ -31,8 +31,12 @@ alloy-dyn-abi = "1.5"
 alloy-json-abi = "1.5"
 
 # Ethereum RPC & provider
-alloy-provider = "1.8"
-alloy-transport-http = "1.8"
+# default-features disabled to drop `reqwest-default-tls`, which pulls rustls-platform-verifier.
+# On Android that verifier enforces OCSP revocation and rejects Let's Encrypt certs (RUSTSEC-less
+# systemic issue after LE OCSP EOL, Aug 2025). We supply our own webpki-roots TLS via
+# reqwest::ClientBuilder::use_preconfigured_tls in rustok_core::http.
+alloy-provider = { version = "1.8", default-features = false, features = ["reqwest"] }
+alloy-transport-http = { version = "1.8", default-features = false, features = ["reqwest"] }
 alloy-rpc-types-eth = "1.8"
 alloy-network = "1.8"
 alloy-consensus = { version = "1.8", default-features = false, features = ["std"] }
