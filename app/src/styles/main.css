@@ -32,6 +32,10 @@ html {
     height: 100%;
     overflow: auto;
     -webkit-overflow-scrolling: touch;
+    /* Disable WebView overscroll / rubber-band drag on dark-themed screens
+       (welcome, receive, future dark screens); the `html`/`body` elements
+       would otherwise bounce when content exactly fills the viewport. */
+    overscroll-behavior: none;
 }
 
 body {
@@ -44,6 +48,9 @@ body {
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);
     padding-right: env(safe-area-inset-right);
+    /* See html{} above — applied here too for older WebKit WebViews where
+       the property only takes effect on the body element. */
+    overscroll-behavior: none;
 }
 
 /* Typography */
