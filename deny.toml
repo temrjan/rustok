@@ -45,6 +45,10 @@ allow = [
     "AGPL-3.0-or-later",
     "CC0-1.0",
     "CDLA-Permissive-2.0",
+    # `clipboard-win` (transitive from tauri-plugin-clipboard-manager on
+    # Windows) ships under Boost 1.0 — permissive, compatible with
+    # AGPL/MIT/Apache-2.
+    "BSL-1.0",
 ]
 confidence-threshold = 0.8
 exceptions = []
