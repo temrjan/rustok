@@ -124,9 +124,9 @@ cargo install tauri-cli --version "^2.10" --locked
 cargo tauri dev
 ```
 
-Pages: Home (auto-balance + actions), Send (3-step: input → preview → result), Receive (QR), Analyze (txguard), Activity (transaction history), Settings, Wallet (4-step create wizard: ack → phrase → confirm quiz → password), Restore (import from BIP39 phrase), Unlock.
-Navigation: bottom tab bar (Home / Activity / Settings) with SVG tab bar icons. Send/Receive/Scan — fullscreen from Home action buttons.
-Branding: amber palette (#f59e0b), neutral dark background (#0D0D0D), 3D amber Ethereum diamond logo.
+Pages: Welcome (brand landing + Create/Restore CTA), Home (hero balance + Send/Receive/Scan + chains list), Send (3-step DarkShell wizard: input → preview with txguard verdict → result), Receive (chain pills + white QR card + copy address), Analyze/TxGuard (risk badge + per-finding rows + Nexus Mutual CTA when blocked), Activity (dark cards with direction icons — ↑ DANGER, ↓ SUCCESS, swap ACCENT), Settings (wallet card + Face ID toggle + Lock + Create new wallet → Welcome), Wallet (5-step PIN create wizard: SetPin → Confirm → ShowPhrase → Quiz → BackupConfirm), Restore (phrase + PIN), Unlock (PIN keypad + Face ID).
+Navigation: bottom tab bar (Wallet / Activity / Settings) with SVG icons. Send / Receive / Scan push fullscreen from Home action buttons.
+Branding: navy + periwinkle palette (`#0A1123` / `#8387C3`), 6-digit PIN onboarding, periwinkle diamond logo. Design foundation: `app/src/src/tokens.rs` + `components/{icons,button,logo,dark_shell}.rs`. Copy address uses `tauri-plugin-clipboard-manager`.
 
 ## iOS App
 

@@ -44,10 +44,20 @@ system TrustManager тоже не выполняют live OCSP check.
 
 ## Что делать в следующей сессии
 
-### 1. Новый UI дизайн (приоритет)
+### 1. Консистентный navy body + tab bar (приоритет)
 
-Пользователь готовил новый крупный проект по дизайну. Нужно посмотреть макет,
-оценить объём правок по Leptos, согласовать scope (v0.2 или частично в v0.1.3).
+Dark-редизайн экранов завершён (welcome, receive, activity, settings, send,
+analyze, home — все navy + periwinkle через `crate::tokens`). Остался общий
+shell в `app/src/styles/main.css`:
+
+```css
+body { background: #0A1123; }            /* вместо #0D0D0D amber */
+.tab-bar { background: #141A33; border-top: 1px solid #242B4C; }
+.tab-bar a { color: #959BB5; }           /* neutral mid */
+.tab-bar a[aria-current="page"] { color: #8387C3; }   /* periwinkle */
+```
+
+Один коммит, регрессий не ожидается — экраны уже тянут свои tokens.
 
 ### 2. iOS публикация (блокер — $99/год Apple Developer)
 
@@ -76,10 +86,22 @@ ETH Arbitrum → Base через intent solver. `crates/bridge/` новый crat
 - **Settings → Show Recovery Phrase:** требует v2 keystore format
   (encrypted mnemonic + encrypted private key). Security-critical, отдельный PR
   с ревью.
-- **Transaction history polling** в Activity (сейчас fetch при mount)
-- **Copy address** на Android WebView — возможно через `tauri-plugin-clipboard-manager`
-- **Cosmetic:** белые кнопки в Settings (`app/src/src/pages/settings.rs`),
-  brand launcher icon (`cargo tauri icon rustok-landing/public/logo.png`)
+- **Transaction history polling** в Activity (сейчас fetch при mount).
+- **Price feed** в `crates/core/prices.rs` (CoinGecko) — откроет путь к
+  `HomeVariant::Chart` и USD-колонкам в Activity/Home.
+- **Cosmetic:** brand launcher icon (`cargo tauri icon rustok-landing/public/logo.png`).
+
+### 6. Сделано в сессии 2026-04-24 (вечер) — dark-редизайн готов
+
+- Foundation: `tokens.rs`, `components/{icons,button,logo,dark_shell}.rs`.
+- Welcome screen (новый роут `/welcome`).
+- Redesign: home, receive, activity, settings, send, analyze.
+- `tauri-plugin-clipboard-manager` — починенный Copy address.
+- CSS: `overscroll-behavior: none`, safe-area математика для full-screen pages.
+- Send amount input: `type="text" inputmode="decimal" pattern` — Android
+  клавиатура теперь открывается.
+
+См. детали: `docs/REDESIGN.md` § «Сессия 2026-04-24 (вечер)».
 
 ## Технический контекст
 

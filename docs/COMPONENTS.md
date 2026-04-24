@@ -170,21 +170,31 @@ App (не в workspace):
 
 **Технология:** Leptos 0.7 (CSR) + leptos_router
 
-**Страницы (10):**
-1. `home.rs` — баланс (одна цифра), action buttons (Send/Receive/Scan)
-2. `balance.rs` — детализация баланса по сетям
-3. `send.rs` — 3-step flow (input → preview → result), preset % кнопки
-4. `receive.rs` — QR-код + Copy Address
-5. `analyze.rs` — txguard анализ транзакции
-6. `activity.rs` — история транзакций (Blockscout)
-7. `settings.rs` — адрес, версия, Create New Wallet
-8. `wallet.rs` — 4-step create wizard (ack checkboxes → phrase display → confirm quiz → password)
-9. `restore.rs` — восстановление по BIP39 фразе (маршрут `/wallet/restore`)
-10. `unlock.rs` — разблокировка (пароль / Face ID)
+**Страницы (11):**
+1. `welcome.rs` — navy hero + логотип + Create / Restore CTA (route `/welcome`, дефолт для `Uninit`)
+2. `home.rs` — Main wallet greeting + copy-address pill + hero balance card + 3 action buttons (Send/Receive/Scan) + Networks list
+3. `balance.rs` — детализация баланса по сетям (old, не редизайн)
+4. `send.rs` — 3-step DarkShell wizard (input → preview с txguard pill → result). Input: mono recipient + 24px amount + MAX + 25/50/75% presets (`type="text" inputmode="decimal" pattern`)
+5. `receive.rs` — DarkShell + chain pills + white QR card + Copy address (tauri-plugin-clipboard-manager) + cross-chain warning
+6. `analyze.rs` — DarkShell txguard: risk badge (ALLOW/WARN/BLOCK) + per-finding строки + Nexus Mutual CTA (блок при high risk)
+7. `activity.rs` — Recent/Activity header + dark cards с direction icons + chain badges
+8. `settings.rs` — WalletHeader (MW periwinkle avatar) + Face ID ToggleRow + Create new wallet / Lock wallet NavRows. Create new wallet ведёт на `/welcome`
+9. `wallet.rs` — 5-step PIN create wizard: SetPin → ConfirmPin → ShowPhrase → Quiz → BackupConfirm
+10. `restore.rs` — phrase input + 3-step PIN wizard (маршрут `/wallet/restore`)
+11. `unlock.rs` — разблокировка (6-digit PIN keypad + Face ID)
 
-Навигация: только через `use_navigate()` из `leptos_router`. Старый `bridge::navigate_to()` удалён.
+Навигация: `use_navigate()` из `leptos_router`.
 
-**Зависимости:** rustok-types, leptos, wasm-bindgen, web-sys
+**Shared компоненты (`components/`):**
+- `icons.rs` — 23 SVG-иконки (IconArrowUp/Down/Swap/Shield/Copy/Check/QR/Lock/FaceId/Info/Alert/…) через макрос `icon_component!`
+- `button.rs` — `PrimaryButton` (dark/light variants, disabled Signal), `SecondaryButton`, `TextButton`
+- `logo.rs` — `RustokLogo` (`assets/rustok-logo-transparent.png`)
+- `dark_shell.rs` — `DarkShell` (navbar + back chevron + контент) + `DarkFieldLabel` для форм
+- `passcode.rs` — `Keypad` + `PasscodeDots` + `PASSCODE_LENGTH = 6`
+
+**Design system:** `app/src/src/tokens.rs` (186 строк — navy+periwinkle palette, типографика `rw_type::FAMILY`, радиусы `rw_radius::{SM,MD,LG,XL,PILL}`, тени, градиенты).
+
+**Зависимости:** rustok-types, leptos, wasm-bindgen, web-sys, gloo-timers
 
 ---
 
@@ -195,6 +205,10 @@ App (не в workspace):
 Среди них для BIP39: `generate_mnemonic_phrase`, `create_wallet_with_mnemonic`, `import_wallet_from_mnemonic`.
 
 **Ключевое:** Mutex для thread-safe доступа к keyring, clone signer before .await.
+
+**Tauri plugins:**
+- `tauri-plugin-biometric` (mobile): Face ID / Touch ID.
+- `tauri-plugin-clipboard-manager` (all platforms): `plugin:clipboard-manager|write_text` — Copy address на Android WebView (замена отказавшего `navigator.clipboard.writeText`).
 
 ---
 

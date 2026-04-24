@@ -191,7 +191,7 @@ set_timeout(move || { pin.set(String::new()); }, Duration::from_millis(500));
 
 ## 5. Прогресс (обновлять после каждой сессии)
 
-### Сессия 2026-04-23 — онбординг PIN (в процессе)
+### Сессия 2026-04-23 — онбординг PIN (unlock)
 
 **Выполнено:**
 - [x] Анализ rust-design репо (все экраны, архитектура)
@@ -203,42 +203,94 @@ set_timeout(move || { pin.set(String::new()); }, Duration::from_millis(500));
 - [x] `main.rs`: добавлен `mod components`
 - [x] `pages/unlock.rs`: PIN keypad, auto-unlock на 6-й цифре, shake, biometric
 
-### Сессия 2026-04-24 — restore.rs
+### Сессия 2026-04-24 — restore.rs + wallet.rs (онбординг готов)
 
 **Выполнено:**
-- [x] `pages/restore.rs` — phrase input + 3-шаговый PIN wizard (Phrase → SetPin → ConfirmPin → import → /)
-
-### Сессия 2026-04-25 — wallet.rs
-
-**Выполнено:**
+- [x] `pages/restore.rs` — phrase + 3-шаговый PIN wizard
 - [x] `pages/wallet.rs` — 5-шаговый PIN wizard: SetPin → ConfirmPin → ShowPhrase → Quiz → BackupConfirm → import → /
-  - Blur overlay + tap-to-reveal для фразы
-  - Quiz: chip grid 4 варианта, 3 вопроса, progress dots (answered=green, current=accent)
-  - Wrong answer: red flash 500ms на чипах (DANGER_BG + DANGER border)
-  - BackupConfirm: 3 checkbox (CheckboxItem компонент), error banner при ошибке бэкенда
-  - Inline styles, navy+periwinkle палитра, 12 токенов
-  - `cargo check` ✅ `clippy` ✅ (0 ошибок в wallet.rs) `110 тестов` ✅
-  - Пройден `/rust-review`: 0 critical/error, 1 warning исправлен (silent error → error banner)
+- [x] Коммит `5dfb110 feat(ui): redesign onboarding with 6-digit PIN flow`
 
-**Осталось в задаче онбординга:**
-- [ ] `cargo tauri android build --apk` → тест на эмуляторе
-- [ ] Коммит → пуш → CI
+### Сессия 2026-04-24 (вечер) — Welcome + dark screens portage
 
-**После этой задачи (следующие задачи):**
+Полный редизайн dark-экранов: все видимые поверхности перенесены с amber на
+navy + periwinkle палитру, из `rust-design/src/screens/dark/` + `onboarding/`.
 
-- [ ] **Полный визуальный редизайн** — портировать `screens/dark/` из rust-design:
-  - `home.rs` (3 варианта: Base/Chart/Tokens + PriceChart)
-  - `activity.rs` (day-grouped, новые стили)
-  - `send.rs` (новый UI)
-  - `receive.rs` (новый QR экран)
-  - `settings.rs` (grouped sections + toggles)
-  - `txguard.rs` (transaction safety checker)
-- [ ] **Миграция на state machine** — заменить leptos_router на `RwSignal<Screen>` (как в rust-design app.rs). Требует полного редизайна всех страниц.
-- [ ] **Screen::Unlock** — добавить в state machine после миграции
-- [ ] **Cloudflare Worker RPC proxy** — Settings toggle `rpc.rustokwallet.com` (scaffold в `deploy/rpc-proxy/`)
-- [ ] **Phase 4** — Cross-chain via Across Protocol (`crates/bridge/`)
-- [ ] **iOS TestFlight** — $99 Apple Developer Program
-- [ ] **Show Recovery Phrase** — Settings → требует v2 keystore format, отдельный security PR
+**Foundation (портировано целиком):**
+- [x] `tokens.rs` — 186 строк design-системы (колоры, типографика, радиусы,
+  тени, градиенты). Без `css::` CSS-переменных (тема переключаемой не делаем).
+- [x] `components/icons.rs` — 23 SVG иконки через `icon_component!` макрос
+  (IconArrowUp/Down/Swap/Shield/Copy/Check/QR/Lock/FaceId/Info/Alert + …).
+- [x] `components/button.rs` — `PrimaryButton` (dark/light variants, disabled
+  Signal), `SecondaryButton` (periwinkle ghost), `TextButton`.
+- [x] `components/logo.rs` — `RustokLogo` на PNG-ассете
+  `assets/rustok-logo-transparent.png` (скопирован из rust-design).
+- [x] `components/dark_shell.rs` — `DarkShell` (navbar с опциональным back
+  chevron + контент) + `DarkFieldLabel` для dark-форм.
+
+**Страницы (dark):**
+- [x] `pages/welcome.rs` — navy hero + логотип + create/restore CTA,
+  маршрут `/welcome`. Коммит `b6b694c`.
+- [x] `pages/home.rs` — `Uninit` guard теперь шлёт на `/welcome`, не прямо
+  на `/wallet/create`. (bypass в Settings из старого фикса тоже убран — см.
+  ниже.) Полный dark-редизайн hero-карточки + action-кнопок + chains list.
+- [x] `pages/receive.rs` — DarkShell + chain pills + white QR card + copy
+  button + amber cross-chain warning. Коммит `f2a48c8`.
+- [x] `pages/activity.rs` — "Recent / Activity" header + dark cards с
+  direction icons (↑ DANGER, ↓ SUCCESS, swap ACCENT), chain badges,
+  failed-row opacity. Коммит `09df8ea`.
+- [x] `pages/settings.rs` — WalletHeader card (MW periwinkle avatar +
+  адрес), Face ID ToggleRow, Create new wallet / Lock wallet NavRows.
+  **Create new wallet теперь ведёт на `/welcome`, а не минует его.**
+  Коммит `c1b6517`.
+- [x] `pages/send.rs` — 3-step DarkShell wizard:
+  * Input — Available + Recipient (mono) + Amount (24px, MAX + 25/50/75%).
+    Amount input: `type="text" inputmode="decimal" pattern="[0-9]*[.]?[0-9]*"`
+    — стандартный mobile-рецепт, без него Android не открывал клавиатуру.
+  * Preview — dark card с txguard pill (ALLOW green / WARN amber / BLOCK red
+    + risk score). Send отключён при BLOCK.
+  * Result — success checkmark + amount + chain + mono tx_hash + Done.
+  Коммит `bd1036c`.
+- [x] `pages/analyze.rs` (маршрут `/scan`) — DarkShell + risk badge + per-
+  finding строки (rule mono periwinkle + description) + Nexus Mutual CTA
+  только при BLOCK. Коммит `79d0750`.
+
+**Фиксы и инфраструктура:**
+- [x] `app/src-tauri/Cargo.toml`: подключён `tauri-plugin-clipboard-manager`.
+  `bridge::copy_to_clipboard` переписан на
+  `invoke("plugin:clipboard-manager|write_text", …)`. Раньше `navigator.
+  clipboard.writeText` молча фейлил на Android WebView. Коммит `ba7f64e`.
+- [x] `main.css`: `overscroll-behavior: none` на html+body убрал rubber-band
+  bounce на dark-экранах. `body` padding top/bottom возвращён, а full-screen
+  страницы (unlock/wallet/restore/welcome/DarkShell) теперь
+  `min-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
+  чтобы ряд клавиатуры `0 / backspace` не уезжал под gesture bar.
+  Коммиты `097bbd6`, `86a0429`.
+- [x] Receive QR: centered wrapper `display:flex;justify-content:center` вместо
+  фиксированных 192×192 — SVG от `rustok-core` с собственным intrinsic width
+  больше не переливается вправо. Коммит `097bbd6`.
+
+**Известные ограничения / не в scope:**
+- Нет `HomeVariant::Chart` и `HomeVariant::Tokens` — требуют backend-price-feed
+  (CoinGecko) и ERC-20 поддержки, отдельные задачи.
+- `SecondaryButton` и `DarkFieldLabel` пока не экспортированы из `components`
+  (re-add когда пойдут в работу).
+- Миграция на state-machine (`RwSignal<Screen>` вместо `leptos_router`) не
+  делается — router справляется.
+- iOS ещё не собрали с новыми экранами (физического устройства нет).
+
+**Следующие задачи (по убыванию приоритета):**
+- [ ] Привести body-background + bottom tab bar в navy (сейчас `#0D0D0D`
+  амбер): `body { background: #0A1123 }`, `.tab-bar { background: #141A33;
+  border-top: 1px solid #242B4C; }`, `.tab-bar a[aria-current="page"] {
+  color: #8387C3 }`. Новые screens тянут navy, но старые tab icons (wallet/
+  activity/settings) пока рендерятся amber — после смены тонов консистентно.
+- [ ] **Cloudflare Worker RPC proxy** — Settings toggle `rpc.rustokwallet.com`
+  (scaffold в `deploy/rpc-proxy/`).
+- [ ] **Phase 4** — Cross-chain via Across Protocol (`crates/bridge/`).
+- [ ] **iOS TestFlight** — $99 Apple Developer Program.
+- [ ] **Show Recovery Phrase** — Settings → требует v2 keystore format.
+- [ ] **Price feed** — `crates/core/prices.rs` (CoinGecko) → открыть путь
+  для `HomeVariant::Chart` и USD колонок в Activity.
 
 ---
 

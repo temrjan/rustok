@@ -247,17 +247,19 @@ fn StepInput(
             r = rw_radius::MD,
         )>
             <input
+                type="text"
+                inputmode="decimal"
+                pattern="[0-9]*[.]?[0-9]*"
                 style=format!(
                     "flex:1;border:none;background:transparent;\
                      font-family:{family};font-size:24px;font-weight:700;\
                      color:{text};outline:none;letter-spacing:-0.5px;min-width:0;\
-                     caret-color:{accent};",
+                     caret-color:{accent};-webkit-user-select:text;user-select:text;",
                     family = rw_type::FAMILY,
                     text = t::TEXT_LIGHT,
                     accent = t::ACCENT,
                 )
                 placeholder="0.00"
-                inputmode="decimal"
                 on:input:target=move |ev| amount.set(ev.target().value())
                 prop:value=move || amount.get()
             />
