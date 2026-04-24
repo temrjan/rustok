@@ -34,7 +34,8 @@ pub fn DarkShell(
 
     view! {
         <div style=format!(
-            "min-height:100vh;display:flex;flex-direction:column;background:{bg};",
+            "min-height:calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));\
+             display:flex;flex-direction:column;background:{bg};",
             bg = t::BG_DARK,
         )>
             <div style=nav_style>

@@ -170,8 +170,9 @@ pub fn UnlockPage() -> impl IntoView {
 
     view! {
         <div style=format!(
-            "display:flex;flex-direction:column;min-height:100dvh;\
-             background:{BG};padding-top:max(52px,env(safe-area-inset-top));"
+            "display:flex;flex-direction:column;\
+             min-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));\
+             background:{BG};padding-top:52px;"
         )>
             // Header
             <div style="display:flex;flex-direction:column;align-items:center;padding:32px 24px 0;">

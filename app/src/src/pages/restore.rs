@@ -186,8 +186,9 @@ pub fn RestorePage() -> impl IntoView {
 
     view! {
         <div style=format!(
-            "display:flex;flex-direction:column;min-height:100dvh;\
-             background:{BG};padding-top:max(52px,env(safe-area-inset-top));"
+            "display:flex;flex-direction:column;\
+             min-height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));\
+             background:{BG};padding-top:52px;"
         )>
 
             // ── Step 1: Phrase input ─────────────────────────────────────────

@@ -20,7 +20,9 @@ pub fn WelcomePage() -> impl IntoView {
     let go_restore = Callback::new(move |()| navigate("/wallet/restore", Default::default()));
 
     let wrapper_style = format!(
-        "position:relative;min-height:100vh;background:{bg};\
+        "position:relative;\
+         min-height:calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));\
+         background:{bg};\
          display:flex;flex-direction:column;padding:100px 24px 48px;\
          box-sizing:border-box;",
         bg = t::BG_DARK,
