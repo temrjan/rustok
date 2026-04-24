@@ -1,70 +1,210 @@
+//! Receive screen — dark-themed QR + address + copy action.
+//!
+//! QR card keeps a white background (required for camera scanning).
+
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+use leptos_router::hooks::use_navigate;
 use serde::Serialize;
 
 use crate::bridge::{copy_to_clipboard, tauri_invoke};
+use crate::components::icons::{IconCheck, IconCopy};
+use crate::components::DarkShell;
+use crate::tokens::{self as t, rw_radius, rw_type};
 
 #[derive(Serialize)]
 struct EmptyArgs {}
 
+/// Chains the wallet can receive on.
+///
+/// Native ETH on EVM chains shares the same address; the selector just
+/// changes the warning copy below the QR card. Kept frontend-only to avoid
+/// an extra `tauri::command` round-trip — chain set is stable.
+const CHAINS: &[(&str, &str)] = &[
+    ("Ethereum", "#627EEA"),
+    ("Arbitrum One", "#28A0F0"),
+    ("Base", "#0052FF"),
+    ("Optimism", "#FF0420"),
+    ("zkSync Era", "#1E69FF"),
+    ("Sepolia", "#CFB5F0"),
+];
+
 #[component]
 pub fn ReceivePage() -> impl IntoView {
-    let (address, set_address) = signal(None::<String>);
-    let (qr_svg, set_qr_svg) = signal(None::<String>);
-    let (copied, set_copied) = signal(false);
+    let navigate = use_navigate();
+    let go_back = Callback::new(move |()| navigate("/", Default::default()));
 
-    // Fetch address and QR on mount.
+    let address = RwSignal::new(None::<String>);
+    let qr_svg = RwSignal::new(None::<String>);
+    let copied = RwSignal::new(false);
+    let chain_idx = RwSignal::new(0usize);
+
     spawn_local(async move {
         if let Ok(Some(addr)) =
             tauri_invoke::<_, Option<String>>("get_current_address", &EmptyArgs {}).await
         {
-            set_address.set(Some(addr));
+            address.set(Some(addr));
         }
         if let Ok(svg) = tauri_invoke::<_, String>("get_wallet_qr_svg", &EmptyArgs {}).await {
-            set_qr_svg.set(Some(svg));
+            qr_svg.set(Some(svg));
         }
     });
 
     let on_copy = move |_| {
         if let Some(addr) = address.get() {
             if copy_to_clipboard(&addr) {
-                set_copied.set(true);
-                gloo_timers::callback::Timeout::new(2_000, move || {
-                    set_copied.set(false);
-                })
-                .forget();
+                copied.set(true);
+                gloo_timers::callback::Timeout::new(1_600, move || copied.set(false)).forget();
             }
         }
     };
 
     view! {
-        <div>
-            <h1 class="text-2xl font-bold mb-4">"Receive"</h1>
-            {move || match (address.get(), qr_svg.get()) {
-                (Some(addr), Some(svg)) => view! {
-                    <div class="text-center">
-                        <p class="text-gray-400 mb-2">"Scan to send ETH:"</p>
-                        // SAFETY: SVG generated server-side from validated Ethereum address
-                        <div class="qr-container" inner_html=svg />
-                        <p class="font-mono text-sm break-all bg-gray-800 p-4 rounded mt-4">{addr}</p>
-                        <button class="copy-btn mt-4" on:click=on_copy>
-                            {move || if copied.get() { "Copied!" } else { "Copy Address" }}
-                        </button>
+        <DarkShell title="Receive".to_string() back=go_back>
+            <div style="flex:1;display:flex;flex-direction:column;\
+                        padding:24px 20px 40px;align-items:center;\
+                        overflow-y:auto;">
+
+                // ── Chain selector pills ────────────────────────
+                <div style="display:flex;gap:8px;overflow-x:auto;width:100%;\
+                            scrollbar-width:none;">
+                    {CHAINS.iter().enumerate().map(|(i, (name, _))| {
+                        let name = *name;
+                        let chip_style = move || {
+                            let active = chain_idx.get() == i;
+                            let (bg, color, border) = if active {
+                                (
+                                    "rgba(131,135,195,0.18)".to_string(),
+                                    t::ACCENT.to_string(),
+                                    t::ACCENT.to_string(),
+                                )
+                            } else {
+                                (
+                                    t::SURFACE_DARK_2.to_string(),
+                                    t::TEXT_LIGHT.to_string(),
+                                    t::BORDER_DARK.to_string(),
+                                )
+                            };
+                            format!(
+                                "padding:8px 14px;background:{bg};color:{color};\
+                                 border:1px solid {border};border-radius:999px;\
+                                 font-family:{family};font-size:13px;font-weight:600;\
+                                 cursor:pointer;white-space:nowrap;flex-shrink:0;",
+                                family = rw_type::FAMILY,
+                            )
+                        };
+                        view! {
+                            <button style=chip_style on:click=move |_| chain_idx.set(i)>
+                                {name}
+                            </button>
+                        }
+                    }).collect_view()}
+                </div>
+
+                // ── QR card — white bg required for camera scan ─
+                <div style=format!(
+                    "margin-top:24px;padding:20px;background:{white};\
+                     border-radius:{r}px;box-shadow:0 12px 40px rgba(0,0,0,0.4);\
+                     min-width:232px;min-height:232px;\
+                     display:flex;align-items:center;justify-content:center;",
+                    white = t::WHITE,
+                    r = rw_radius::XL,
+                )>
+                    {move || match qr_svg.get() {
+                        // SAFETY: SVG generated by rustok-core from validated Ethereum
+                        // address; no user-controlled input reaches the markup.
+                        Some(svg) => view! {
+                            <div style="width:192px;height:192px;" inner_html=svg/>
+                        }.into_any(),
+                        None => view! {
+                            <div style=format!(
+                                "width:192px;height:192px;\
+                                 display:flex;align-items:center;justify-content:center;\
+                                 color:{muted};font-family:{family};font-size:13px;",
+                                muted = t::NEUTRAL_MID,
+                                family = rw_type::FAMILY,
+                            )>
+                                "…"
+                            </div>
+                        }.into_any(),
+                    }}
+                </div>
+
+                // ── Address block ───────────────────────────────
+                <div style=format!(
+                    "margin-top:20px;width:100%;padding:14px 16px;background:{bg};\
+                     border:1px solid {border};border-radius:{r}px;\
+                     display:flex;align-items:center;gap:12px;",
+                    bg = t::SURFACE_DARK,
+                    border = t::BORDER_DARK,
+                    r = rw_radius::MD,
+                )>
+                    <div style="flex:1;min-width:0;overflow:hidden;">
+                        <div style=format!(
+                            "font-family:{family};font-size:11px;color:{muted};\
+                             font-weight:600;text-transform:uppercase;letter-spacing:0.4px;",
+                            family = rw_type::FAMILY,
+                            muted = t::NEUTRAL_MID,
+                        )>"Your address"</div>
+                        <div style=format!(
+                            "margin-top:4px;font-family:{mono};font-size:13px;\
+                             color:{text};font-weight:500;word-break:break-all;",
+                            mono = rw_type::MONO,
+                            text = t::TEXT_LIGHT,
+                        )>
+                            {move || address.get().unwrap_or_else(|| "Loading…".to_string())}
+                        </div>
                     </div>
-                }.into_any(),
-                (Some(addr), None) => view! {
-                    <div class="text-center">
-                        <p class="text-gray-400 mb-2">"Share this address to receive ETH:"</p>
-                        <p class="font-mono text-lg break-all bg-gray-800 p-4 rounded">{addr}</p>
-                        <button class="copy-btn mt-4" on:click=on_copy>
-                            {move || if copied.get() { "Copied!" } else { "Copy Address" }}
-                        </button>
-                    </div>
-                }.into_any(),
-                _ => view! {
-                    <p class="text-gray-400">"No wallet loaded. Create one first."</p>
-                }.into_any(),
-            }}
-        </div>
+                </div>
+
+                // ── Actions ─────────────────────────────────────
+                <div style="margin-top:16px;display:flex;gap:10px;width:100%;">
+                    <button
+                        on:click=on_copy
+                        style=format!(
+                            "flex:1;height:48px;background:rgba(131,135,195,0.14);\
+                             color:{accent};border:1px solid rgba(131,135,195,0.25);\
+                             border-radius:{r}px;font-family:{family};font-size:14px;\
+                             font-weight:600;cursor:pointer;display:inline-flex;\
+                             align-items:center;justify-content:center;gap:8px;",
+                            accent = t::ACCENT,
+                            r = rw_radius::LG,
+                            family = rw_type::FAMILY,
+                        )
+                    >
+                        {move || if copied.get() {
+                            view! {
+                                <IconCheck size=16 stroke_width=2.0 color=t::SUCCESS.to_string()/>
+                                <span style=format!("color:{};", t::SUCCESS)>"Copied"</span>
+                            }.into_any()
+                        } else {
+                            view! {
+                                <IconCopy size=16 stroke_width=2.0 color=t::ACCENT.to_string()/>
+                                <span>"Copy address"</span>
+                            }.into_any()
+                        }}
+                    </button>
+                </div>
+
+                // ── Warning note ────────────────────────────────
+                <div style=format!(
+                    "margin-top:20px;padding:12px 14px;background:rgba(217,165,98,0.10);\
+                     border:1px solid rgba(217,165,98,0.28);border-radius:{r}px;\
+                     font-family:{family};font-size:12px;color:{warn};\
+                     font-weight:500;line-height:1.5;width:100%;box-sizing:border-box;",
+                    warn = t::WARN,
+                    r = rw_radius::MD,
+                    family = rw_type::FAMILY,
+                )>
+                    {move || {
+                        let name = CHAINS.get(chain_idx.get()).map_or("Ethereum", |c| c.0);
+                        format!(
+                            "Only send tokens supported on {name} to this address. \
+                             Sending assets on another network will result in loss."
+                        )
+                    }}
+                </div>
+            </div>
+        </DarkShell>
     }
 }

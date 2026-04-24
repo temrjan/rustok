@@ -1,4 +1,8 @@
-//! Button primitives — `PrimaryButton` and `TextButton`.
+// Shared button foundation: some variants (SecondaryButton) land here for
+// re-use across upcoming dark screens before being wired in.
+#![allow(dead_code)]
+
+//! Button primitives — `PrimaryButton`, `SecondaryButton`, `TextButton`.
 //!
 //! Both accept an `on_click` callback and render consistent type/radius
 //! tokens from [`crate::tokens`]. Shared between onboarding (light surfaces)
@@ -74,6 +78,33 @@ pub fn PrimaryButton(
                 }
             }
         >
+            {children()}
+        </button>
+    }
+}
+
+/// Secondary button — periwinkle-tinted ghost.
+#[component]
+pub fn SecondaryButton(
+    children: Children,
+    #[prop(into)] on_click: Callback<()>,
+    #[prop(into, optional, default = String::new())] style: String,
+) -> impl IntoView {
+    let full_style = format!(
+        "height:56px;padding:0 24px;background:rgba(131,135,195,0.12);\
+         color:{accent};border:none;border-radius:{radius}px;\
+         font-family:{family};font-size:16px;font-weight:{semibold};\
+         letter-spacing:-0.2px;cursor:pointer;display:inline-flex;\
+         align-items:center;justify-content:center;gap:8px;{extra}",
+        accent = t::ACCENT,
+        radius = rw_radius::LG,
+        family = rw_type::FAMILY,
+        semibold = rw_type::SEMIBOLD,
+        extra = style,
+    );
+
+    view! {
+        <button style=full_style on:click=move |_| on_click.run(())>
             {children()}
         </button>
     }
