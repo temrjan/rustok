@@ -279,11 +279,13 @@ navy + periwinkle палитру, из `rust-design/src/screens/dark/` + `onboar
 - iOS ещё не собрали с новыми экранами (физического устройства нет).
 
 **Следующие задачи (по убыванию приоритета):**
-- [ ] Привести body-background + bottom tab bar в navy (сейчас `#0D0D0D`
-  амбер): `body { background: #0A1123 }`, `.tab-bar { background: #141A33;
-  border-top: 1px solid #242B4C; }`, `.tab-bar a[aria-current="page"] {
-  color: #8387C3 }`. Новые screens тянут navy, но старые tab icons (wallet/
-  activity/settings) пока рендерятся amber — после смены тонов консистентно.
+- [x] Body-background + bottom tab bar в navy — закрыто коммитом `f110ec6`
+  (24 апреля): `body #0A1123`, `.tab-bar #141A33` + periwinkle active.
+- [ ] **Theme parity (light/dark switch).** Полный план —
+  `docs/REDESIGN-AUDIT.md`, ТЗ — `docs/NEXT-SESSION-TZ.md`. Гибрид:
+  recurring screens (Unlock + main app) → CSS vars + `ThemeKind` context +
+  Settings toggle; one-time onboarding остаётся статикой light. 8 коммитов,
+  чек-лист в audit-документе.
 - [ ] **Cloudflare Worker RPC proxy** — Settings toggle `rpc.rustokwallet.com`
   (scaffold в `deploy/rpc-proxy/`).
 - [ ] **Phase 4** — Cross-chain via Across Protocol (`crates/bridge/`).

@@ -44,20 +44,19 @@ system TrustManager тоже не выполняют live OCSP check.
 
 ## Что делать в следующей сессии
 
-### 1. Консистентный navy body + tab bar (приоритет)
+### 1. Theme parity — light/dark switch (приоритет)
 
-Dark-редизайн экранов завершён (welcome, receive, activity, settings, send,
-analyze, home — все navy + periwinkle через `crate::tokens`). Остался общий
-shell в `app/src/styles/main.css`:
+Полный план: **`docs/REDESIGN-AUDIT.md`**. Компактное ТЗ:
+**`docs/NEXT-SESSION-TZ.md`**.
 
-```css
-body { background: #0A1123; }            /* вместо #0D0D0D amber */
-.tab-bar { background: #141A33; border-top: 1px solid #242B4C; }
-.tab-bar a { color: #959BB5; }           /* neutral mid */
-.tab-bar a[aria-current="page"] { color: #8387C3; }   /* periwinkle */
-```
+Гибридная стратегия (одобрена 2026-04-25): one-time onboarding (welcome /
+wallet wizard / restore) остаётся статикой light, recurring screens
+(Unlock + main app) переходят на CSS vars + `ThemeKind` context, в Settings
+появляется toggle "Light mode". 8 атомарных коммитов: A infra, B migrate,
+C toggle, D tab bar, E Splash, F CreateSuccess, G QA, H docs.
 
-Один коммит, регрессий не ожидается — экраны уже тянут свои tokens.
+> Раздел «navy body + tab bar» закрыт коммитом `f110ec6` (24 апреля).
+> CSS-переменные приходят на смену прямым hex-цветам в части D.
 
 ### 2. iOS публикация (блокер — $99/год Apple Developer)
 
