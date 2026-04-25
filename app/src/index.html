@@ -5,16 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <title>Rustok</title>
 
-    <script>
-      (function () {
-        try {
-          var t = localStorage.getItem('rustok.theme');
-          if (t === 'light') {
-            document.documentElement.setAttribute('data-theme', 'light');
-          }
-        } catch (e) {}
-      })();
-    </script>
+    <link data-trunk rel="copy-file" href="assets/anti-fouc.js" />
+    <script src="anti-fouc.js"></script>
     <meta name="theme-color" content="#0A1123" />
     <style>
       :root {
