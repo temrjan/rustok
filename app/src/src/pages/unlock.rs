@@ -13,14 +13,15 @@ use serde::{Deserialize, Serialize};
 use crate::app::WalletState;
 use crate::bridge::tauri_invoke;
 use crate::components::{Keypad, PasscodeDots, PASSCODE_LENGTH};
+use crate::tokens::{self as t, rw_type};
 
-// ─── Token constants (new palette) ──────────────────────────────────────────
-const BG: &str = "#F6F7FB";
-const BRAND: &str = "#0A1123";
-const ACCENT: &str = "#8387C3";
-const MUTED: &str = "#959BB5";
-const FONT: &str =
-    r#"Roboto, -apple-system, "SF Pro Display", "SF Pro Text", system-ui, sans-serif"#;
+// Local re-aliases keep the existing `format!` blocks readable; the values
+// resolve to `var(--rw-*)` and follow the active theme.
+const BG: &str = t::css::BG;
+const BRAND: &str = t::css::TEXT;
+const ACCENT: &str = t::ACCENT;
+const MUTED: &str = t::css::NEUTRAL_MID;
+const FONT: &str = rw_type::FAMILY;
 
 // ─── Tauri arg types ─────────────────────────────────────────────────────────
 

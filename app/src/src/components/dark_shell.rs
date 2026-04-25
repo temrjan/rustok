@@ -27,7 +27,7 @@ pub fn DarkShell(
     let title_style = format!(
         "color:{text};font-family:{family};font-size:17px;\
          font-weight:{semibold};letter-spacing:-0.2px;",
-        text = t::TEXT_LIGHT,
+        text = t::css::TEXT,
         family = rw_type::FAMILY,
         semibold = rw_type::SEMIBOLD,
     );
@@ -36,7 +36,7 @@ pub fn DarkShell(
         <div style=format!(
             "min-height:calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));\
              display:flex;flex-direction:column;background:{bg};",
-            bg = t::BG_DARK,
+            bg = t::css::BG,
         )>
             <div style=nav_style>
                 {back.map(|cb| view! {
@@ -47,7 +47,7 @@ pub fn DarkShell(
                              width:44px;height:44px;background:transparent;\
                              border:none;color:{text};cursor:pointer;\
                              display:flex;align-items:center;justify-content:center;",
-                            text = t::TEXT_LIGHT,
+                            text = t::css::TEXT,
                         )
                         on:click=move |_| cb.run(())
                     >

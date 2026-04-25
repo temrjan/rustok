@@ -53,7 +53,7 @@ pub fn ActivityPage() -> impl IntoView {
                     "margin-top:4px;font-family:{family};font-size:28px;\
                      color:{white};font-weight:700;letter-spacing:-0.5px;",
                     family = rw_type::FAMILY,
-                    white = t::TEXT_LIGHT,
+                    white = t::css::TEXT,
                 )>"Activity"</div>
             </div>
 
@@ -92,7 +92,7 @@ fn render_body(
                          color:{text};text-decoration:none;border-radius:{r}px;\
                          font-family:{family};font-size:14px;font-weight:600;",
                         accent = t::ACCENT,
-                        text = t::TEXT_LIGHT,
+                        text = t::css::TEXT,
                         r = rw_radius::LG,
                         family = rw_type::FAMILY,
                     )>"Unlock"</a>
@@ -166,7 +166,7 @@ fn render_body(
                 let (kind_color, kind_bg, amount_color, arrow) = match tx.direction.as_str() {
                     "sent" => (t::DANGER, "rgba(224,107,107,0.14)", t::DANGER, Arrow::Up),
                     "received" => (t::SUCCESS, "rgba(74,179,123,0.14)", t::SUCCESS, Arrow::Down),
-                    _ => (t::ACCENT, "rgba(131,135,195,0.16)", t::TEXT_LIGHT, Arrow::Swap),
+                    _ => (t::ACCENT, "rgba(131,135,195,0.16)", t::css::TEXT, Arrow::Swap),
                 };
 
                 let addr_raw = match tx.direction.as_str() {
@@ -214,8 +214,8 @@ fn render_body(
                              padding:12px 14px;background:{surface};\
                              border:1px solid {border};border-radius:{r}px;\
                              color:inherit;text-decoration:none;opacity:{opacity};",
-                            surface = t::SURFACE_DARK,
-                            border = t::BORDER_DARK,
+                            surface = t::css::SURFACE,
+                            border = t::css::BORDER,
                             r = rw_radius::LG,
                             opacity = row_opacity,
                         )
@@ -235,7 +235,7 @@ fn render_body(
                                      font-weight:600;letter-spacing:-0.2px;\
                                      white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",
                                     family = rw_type::FAMILY,
-                                    white = t::TEXT_LIGHT,
+                                    white = t::css::TEXT,
                                 )>{format!("{prefix} {short}")}</span>
                                 <span style=format!(
                                     "font-family:{family};font-size:11px;color:{muted};\
@@ -253,7 +253,7 @@ fn render_body(
                                 <span style=format!(
                                     "padding:1px 6px;background:{surface2};\
                                      color:{soft};border-radius:4px;font-size:11px;",
-                                    surface2 = t::SURFACE_DARK_2,
+                                    surface2 = t::css::SURFACE_2,
                                     soft = t::TEXT_SOFT,
                                 )>{tx.chain_name.clone()}</span>
                                 {failed.then(|| view! {

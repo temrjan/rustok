@@ -64,11 +64,11 @@ pub fn AnalyzePage() -> impl IntoView {
          border:1px solid {border};border-radius:{r}px;font-family:{mono};\
          font-size:14px;color:{text};outline:none;box-sizing:border-box;\
          caret-color:{accent};",
-        bg = t::SURFACE_DARK,
-        border = t::BORDER_DARK,
+        bg = t::css::SURFACE,
+        border = t::css::BORDER,
         r = rw_radius::MD,
         mono = rw_type::MONO,
-        text = t::TEXT_LIGHT,
+        text = t::css::TEXT,
         accent = t::ACCENT,
     );
 
@@ -150,8 +150,8 @@ fn ResultCard(resp: AnalysisResponse) -> impl IntoView {
         <div style=format!(
             "margin-top:20px;padding:20px;background:{surface};\
              border:1px solid {border};border-radius:{r}px;",
-            surface = t::SURFACE_DARK,
-            border = t::BORDER_DARK,
+            surface = t::css::SURFACE,
+            border = t::css::BORDER,
             r = rw_radius::LG,
         )>
             // Risk badge + score
@@ -176,7 +176,7 @@ fn ResultCard(resp: AnalysisResponse) -> impl IntoView {
                 "margin-top:14px;font-family:{family};font-size:14px;\
                  color:{text};line-height:1.5;",
                 family = rw_type::FAMILY,
-                text = t::TEXT_LIGHT,
+                text = t::css::TEXT,
             )>{resp.description.clone()}</div>
 
             // Findings
@@ -198,7 +198,7 @@ fn ResultCard(resp: AnalysisResponse) -> impl IntoView {
                                  font-family:{family};font-size:13px;color:{text};\
                                  line-height:1.4;",
                                 family = rw_type::FAMILY,
-                                text = t::TEXT_LIGHT,
+                                text = t::css::TEXT,
                             )>
                                 <span style=format!(
                                     "color:{};flex-shrink:0;margin-top:1px;",
@@ -230,15 +230,15 @@ fn NexusCta() -> impl IntoView {
         <div style=format!(
             "margin-top:20px;padding:16px;background:{bg};\
              border:1px solid {border};border-radius:{r}px;",
-            bg = t::SURFACE_DARK_2,
-            border = t::BORDER_DARK,
+            bg = t::css::SURFACE_2,
+            border = t::css::BORDER,
             r = rw_radius::MD,
         )>
             <div style=format!(
                 "font-family:{family};font-size:15px;font-weight:700;\
                  color:{text};letter-spacing:-0.1px;",
                 family = rw_type::FAMILY,
-                text = t::TEXT_LIGHT,
+                text = t::css::TEXT,
             )>"Protect this transaction"</div>
             <div style=format!(
                 "margin-top:6px;font-family:{family};font-size:13px;\

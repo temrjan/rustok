@@ -81,9 +81,9 @@ pub fn ReceivePage() -> impl IntoView {
                                 )
                             } else {
                                 (
-                                    t::SURFACE_DARK_2.to_string(),
-                                    t::TEXT_LIGHT.to_string(),
-                                    t::BORDER_DARK.to_string(),
+                                    t::css::SURFACE_2.to_string(),
+                                    t::css::TEXT.to_string(),
+                                    t::css::BORDER.to_string(),
                                 )
                             };
                             format!(
@@ -143,8 +143,8 @@ pub fn ReceivePage() -> impl IntoView {
                     "margin-top:20px;width:100%;padding:14px 16px;background:{bg};\
                      border:1px solid {border};border-radius:{r}px;\
                      display:flex;align-items:center;gap:12px;",
-                    bg = t::SURFACE_DARK,
-                    border = t::BORDER_DARK,
+                    bg = t::css::SURFACE,
+                    border = t::css::BORDER,
                     r = rw_radius::MD,
                 )>
                     <div style="flex:1;min-width:0;overflow:hidden;">
@@ -158,7 +158,7 @@ pub fn ReceivePage() -> impl IntoView {
                             "margin-top:4px;font-family:{mono};font-size:13px;\
                              color:{text};font-weight:500;word-break:break-all;",
                             mono = rw_type::MONO,
-                            text = t::TEXT_LIGHT,
+                            text = t::css::TEXT,
                         )>
                             {move || address.get().unwrap_or_else(|| "Loading…".to_string())}
                         </div>

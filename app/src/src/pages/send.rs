@@ -222,11 +222,11 @@ fn StepInput(
                  border:1px solid {border};border-radius:{r}px;font-family:{mono};\
                  font-size:14px;color:{text};outline:none;box-sizing:border-box;\
                  caret-color:{accent};",
-                bg = t::SURFACE_DARK,
-                border = t::BORDER_DARK,
+                bg = t::css::SURFACE,
+                border = t::css::BORDER,
                 r = rw_radius::MD,
                 mono = rw_type::MONO,
-                text = t::TEXT_LIGHT,
+                text = t::css::TEXT,
                 accent = t::ACCENT,
             )
             placeholder="0x…"
@@ -242,8 +242,8 @@ fn StepInput(
             "margin-top:8px;display:flex;align-items:center;gap:10px;\
              padding:14px 16px;background:{bg};border:1px solid {border};\
              border-radius:{r}px;",
-            bg = t::SURFACE_DARK,
-            border = t::BORDER_DARK,
+            bg = t::css::SURFACE,
+            border = t::css::BORDER,
             r = rw_radius::MD,
         )>
             <input
@@ -256,7 +256,7 @@ fn StepInput(
                      color:{text};outline:none;letter-spacing:-0.5px;min-width:0;\
                      caret-color:{accent};-webkit-user-select:text;user-select:text;",
                     family = rw_type::FAMILY,
-                    text = t::TEXT_LIGHT,
+                    text = t::css::TEXT,
                     accent = t::ACCENT,
                 )
                 placeholder="0.00"
@@ -292,9 +292,9 @@ fn StepInput(
                              color:{text};border:1px solid {border};\
                              border-radius:{r}px;font-family:{family};font-size:13px;\
                              font-weight:600;cursor:pointer;",
-                            bg = t::SURFACE_DARK,
-                            text = t::TEXT_LIGHT,
-                            border = t::BORDER_DARK,
+                            bg = t::css::SURFACE,
+                            text = t::css::TEXT,
+                            border = t::css::BORDER,
                             r = rw_radius::MD,
                             family = rw_type::FAMILY,
                         )
@@ -345,8 +345,8 @@ fn StepPreview(
                     <div style=format!(
                         "padding:16px;background:{bg};border:1px solid {border};\
                          border-radius:{r}px;display:flex;flex-direction:column;gap:12px;",
-                        bg = t::SURFACE_DARK,
-                        border = t::BORDER_DARK,
+                        bg = t::css::SURFACE,
+                        border = t::css::BORDER,
                         r = rw_radius::LG,
                     )>
                         <PreviewRow label="To" value=p.to_short.clone() mono=true/>
@@ -434,14 +434,14 @@ fn StepResult(
                         "margin-top:20px;font-family:{family};font-size:24px;\
                          color:{white};font-weight:700;letter-spacing:-0.3px;",
                         family = rw_type::FAMILY,
-                        white = t::TEXT_LIGHT,
+                        white = t::css::TEXT,
                     )>"Sent!"</div>
 
                     <div style=format!(
                         "margin-top:8px;font-family:{family};font-size:16px;\
                          color:{text};font-weight:500;",
                         family = rw_type::FAMILY,
-                        text = t::TEXT_LIGHT,
+                        text = t::css::TEXT,
                     )>{r.amount_formatted.clone()}</div>
 
                     <div style=format!(
@@ -456,11 +456,11 @@ fn StepResult(
                          border:1px solid {border};border-radius:{r}px;\
                          font-family:{mono};font-size:12px;color:{text};\
                          word-break:break-all;max-width:100%;",
-                        bg = t::SURFACE_DARK,
-                        border = t::BORDER_DARK,
+                        bg = t::css::SURFACE,
+                        border = t::css::BORDER,
                         r = rw_radius::MD,
                         mono = rw_type::MONO,
-                        text = t::TEXT_LIGHT,
+                        text = t::css::TEXT,
                     )>{r.tx_hash.clone()}</div>
                 </div>
 
@@ -517,7 +517,7 @@ fn PreviewRow(label: &'static str, value: String, mono: bool) -> impl IntoView {
                 "font-family:{font};font-size:13px;color:{text};font-weight:600;\
                  text-align:right;word-break:break-all;",
                 font = value_font,
-                text = t::TEXT_LIGHT,
+                text = t::css::TEXT,
             )>{value}</span>
         </div>
     }

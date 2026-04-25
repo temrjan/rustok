@@ -95,7 +95,7 @@ pub fn SettingsPage() -> impl IntoView {
                     "margin-top:4px;font-family:{family};font-size:28px;\
                      color:{white};font-weight:700;letter-spacing:-0.5px;",
                     family = rw_type::FAMILY,
-                    white = t::TEXT_LIGHT,
+                    white = t::css::TEXT,
                 )>"Settings"</div>
             </div>
 
@@ -172,8 +172,8 @@ fn Section(children: Children) -> impl IntoView {
         <div style=format!(
             "background:{surface};border:1px solid {border};\
              border-radius:{r}px;overflow:hidden;",
-            surface = t::SURFACE_DARK,
-            border = t::BORDER_DARK,
+            surface = t::css::SURFACE,
+            border = t::css::BORDER,
             r = rw_radius::LG,
         )>
             {children()}
@@ -186,7 +186,7 @@ fn Divider() -> impl IntoView {
     view! {
         <div style=format!(
             "height:1px;background:{border};margin-left:64px;",
-            border = t::BORDER_DARK,
+            border = t::css::BORDER,
         )/>
     }
 }
@@ -232,7 +232,7 @@ fn NavRow(
                 "flex:1;text-align:left;font-family:{family};font-size:14px;\
                  color:{white};font-weight:500;letter-spacing:-0.1px;",
                 family = rw_type::FAMILY,
-                white = t::TEXT_LIGHT,
+                white = t::css::TEXT,
             )>{label}</span>
             <IconChevronRight size=16 stroke_width=2.0 color=t::NEUTRAL_SOFT.to_string()/>
         </button>
@@ -262,7 +262,7 @@ where
                     "font-family:{family};font-size:14px;color:{white};\
                      font-weight:500;letter-spacing:-0.1px;",
                     family = rw_type::FAMILY,
-                    white = t::TEXT_LIGHT,
+                    white = t::css::TEXT,
                 )>{label}</div>
                 <div style=format!(
                     "margin-top:2px;font-family:{family};font-size:12px;\
@@ -283,7 +283,7 @@ fn Switch(on: RwSignal<bool>) -> impl IntoView {
         let bg = if is_on {
             t::ACCENT.to_string()
         } else {
-            t::BORDER_DARK.to_string()
+            t::css::SWITCH_OFF.to_string()
         };
         format!(
             "position:relative;width:42px;height:24px;border-radius:999px;\
@@ -336,7 +336,7 @@ fn WalletHeader(addr: RwSignal<Option<String>>) -> impl IntoView {
                     "font-family:{family};font-size:14px;color:{white};\
                      font-weight:600;letter-spacing:-0.1px;",
                     family = rw_type::FAMILY,
-                    white = t::TEXT_LIGHT,
+                    white = t::css::TEXT,
                 )>"Main wallet"</div>
                 <div style=format!(
                     "margin-top:2px;font-family:{mono};font-size:12px;\

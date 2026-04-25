@@ -167,7 +167,7 @@ pub fn HomePage() -> impl IntoView {
                             "margin-top:4px;background:transparent;border:none;padding:0;\
                              cursor:pointer;display:flex;align-items:center;gap:8px;\
                              color:{white};font-family:{mono};font-size:15px;font-weight:500;",
-                            white = t::TEXT_LIGHT,
+                            white = t::css::TEXT,
                             mono = rw_type::MONO,
                         )
                     >
@@ -190,8 +190,8 @@ pub fn HomePage() -> impl IntoView {
                 "margin:0 16px;background:{card};border-radius:{r}px;\
                  position:relative;padding:24px 22px 22px;\
                  border:1px solid {border};overflow:hidden;",
-                card = t::CARD_DARK,
-                border = t::BORDER_DARK,
+                card = t::css::CARD,
+                border = t::css::BORDER,
                 r = rw_radius::XL,
             )>
                 // Decorative periwinkle glow
@@ -210,7 +210,7 @@ pub fn HomePage() -> impl IntoView {
 
                 <div style=format!(
                     "margin-top:8px;color:{white};font-family:{family};letter-spacing:-1px;",
-                    white = t::TEXT_LIGHT,
+                    white = t::css::TEXT,
                     family = rw_type::FAMILY,
                 )>
                     <span style="font-size:40px;font-weight:700;">
@@ -273,7 +273,7 @@ pub fn HomePage() -> impl IntoView {
                     "font-family:{family};font-size:17px;color:{white};\
                      font-weight:600;letter-spacing:-0.2px;",
                     family = rw_type::FAMILY,
-                    white = t::TEXT_LIGHT,
+                    white = t::css::TEXT,
                 )>"Networks"</div>
             </div>
 
@@ -281,9 +281,9 @@ pub fn HomePage() -> impl IntoView {
                 <div style=format!(
                     "background:{surface};border-radius:{r}px;border:1px solid {border};\
                      overflow:hidden;",
-                    surface = t::SURFACE_DARK,
+                    surface = t::css::SURFACE,
                     r = rw_radius::LG,
-                    border = t::BORDER_DARK,
+                    border = t::css::BORDER,
                 )>
                     {move || balance.get().map(|b| {
                         let chains = b.chains.clone();
@@ -297,7 +297,7 @@ pub fn HomePage() -> impl IntoView {
                                     bb = if last {
                                         "none".to_string()
                                     } else {
-                                        format!("1px solid {}", t::BORDER_DARK)
+                                        format!("1px solid {}", t::css::BORDER)
                                     },
                                 )>
                                     <ChainDot color=chain_color(&c.chain_name)/>
@@ -307,7 +307,7 @@ pub fn HomePage() -> impl IntoView {
                                              color:{white};font-weight:600;\
                                              letter-spacing:-0.2px;",
                                             family = rw_type::FAMILY,
-                                            white = t::TEXT_LIGHT,
+                                            white = t::css::TEXT,
                                         )>{c.chain_name.clone()}</div>
                                         <div style=format!(
                                             "margin-top:2px;font-family:{family};\
@@ -322,7 +322,7 @@ pub fn HomePage() -> impl IntoView {
                                              color:{white};font-weight:600;\
                                              letter-spacing:-0.2px;",
                                             family = rw_type::FAMILY,
-                                            white = t::TEXT_LIGHT,
+                                            white = t::css::TEXT,
                                         )>{c.formatted.clone()}</div>
                                     </div>
                                 </div>
@@ -389,7 +389,7 @@ where
         (
             "rgba(255,255,255,0.06)".to_string(),
             "rgba(255,255,255,0.08)".to_string(),
-            t::TEXT_LIGHT,
+            t::css::TEXT,
         )
     };
     let icon_color = color.to_string();
@@ -422,7 +422,7 @@ where
                 "font-family:{family};font-size:13px;font-weight:500;\
                  color:{white};letter-spacing:-0.1px;",
                 family = rw_type::FAMILY,
-                white = t::TEXT_LIGHT,
+                white = t::css::TEXT,
             )>{label}</span>
         </button>
     }
