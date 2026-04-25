@@ -1,17 +1,30 @@
 # Следующая сессия
 
+> **Точка входа для новой сессии:**
+> 1. Прочитать целиком этот файл (где находимся, что делать)
+> 2. Прочитать `docs/REDESIGN.md` целиком (архитектура + история сессий)
+> 3. Прочитать `docs/COMPONENTS.md` (структура компонентов и контекстов)
+> 4. Запустить скиллы по необходимости: `/codex` → `/rust web/leptos` →
+>    `/check` → код → `/rust-review` → `git diff` → коммит → пуш → CI
+>
+> Все «оперативные» документы прошлой сессии (`NEXT-SESSION-TZ.md`,
+> `REDESIGN-AUDIT.md`, `PHASE2-LEPTOS-TAURI.md`) удалены — их содержание
+> либо перенесено сюда / в `REDESIGN.md`, либо потеряло актуальность.
+
 ## Статус (конец 2026-04-25 — theme parity закрыта)
 
 **v0.1.2 в Google Play Internal Testing** (без изменений). После сессии
 2026-04-25 main содержит theme parity (light/dark switch на recurring
-экранах) и Splash/CreateSuccess overlays. 6 фич-коммитов + docs
-зелёный в CI:
+экранах), Splash overlay и Success screens. CI зелёный на всех
+коммитах. 8 коммитов сессии:
 - `92e82c0` `feat(ui): theme infrastructure (CSS vars + ThemeKind)`
 - `c7b6f09` `fix(ui): move anti-FOUC to external file for CSP compliance`
 - `b2a81d4` `feat(ui): switch recurring screens to CSS variables`
 - `4a46bb6` `feat(ui): light mode toggle in settings`
 - `688bce0` `feat(ui): cold-start splash overlay`
 - `2c46153` `feat(ui): create success screen after wallet creation`
+- `bab1c68` `docs: theme parity wrap-up`
+- `2676bf1` `refactor(ui): extract WizardSuccess shared component`
 
 Подробности: `docs/REDESIGN.md` § «Сессия 2026-04-25 — Theme parity».
 

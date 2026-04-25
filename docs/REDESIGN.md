@@ -297,7 +297,7 @@ navy + periwinkle палитру, из `rust-design/src/screens/dark/` + `onboar
 Все recurring экраны теперь следуют выбранной теме через CSS-переменные;
 one-time onboarding (Welcome / Wallet wizard / Restore) остаётся
 статически light по дизайн-решению (первое впечатление + читабельность
-seed phrase). Полный план реализации — `docs/REDESIGN-AUDIT.md`.
+seed phrase).
 
 **Архитектура темы:**
 - `app/src/index.html` — `<style>` с `:root` (dark default) и
@@ -335,7 +335,8 @@ seed phrase). Полный план реализации — `docs/REDESIGN-AUDI
 - `4a46bb6` `feat(ui): light mode toggle in settings`
 - `688bce0` `feat(ui): cold-start splash overlay`
 - `2c46153` `feat(ui): create success screen after wallet creation`
-- + `docs: theme parity wrap-up` (этот коммит)
+- `bab1c68` `docs: theme parity wrap-up`
+- `2676bf1` `refactor(ui): extract WizardSuccess shared component`
 
 **Что НЕ покрыто (вынесено в backlog):**
 - Pixel_8 emulator пропустили — QA проведено через `cargo tauri dev`
@@ -344,6 +345,15 @@ seed phrase). Полный план реализации — `docs/REDESIGN-AUDI
 - Create success экран в этой сессии не дёргали (только restore).
 - BIP-39 autocomplete в restore — suggestion от тестировщика во
   время QA, отдельный feature PR.
+
+**Финальный refactor (после `/rust-review`):**
+
+Wallet и Restore wizards шипили почти идентичный Step::Success view
+блок (~50 строк дублирования). Вынесли в `components/wizard_success.rs`
+— `WizardSuccess` принимает `title`, `subtitle`, `on_continue: Callback<()>`
+и рендерит 96 px green-check disc + texts + Continue CTA. Хосты
+оставляют только step-visibility wrapper `<div display:flex/none>`.
+Коммит `2676bf1`.
 
 ---
 
