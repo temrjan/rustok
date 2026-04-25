@@ -10,7 +10,7 @@ use serde::Serialize;
 
 use crate::app::WalletState;
 use crate::bridge::tauri_invoke;
-use crate::components::{Keypad, PasscodeDots, PASSCODE_LENGTH};
+use crate::components::{Keypad, PasscodeDots, WizardSuccess, PASSCODE_LENGTH};
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const BG: &str = "#F6F7FB";
@@ -686,46 +686,11 @@ pub fn WalletPage() -> impl IntoView {
                 "flex-direction:column;flex:1;display:{};",
                 if step.get() == Step::Success { "flex" } else { "none" }
             )>
-                <div style="display:flex;flex-direction:column;align-items:center;\
-                            text-align:center;padding:48px 32px 0;flex:1;">
-                    <div style=format!(
-                        "width:96px;height:96px;border-radius:50%;\
-                         background:rgba(74,179,123,0.14);\
-                         border:1px solid rgba(74,179,123,0.32);\
-                         display:flex;align-items:center;justify-content:center;\
-                         color:{SUCCESS};"
-                    )>
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
-                            stroke="currentColor" stroke-width="2.5"
-                            stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M5 13l4 4L19 7"/>
-                        </svg>
-                    </div>
-
-                    <div style=format!(
-                        "margin-top:24px;font-family:{FONT};font-size:24px;\
-                         font-weight:700;color:{BRAND};letter-spacing:-0.4px;"
-                    )>"Wallet ready"</div>
-
-                    <div style=format!(
-                        "margin-top:8px;font-family:{FONT};font-size:14px;\
-                         color:{MUTED};line-height:1.45;max-width:280px;"
-                    )>
-                        "Your recovery phrase is the only way back in. Keep it safe."
-                    </div>
-                </div>
-
-                <div style="padding:0 24px max(24px,env(safe-area-inset-bottom));">
-                    <button
-                        on:click=go_home
-                        style=format!(
-                            "width:100%;height:56px;border:none;border-radius:16px;\
-                             font-family:{FONT};font-size:16px;font-weight:700;\
-                             letter-spacing:-0.2px;cursor:pointer;color:#FFFFFF;\
-                             background:{ACCENT};transition:background 0.15s;"
-                        )
-                    >"Continue"</button>
-                </div>
+                <WizardSuccess
+                    title="Wallet ready"
+                    subtitle="Your recovery phrase is the only way back in. Keep it safe."
+                    on_continue=Callback::new(go_home)
+                />
             </div>
         </div>
     }
