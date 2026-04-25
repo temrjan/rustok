@@ -9,9 +9,9 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 use serde::{Deserialize, Serialize};
 
-use crate::app::WalletState;
+use crate::app::{ThemeKind, WalletState};
 use crate::bridge::tauri_invoke;
-use crate::components::icons::{IconChevronRight, IconFaceId, IconLock, IconPlus};
+use crate::components::icons::{IconChevronRight, IconEye, IconFaceId, IconLock, IconPlus};
 use crate::tokens::{self as t, rw_radius, rw_type};
 
 #[derive(Serialize)]
@@ -27,11 +27,28 @@ struct BiometricStatus {
 pub fn SettingsPage() -> impl IntoView {
     let auth_state = use_context::<RwSignal<WalletState>>()
         .expect("WalletState context missing — must be provided in App");
+    let theme = use_context::<RwSignal<ThemeKind>>()
+        .expect("ThemeKind context missing — must be provided in App");
     let navigate = use_navigate();
 
     let address = RwSignal::new(None::<String>);
     let bio_available = RwSignal::new(false);
     let bio_enabled = RwSignal::new(false);
+
+    // Local UI mirror of the global theme. Initial value matches the
+    // persisted preference; the toggle is the only writer to `theme`,
+    // so we stay in sync without an Effect (idempotent re-writes on
+    // every Settings mount would otherwise hit localStorage).
+    let light_mode = RwSignal::new(theme.get_untracked() == ThemeKind::Light);
+    let toggle_theme = move || {
+        let now_light = !light_mode.get_untracked();
+        light_mode.set(now_light);
+        theme.set(if now_light {
+            ThemeKind::Light
+        } else {
+            ThemeKind::Dark
+        });
+    };
 
     spawn_local(async move {
         if let Ok(Some(addr)) =
@@ -122,6 +139,22 @@ pub fn SettingsPage() -> impl IntoView {
                 </Section>
             })}
 
+            // ── Appearance ──────────────────────────────────
+            <SectionTitle label="Appearance"/>
+            <Section>
+                <ToggleRow
+                    label="Light mode"
+                    caption=move || if light_mode.get() {
+                        "Light surfaces"
+                    } else {
+                        "Dark surfaces (default)"
+                    }
+                    icon=IconKind::Eye
+                    on=light_mode
+                    on_click=Callback::new(move |()| toggle_theme())
+                />
+            </Section>
+
             // ── Actions ─────────────────────────────────────
             <SectionTitle label="Actions"/>
             <Section>
@@ -196,6 +229,7 @@ enum IconKind {
     Face,
     Lock,
     Plus,
+    Eye,
 }
 
 #[component]
@@ -206,6 +240,7 @@ fn RowIcon(kind: IconKind) -> impl IntoView {
         IconKind::Face => view! { <IconFaceId size=18 stroke_width=2.0 color=color/> }.into_any(),
         IconKind::Lock => view! { <IconLock size=18 stroke_width=2.0 color=color/> }.into_any(),
         IconKind::Plus => view! { <IconPlus size=18 stroke_width=2.0 color=color/> }.into_any(),
+        IconKind::Eye => view! { <IconEye size=18 stroke_width=2.0 color=color/> }.into_any(),
     };
     view! {
         <div style=format!(
