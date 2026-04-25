@@ -10,10 +10,11 @@ use leptos_router::hooks::use_navigate;
 use rustok_types::{TransactionHistoryDto, UnifiedBalance};
 use serde::Serialize;
 use wasm_bindgen::JsCast;
+use send_wrapper::SendWrapper;
 use wasm_bindgen::closure::Closure;
 
 use super::splash::SplashView;
-use crate::app::{SplashDone, WalletState};
+use crate::app::{BalanceHidden, SplashDone, WalletState};
 use crate::bridge::{copy_to_clipboard, tauri_invoke};
 use crate::components::icons::{
     IconArrowDown, IconArrowUp, IconCheck, IconChevronRight, IconCopy, IconShield, IconSwap,
@@ -47,6 +48,9 @@ pub fn HomePage() -> impl IntoView {
     let state = use_context::<RwSignal<WalletState>>()
         .expect("WalletState context missing — must be provided in App");
     let navigate = use_navigate();
+
+    let BalanceHidden(balance_hidden) = use_context::<BalanceHidden>()
+        .expect("BalanceHidden context missing — must be provided in App");
 
     let balance = RwSignal::new(None::<UnifiedBalance>);
     let address = RwSignal::new(None::<String>);
@@ -82,26 +86,37 @@ pub fn HomePage() -> impl IntoView {
     });
 
     // Auto-refresh balance every AUTO_REFRESH_MS while the tab is visible.
-    gloo_timers::callback::Interval::new(AUTO_REFRESH_MS, move || {
-        if state.get_untracked() != WalletState::Unlocked || document_hidden() {
-            return;
-        }
-        silent_refresh(balance);
-    })
-    .forget();
+    let interval = SendWrapper::new(gloo_timers::callback::Interval::new(
+        AUTO_REFRESH_MS,
+        move || {
+            if state.get_untracked() != WalletState::Unlocked || document_hidden() {
+                return;
+            }
+            silent_refresh(balance);
+        },
+    ));
 
     // Refetch when the app returns from background (visibilitychange).
-    let closure = Closure::wrap(Box::new(move || {
+    let closure = SendWrapper::new(Closure::wrap(Box::new(move || {
         if state.get_untracked() != WalletState::Unlocked || document_hidden() {
             return;
         }
         silent_refresh(balance);
-    }) as Box<dyn FnMut()>);
+    }) as Box<dyn FnMut()>));
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         let _ = doc
             .add_event_listener_with_callback("visibilitychange", closure.as_ref().unchecked_ref());
     }
-    closure.forget();
+
+    on_cleanup(move || {
+        drop(interval);
+        if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
+            let _ = doc.remove_event_listener_with_callback(
+                "visibilitychange",
+                closure.as_ref().unchecked_ref(),
+            );
+        }
+    });
 
     // Initial balance + history fetch when the wallet becomes Unlocked.
     // Android TLS can race the first RPC call — one retry after 800 ms.
@@ -248,7 +263,11 @@ pub fn HomePage() -> impl IntoView {
                     family = rw_type::FAMILY,
                 )>
                     <span style="font-size:40px;font-weight:700;">
-                        {move || balance_headline(&balance.get())}
+                        {move || if balance_hidden.get() {
+                            "•••• ETH".to_string()
+                        } else {
+                            balance_headline(&balance.get())
+                        }}
                     </span>
                 </div>
 
@@ -372,7 +391,7 @@ pub fn HomePage() -> impl IntoView {
                                              letter-spacing:-0.2px;",
                                             family = rw_type::FAMILY,
                                             white = t::css::TEXT,
-                                        )>{c.formatted.clone()}</div>
+                                        )>{if balance_hidden.get() { "•••• ETH".to_string() } else { c.formatted.clone() }}</div>
                                     </div>
                                 </div>
                             }

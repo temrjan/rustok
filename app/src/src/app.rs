@@ -50,7 +50,15 @@ pub enum ThemeKind {
 #[derive(Clone, Copy)]
 pub struct SplashDone(pub RwSignal<bool>);
 
+/// Privacy toggle for hiding balance amounts across the app.
+///
+/// Newtyped over `RwSignal<bool>` to avoid context-key collisions.
+/// When `true`, numeric balances are replaced with "•••• ETH".
+#[derive(Clone, Copy)]
+pub struct BalanceHidden(pub RwSignal<bool>);
+
 const STORAGE_KEY_THEME: &str = "rustok.theme";
+const STORAGE_KEY_BALANCE_HIDDEN: &str = "rustok.balance-hidden";
 
 /// Read the persisted theme from `localStorage`. Falls back to `Dark`
 /// when the entry is missing or storage is unavailable (private mode,
@@ -66,6 +74,22 @@ fn load_theme() -> ThemeKind {
         Some("light") => ThemeKind::Light,
         _ => ThemeKind::Dark,
     }
+}
+
+/// Read the persisted balance-hidden preference from `localStorage`.
+/// Falls back to `false` (visible) when the entry is missing or storage
+/// is unavailable.
+fn load_balance_hidden() -> bool {
+    let Some(win) = web_sys::window() else {
+        return false;
+    };
+    let Some(storage) = win.local_storage().ok().flatten() else {
+        return false;
+    };
+    matches!(
+        storage.get_item(STORAGE_KEY_BALANCE_HIDDEN).ok().flatten().as_deref(),
+        Some("true")
+    )
 }
 
 #[derive(Serialize)]
@@ -84,6 +108,10 @@ pub fn App() -> impl IntoView {
     let theme = RwSignal::new(load_theme());
     provide_context(theme);
 
+    // Balance privacy toggle — persisted in localStorage.
+    let balance_hidden = RwSignal::new(load_balance_hidden());
+    provide_context(BalanceHidden(balance_hidden));
+
     // Cold-start splash gate — fires once per WASM bootstrap, then stays
     // true for the rest of the app's life. HomePage reads it via context
     // so re-mounts from tab navigation don't replay the splash.
@@ -98,14 +126,32 @@ pub fn App() -> impl IntoView {
         };
         let Some(win) = web_sys::window() else { return };
         if let Ok(Some(storage)) = win.local_storage() {
-            let _ = storage.set_item(STORAGE_KEY_THEME, attr);
+            if let Err(e) = storage.set_item(STORAGE_KEY_THEME, attr) {
+                web_sys::console::warn_1(&format!("failed to persist theme: {e:?}").into());
+            }
         }
         let Some(doc) = win.document() else { return };
         if let Some(el) = doc.document_element() {
-            let _ = el.set_attribute("data-theme", attr);
+            if let Err(e) = el.set_attribute("data-theme", attr) {
+                web_sys::console::warn_1(&format!("failed to set data-theme: {e:?}").into());
+            }
         }
         if let Ok(Some(meta)) = doc.query_selector("meta[name=\"theme-color\"]") {
-            let _ = meta.set_attribute("content", color);
+            if let Err(e) = meta.set_attribute("content", color) {
+                web_sys::console::warn_1(&format!("failed to set theme-color: {e:?}").into());
+            }
+        }
+    });
+
+    // Persist balance-hidden preference to localStorage on every change.
+    Effect::new(move |_| {
+        let hidden = balance_hidden.get();
+        let Some(win) = web_sys::window() else { return };
+        if let Ok(Some(storage)) = win.local_storage() {
+            let value = if hidden { "true" } else { "false" };
+            if let Err(e) = storage.set_item(STORAGE_KEY_BALANCE_HIDDEN, value) {
+                web_sys::console::warn_1(&format!("failed to persist balance-hidden: {e:?}").into());
+            }
         }
     });
 

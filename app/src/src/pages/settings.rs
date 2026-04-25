@@ -9,9 +9,9 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 use serde::{Deserialize, Serialize};
 
-use crate::app::{ThemeKind, WalletState};
+use crate::app::{BalanceHidden, ThemeKind, WalletState};
 use crate::bridge::tauri_invoke;
-use crate::components::icons::{IconChevronRight, IconEye, IconFaceId, IconLock, IconPlus};
+use crate::components::icons::{IconChevronRight, IconEye, IconEyeOff, IconFaceId, IconLock, IconPlus};
 use crate::tokens::{self as t, rw_radius, rw_type};
 
 #[derive(Serialize)]
@@ -48,6 +48,16 @@ pub fn SettingsPage() -> impl IntoView {
         } else {
             ThemeKind::Dark
         });
+    };
+
+    // Balance privacy toggle — local UI mirror of the global signal.
+    let BalanceHidden(balance_hidden) = use_context::<BalanceHidden>()
+        .expect("BalanceHidden context missing — must be provided in App");
+    let hide_balance = RwSignal::new(balance_hidden.get_untracked());
+    let toggle_balance_hidden = move || {
+        let now_hidden = !hide_balance.get_untracked();
+        hide_balance.set(now_hidden);
+        balance_hidden.set(now_hidden);
     };
 
     spawn_local(async move {
@@ -155,6 +165,22 @@ pub fn SettingsPage() -> impl IntoView {
                 />
             </Section>
 
+            // ── Privacy ─────────────────────────────────────
+            <SectionTitle label="Privacy"/>
+            <Section>
+                <ToggleRow
+                    label="Hide balance"
+                    caption=move || if hide_balance.get() {
+                        "Amounts hidden behind ••••"
+                    } else {
+                        "Amounts visible (default)"
+                    }
+                    icon=IconKind::EyeOff
+                    on=hide_balance
+                    on_click=Callback::new(move |()| toggle_balance_hidden())
+                />
+            </Section>
+
             // ── Actions ─────────────────────────────────────
             <SectionTitle label="Actions"/>
             <Section>
@@ -230,6 +256,7 @@ enum IconKind {
     Lock,
     Plus,
     Eye,
+    EyeOff,
 }
 
 #[component]
@@ -241,6 +268,7 @@ fn RowIcon(kind: IconKind) -> impl IntoView {
         IconKind::Lock => view! { <IconLock size=18 stroke_width=2.0 color=color/> }.into_any(),
         IconKind::Plus => view! { <IconPlus size=18 stroke_width=2.0 color=color/> }.into_any(),
         IconKind::Eye => view! { <IconEye size=18 stroke_width=2.0 color=color/> }.into_any(),
+        IconKind::EyeOff => view! { <IconEyeOff size=18 stroke_width=2.0 color=color/> }.into_any(),
     };
     view! {
         <div style=format!(

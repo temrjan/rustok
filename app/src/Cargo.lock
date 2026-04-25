@@ -1243,6 +1243,7 @@ dependencies = [
  "leptos",
  "leptos_router",
  "rustok-types",
+ "send_wrapper",
  "serde",
  "serde-wasm-bindgen",
  "wasm-bindgen",
