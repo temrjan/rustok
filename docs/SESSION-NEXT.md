@@ -1,6 +1,21 @@
 # Следующая сессия
 
-## Статус (конец 2026-04-22)
+## Статус (конец 2026-04-25 — theme parity закрыта)
+
+**v0.1.2 в Google Play Internal Testing** (без изменений). После сессии
+2026-04-25 main содержит theme parity (light/dark switch на recurring
+экранах) и Splash/CreateSuccess overlays. 6 фич-коммитов + docs
+зелёный в CI:
+- `92e82c0` `feat(ui): theme infrastructure (CSS vars + ThemeKind)`
+- `c7b6f09` `fix(ui): move anti-FOUC to external file for CSP compliance`
+- `b2a81d4` `feat(ui): switch recurring screens to CSS variables`
+- `4a46bb6` `feat(ui): light mode toggle in settings`
+- `688bce0` `feat(ui): cold-start splash overlay`
+- `2c46153` `feat(ui): create success screen after wallet creation`
+
+Подробности: `docs/REDESIGN.md` § «Сессия 2026-04-25 — Theme parity».
+
+## Статус (предыдущий — 2026-04-22)
 
 **v0.1.2 LIVE в Google Play Internal Testing.** AAB `versionCode=1002, versionName=0.1.2`
 загружен и активен. 8 коммитов за сессию, CI зелёный на `feff243`.
@@ -44,19 +59,20 @@ system TrustManager тоже не выполняют live OCSP check.
 
 ## Что делать в следующей сессии
 
-### 1. Theme parity — light/dark switch (приоритет)
+### 1. BIP-39 word autocomplete в restore.rs (новый приоритет)
 
-Полный план: **`docs/REDESIGN-AUDIT.md`**. Компактное ТЗ:
-**`docs/NEXT-SESSION-TZ.md`**.
+Suggestion от тестирования 2026-04-25: при вводе seed phrase показывать
+dropdown с вариантами из 2048-словного BIP-39 wordlist по prefix, tap
+вставляет слово целиком. Pattern из MetaMask / Trust Wallet.
 
-Гибридная стратегия (одобрена 2026-04-25): one-time onboarding (welcome /
-wallet wizard / restore) остаётся статикой light, recurring screens
-(Unlock + main app) переходят на CSS vars + `ThemeKind` context, в Settings
-появляется toggle "Light mode". 8 атомарных коммитов: A infra, B migrate,
-C toggle, D tab bar, E Splash, F CreateSuccess, G QA, H docs.
-
-> Раздел «navy body + tab bar» закрыт коммитом `f110ec6` (24 апреля).
-> CSS-переменные приходят на смену прямым hex-цветам в части D.
+Реализация (~2-4 часа):
+- Wordlist (~13 KB) — `&[&str; 2048]`, либо вытащить из `bip39` крейта,
+  уже есть в зависимостях `rustok-core`.
+- В `pages/restore.rs` парсить текущее слово (последний токен после
+  пробела), фильтровать wordlist по prefix, рендерить в drop-down под
+  textarea, tap вставляет в позицию + добавляет пробел.
+- Edge cases: вставка не в конец строки, undo, autocomplete только
+  пока type ≥1 char.
 
 ### 2. iOS публикация (блокер — $99/год Apple Developer)
 
@@ -90,7 +106,27 @@ ETH Arbitrum → Base через intent solver. `crates/bridge/` новый crat
   `HomeVariant::Chart` и USD-колонкам в Activity/Home.
 - **Cosmetic:** brand launcher icon (`cargo tauri icon rustok-landing/public/logo.png`).
 
-### 6. Сделано в сессии 2026-04-24 (вечер) — dark-редизайн готов
+### 6. Сделано в сессии 2026-04-25 — theme parity
+
+- CSS-переменные `--rw-*` (dark default + light override) в `index.html`
+  + anti-FOUC через внешний `assets/anti-fouc.js` (CSP-compliant).
+- `ThemeKind { Dark, Light }` enum + context + Effect для persist в
+  localStorage и sync `data-theme` / `<meta theme-color>`.
+- 8 recurring файлов мигрированы с `t::*_DARK` на `t::css::*` (home,
+  receive, activity, settings, send, analyze, unlock, dark_shell).
+  Settings Switch OFF → отдельный `t::css::SWITCH_OFF` для контраста
+  на light.
+- Settings Appearance section с `Light mode` toggle (прямой callback,
+  без Effect-sync — нет idempotent re-writes localStorage).
+- Splash overlay через `SplashDone(RwSignal<bool>)` newtype в App;
+  HomePage host'ит overlay, не отдельный route. Tab nav не повторяет
+  splash.
+- `Step::Success` в wallet.rs и restore.rs — green-check + Continue;
+  navigate отложен до пользовательского tap.
+
+См. детали: `docs/REDESIGN.md` § «Сессия 2026-04-25 — Theme parity».
+
+### 7. Сделано в сессии 2026-04-24 (вечер) — dark-редизайн готов
 
 - Foundation: `tokens.rs`, `components/{icons,button,logo,dark_shell}.rs`.
 - Welcome screen (новый роут `/welcome`).

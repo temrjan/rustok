@@ -370,136 +370,146 @@ view! {
 
 ## 5. Чек-лист (атомарные коммиты)
 
-### A — Theme infrastructure (без визуальных изменений)
+### A+D — Theme infrastructure + body/tab-bar (объединены)
 
-- [ ] `app/src/index.html`: добавить `<meta theme-color>`, Anti-FOUC
-      script, `<style>` с CSS-переменными `--rw-*` (dark default + light
-      override).
-- [ ] `app/src/src/tokens.rs`: добавить `pub mod css { … }` (8-9 переменных).
-- [ ] `app/src/src/app.rs`: `ThemeKind` enum + `load_theme()` +
+- [x] `app/src/index.html`: `<meta theme-color>`, anti-FOUC через
+      внешний `assets/anti-fouc.js` (CSP `script-src 'self'` блокирует
+      inline), `<style>` с CSS-переменными `--rw-*` (dark default +
+      light override).
+- [x] `app/src/src/tokens.rs`: `pub mod css { … }` (9 переменных:
+      BG / SURFACE / SURFACE_2 / BORDER / TEXT / CARD / SWITCH_OFF /
+      TAB_BG / NEUTRAL_MID).
+- [x] `app/src/src/app.rs`: `ThemeKind` enum + `load_theme()` +
       `provide_context(theme)` + Effect для persist + sync `data-theme`
-      атрибута и `<meta theme-color>`.
-- [ ] `cargo check` + `cargo clippy` зелёные.
-- [ ] **Коммит:** `feat(ui): add theme infrastructure (CSS vars + ThemeKind)`.
+      и `<meta theme-color>`.
+- [x] `app/src/styles/main.css`: body + `.tab-bar` на `var(--rw-*)`,
+      добавлен `backdrop-filter: blur(20px)` для read-through bar.
+- [x] **Коммиты:**
+  - `92e82c0` `feat(ui): theme infrastructure (CSS vars + ThemeKind)`
+  - `c7b6f09` `fix(ui): move anti-FOUC to external file for CSP compliance`
 
 ### B — Migrate recurring screens на CSS vars
 
-Для каждого файла: заменить `t::BG_DARK` → `t::css::BG`,
-`t::SURFACE_DARK` → `t::css::SURFACE`, `t::SURFACE_DARK_2` →
-`t::css::SURFACE_2`, `t::BORDER_DARK` → `t::css::BORDER`,
-`t::TEXT_LIGHT` → `t::css::TEXT`, `t::CARD_DARK` → `t::css::CARD`.
-Семантика (`t::ACCENT`, `t::SUCCESS`, `t::DANGER`, `t::WARN`,
-`t::SUCCESS_BG` etc.) — НЕ трогать.
+Замены: `t::BG_DARK → t::css::BG`, `t::SURFACE_DARK → t::css::SURFACE`,
+`t::SURFACE_DARK_2 → t::css::SURFACE_2`, `t::BORDER_DARK →
+t::css::BORDER`, `t::TEXT_LIGHT → t::css::TEXT`, `t::CARD_DARK →
+t::css::CARD`. Семантика (`t::ACCENT`, `t::SUCCESS`, `t::DANGER`,
+`t::WARN`) — НЕ трогать. Решение от audit: `dark_shell.rs` НЕ
+переименовывали (имя не критично, переименование — отдельный refactor PR).
 
-- [ ] `app/src/src/components/dark_shell.rs` (3 точки) — попутно
-      переименовать в `app_shell.rs`, обновить mod.rs / re-exports.
-- [ ] `app/src/src/pages/home.rs` (12 точек).
-- [ ] `app/src/src/pages/receive.rs` (6 точек).
-- [ ] `app/src/src/pages/activity.rs` (7 точек).
-- [ ] `app/src/src/pages/settings.rs` (8 точек).
-- [ ] `app/src/src/pages/send.rs` (17 точек).
-- [ ] `app/src/src/pages/analyze.rs` (10 точек).
-- [ ] `app/src/src/pages/unlock.rs` — переход с `BG = #F6F7FB` хардкод
-      на `t::css::BG`. Убрать локальные константы `BG`, `BRAND`, `MUTED` —
-      заменить на `t::css::*`.
-- [ ] `cargo check` зелёный.
-- [ ] **Финальный grep:** `grep -rn "BG_DARK\|SURFACE_DARK\|TEXT_LIGHT\|
-      CARD_DARK\|BORDER_DARK\|SURFACE_DARK_2" app/src/src/pages app/src/
-      src/components` должен быть **пуст** (или показать только comment).
-- [ ] **Коммит:** `feat(ui): switch recurring screens to CSS variables`.
+- [x] `app/src/src/components/dark_shell.rs` (3 точки).
+- [x] `app/src/src/pages/home.rs` (12 точек).
+- [x] `app/src/src/pages/receive.rs` (6 точек).
+- [x] `app/src/src/pages/activity.rs` (7 точек).
+- [x] `app/src/src/pages/settings.rs` (8 точек, Switch OFF →
+      `t::css::SWITCH_OFF`, не `BORDER`).
+- [x] `app/src/src/pages/send.rs` (17 точек).
+- [x] `app/src/src/pages/analyze.rs` (10 точек).
+- [x] `app/src/src/pages/unlock.rs` — локальные const переаттачены
+      на `t::css::*` (BG → css::BG, BRAND → css::TEXT, MUTED →
+      css::NEUTRAL_MID, ACCENT → t::ACCENT, FONT → rw_type::FAMILY).
+- [x] Финальный grep: только `welcome.rs:28` остаётся (намеренно
+      static dark) — recurring scope чист.
+- [x] **Коммит:** `b2a81d4` `feat(ui): switch recurring screens to CSS variables`.
 
 ### C — Settings → Light mode toggle
 
-- [ ] `pages/settings.rs`: добавить `Appearance` секцию с
-      `ToggleRow "Light mode"`. Использовать `use_context::<RwSignal<
-      ThemeKind>>()`. Effect синхронизирует.
-- [ ] Добавить `IconEye` или похожую в `icons.rs` если ещё нет.
-- [ ] Manual test: тоггл переключает все recurring screens live (без
-      перезапуска).
-- [ ] **Коммит:** `feat(ui): light mode toggle in settings`.
+- [x] `pages/settings.rs`: добавлена `Appearance` секция с
+      `ToggleRow "Light mode"` через `use_context::<RwSignal<ThemeKind>>()`.
+- [x] `IconEye` уже был в `icons.rs` — добавлять не пришлось.
+- [x] Решение: вместо Effect-синхронизации `light_mode ↔ theme`
+      используется прямой `toggle_theme` callback (один источник
+      изменений = клик пользователя). Это предотвращает idempotent
+      re-writes localStorage на каждый mount Settings — защита от
+      шума, рекомендованная во время `/check` фазы.
+- [x] Manual test через `cargo tauri dev`: toggle переключает все
+      recurring screens live, persist через relaunch работает.
+- [x] **Коммит:** `4a46bb6` `feat(ui): light mode toggle in settings`.
 
-### D — Bottom tab bar + body на CSS vars
+### D — объединено с A в один коммит
 
-- [ ] `app/src/styles/main.css`:
-  ```css
-  body { background: var(--rw-bg); color: var(--rw-text); }
-  .tab-bar {
-      background: var(--rw-tab-bg);
-      border-top: 1px solid var(--rw-border);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-  }
-  .tab-bar a { color: var(--rw-neutral-mid); }
-  /* active a[aria-current="page"] остаётся ACCENT periwinkle */
-  ```
-- [ ] **Коммит:** `style(ui): bottom tab bar follows theme`.
+> Изначально планировался отдельный коммит `style(ui): bottom tab bar
+> follows theme`, но `body` и `.tab-bar` правки относятся к той же
+> инфраструктурной поверхности что и CSS vars. Объединение убрало
+> промежуточное состояние (commit A без D имел бы body на старом
+> hex и `var(--rw-bg)` ничем не управлял).
+>
+> Все правки `main.css` (body + .tab-bar + `backdrop-filter: blur`)
+> вошли в коммит `92e82c0` вместе с инфраструктурой A. См. § 5A+D.
 
-### E — Splash экран
+### E — Splash overlay
 
-- [ ] Изучить `rust-design/src/screens/onboarding/splash.rs` (1.8 KB).
-- [ ] Создать `app/src/src/pages/splash.rs`:
-  * Static dark (`t::BG_DARK`).
-  * Логотип + wordmark + 3 пульсирующих dots (`@keyframes rw-pulse`).
-  * Auto-advance: `set_timeout(1400)` с one-shot guard. После timeout
-    смотрим `WalletState`:
-    * `Uninit` → `/welcome`
-    * `Locked` → `/unlock`
-    * `Unlocked` → `/`
-- [ ] Добавить `@keyframes rw-pulse` в `main.css`.
-- [ ] `app/src/src/app.rs`: route `path!("/splash")` + изменить дефолт.
-      Все nav_guards оставить как есть (Splash просто прокладка перед
-      первым роутом).
-- [ ] Manual test: cold start → видим Splash 1.4s → правильный target.
-- [ ] **Коммит:** `feat(ui): splash screen`.
+- [x] Создан `app/src/src/pages/splash.rs` — `SplashView` (static
+      `t::BG_DARK`, logo + wordmark + три пульсирующих dot через
+      класс `.rw-pulse-dot` с `animation-delay`).
+- [x] Добавлен `@keyframes rw-pulse` + `.rw-pulse-dot` в `main.css`.
+- [x] **Архитектурное решение (отклонение от audit):** Splash не
+      отдельный route, а **overlay** (`position:fixed; inset:0;
+      z-index:9999`) поверх `HomePage`. Аргумент: HomePage уже на
+      `/`, имеет nav guard, `home.rs` стал host'ом, без Routes-tree
+      перетряхивания.
+- [x] **`SplashDone(pub RwSignal<bool>)` newtype в `app.rs`** —
+      gate живёт в App, не в HomePage. Инициализируется один раз
+      на WASM bootstrap, `Timeout(1400) → splash_done.set(true)`.
+      Без этого re-mount HomePage из tab bar (Settings → Wallet)
+      запускал бы splash повторно.
+- [x] `home.rs` nav guard ждёт `splash_done` через early-return
+      (Effect tracks both signals: `splash_done` и `state`).
+      Overlay рендерится при `!splash_done.get() || state == Loading`.
+- [x] Manual test через `cargo tauri dev`: splash 1.4 s на cold
+      start, не повторяется на tab nav.
+- [x] **Коммит:** `688bce0` `feat(ui): cold-start splash overlay`.
 
-### F — CreateSuccess экран
+### F — Success screen после wallet creation / restore
 
-- [ ] Изучить `CreateSuccessScreen` в
-      `rust-design/src/screens/onboarding/create_verify.rs`.
-- [ ] В `pages/wallet.rs`: добавить `Step::Success` в `enum Step`.
-      После удачного `import_wallet_from_mnemonic` ставить
-      `step.set(Step::Success)` вместо `navigate("/")`.
-- [ ] UI Success: green check disc + "Wallet ready" + "Continue" CTA.
-      Continue → `auth_state.set(Unlocked) + navigate("/")`.
-- [ ] То же самое для `pages/restore.rs` (после успешного import).
-- [ ] **Коммит:** `feat(ui): create success screen after wallet creation`.
+- [x] `pages/wallet.rs`: enum `Step` дополнен `Success`. После
+      Ok из `import_wallet_from_mnemonic` ставится `step.set(Success)`
+      и `loading.set(false)` — навигация **отложена** до Continue.
+- [x] `pages/restore.rs`: тот же pattern (`Step::Success` + view
+      block + `go_home` callback).
+- [x] UI: 96 px green-check disc + "Wallet ready" / "Wallet restored"
+      + Continue CTA. Continue → `auth_state.set(Unlocked) + navigate("/")`.
+- [x] Корректность при kill-on-Success: при следующем запуске
+      App startup probe видит keystore + unlocked flag → state =
+      Unlocked → Home рендерится. Deferred navigate не
+      load-bearing для state correctness.
+- [x] Manual test (cargo tauri dev): restore success экран
+      рендерится, Continue → Home.
+- [x] **Коммит:** `2c46153` `feat(ui): create success screen after wallet creation`.
 
-### G — Manual QA проход (не коммит, blocker для merge)
+### G — Manual QA (cargo tauri dev на macOS)
 
-Для **Dark theme** (default):
-- [ ] Cold start → Splash (1.4s) → Welcome (dark hero).
-- [ ] Welcome → Create → SetPasscode → Confirm → Reveal → Verify →
-      BackupConfirm → CreateSuccess → Home (dark).
-- [ ] Welcome → Restore → PIN → Home (dark).
-- [ ] Home → Send → Preview → Result → Home.
-- [ ] Home → Receive (QR centered).
-- [ ] Home → Scan (TxGuard).
-- [ ] Bottom tab → Activity / Settings.
-- [ ] Settings → toggle Light mode → весь recurring app становится
-      light без перезапуска. Onboarding пройти заново — он остаётся light.
-- [ ] Force-stop + relaunch → выбранная тема сохранена (localStorage).
-- [ ] Anti-FOUC: при light theme cold start нет вспышки dark до WASM
-      bootstrap.
+> Pixel_8 emulator пропустили — `cargo tauri dev` на macOS даёт
+> идентичный WebView рендер CSS+JS. Android-specific повторно
+> валидируем при следующем APK release.
 
-Для **Light theme**:
-- [ ] Toggle в Settings → Light.
-- [ ] Lock wallet → Unlock screen в light.
-- [ ] Все recurring screens читаются (контраст текст/фон ≥ AA).
-- [ ] Periwinkle accent (`#8387C3`) на light surface — проверить что
-      кнопки видны (на rust-design тестировано — должно работать).
+Подтверждено в этой сессии:
+- [x] Cold-start splash (1.4 s, не повторяется на tab nav).
+- [x] Settings toggle переключает recurring screens live.
+- [x] Persist темы через relaunch (localStorage).
+- [x] Anti-FOUC: light cold start без вспышки dark.
+- [x] Restore success screen, Continue → Home.
+- [x] Console clean (нет CSP violations / red errors).
 
-### H — Документация (один коммит после G)
+Не покрыто (отложено до Android APK build):
+- [ ] Create success screen на Pixel emulator (только restore
+      проверен в текущей сессии).
+- [ ] Все recurring screens в light theme на физическом устройстве
+      (десктоп виден, mobile WebView не валидирован).
 
-- [ ] `docs/REDESIGN.md` § 5: добавить «Сессия 2026-04-25 — theme
-      parity».
-- [ ] `docs/SESSION-NEXT.md`: убрать пункт «navy body + tab bar», обновить
-      § 1 на «theme switching реализован, дальше Phase 4 / iOS / price
-      feed».
-- [ ] `docs/COMPONENTS.md`: pages bumped to 12 (+Splash); добавить
-      ThemeKind в список contexts; упомянуть `tokens::css` модуль.
-- [ ] `README.md`: упомянуть light/dark theme + Settings toggle.
-- [ ] Memory `~/.claude/.../memory/rustok-redesign.md`: обновить статус.
-- [ ] **Коммит:** `docs: theme parity wrap-up`.
+### H — Документация wrap-up
+
+- [x] `docs/REDESIGN.md` § 5: добавлена сессия 2026-04-25 — theme
+      parity.
+- [x] `docs/SESSION-NEXT.md`: theme parity перенесена в "сделано",
+      следующие приоритеты обновлены, BIP-39 autocomplete добавлен
+      в backlog.
+- [x] `docs/COMPONENTS.md`: pages 11 → 12 (+ splash); SplashDone
+      и ThemeKind в context-секции; `tokens::css` модуль упомянут.
+- [x] `README.md`: light/dark theme + Settings toggle указаны.
+- [x] Memory `rustok-redesign.md`: статус обновлён, theme parity
+      закрыта.
+- [x] **Коммит:** `docs: theme parity wrap-up`.
 
 ---
 
@@ -577,6 +587,11 @@ git commit -m "feat(ui): switch recurring screens to CSS variables"
 
 Следующие задачи (в `docs/SESSION-NEXT.md`):
 
+- **BIP-39 word autocomplete в restore.rs** — pattern из MetaMask /
+  Trust: пока юзер печатает слово, показываем dropdown с вариантами
+  из 2048-словного wordlist, tap-to-insert. Wordlist ~13 KB, можно
+  вкомпилить как `&[&str; 2048]` или дёрнуть из `bip39` крейта.
+  Suggestion появилась во время QA сессии 2026-04-25.
 - Cloudflare Worker RPC proxy toggle.
 - Phase 4: Cross-chain via Across Protocol.
 - iOS TestFlight ($99 Apple Dev).

@@ -281,11 +281,9 @@ navy + periwinkle палитру, из `rust-design/src/screens/dark/` + `onboar
 **Следующие задачи (по убыванию приоритета):**
 - [x] Body-background + bottom tab bar в navy — закрыто коммитом `f110ec6`
   (24 апреля): `body #0A1123`, `.tab-bar #141A33` + periwinkle active.
-- [ ] **Theme parity (light/dark switch).** Полный план —
-  `docs/REDESIGN-AUDIT.md`, ТЗ — `docs/NEXT-SESSION-TZ.md`. Гибрид:
-  recurring screens (Unlock + main app) → CSS vars + `ThemeKind` context +
-  Settings toggle; one-time onboarding остаётся статикой light. 8 коммитов,
-  чек-лист в audit-документе.
+- [x] **Theme parity (light/dark switch).** Закрыто 2026-04-25, см. ниже.
+- [ ] **BIP-39 word autocomplete в restore.rs** (новое) — drop-down из
+  2048-словного wordlist по prefix; suggestion из QA сессии 2026-04-25.
 - [ ] **Cloudflare Worker RPC proxy** — Settings toggle `rpc.rustokwallet.com`
   (scaffold в `deploy/rpc-proxy/`).
 - [ ] **Phase 4** — Cross-chain via Across Protocol (`crates/bridge/`).
@@ -293,6 +291,59 @@ navy + periwinkle палитру, из `rust-design/src/screens/dark/` + `onboar
 - [ ] **Show Recovery Phrase** — Settings → требует v2 keystore format.
 - [ ] **Price feed** — `crates/core/prices.rs` (CoinGecko) → открыть путь
   для `HomeVariant::Chart` и USD колонок в Activity.
+
+### Сессия 2026-04-25 — Theme parity (light/dark switch)
+
+Все recurring экраны теперь следуют выбранной теме через CSS-переменные;
+one-time onboarding (Welcome / Wallet wizard / Restore) остаётся
+статически light по дизайн-решению (первое впечатление + читабельность
+seed phrase). Полный план реализации — `docs/REDESIGN-AUDIT.md`.
+
+**Архитектура темы:**
+- `app/src/index.html` — `<style>` с `:root` (dark default) и
+  `:root[data-theme="light"]` overrides + anti-FOUC скрипт во внешнем
+  файле `assets/anti-fouc.js` (CSP `script-src 'self'` блокирует inline).
+- `app/src/src/tokens.rs::css` — 9 `var(--rw-*)` констант для
+  switchable surfaces.
+- `app/src/src/app.rs` — `ThemeKind { Dark, Light }` enum + context +
+  Effect для persist в localStorage и sync `data-theme` на
+  `documentElement` + `<meta name="theme-color">`.
+- `app/src/styles/main.css` — `body` и `.tab-bar` на `var(--rw-*)`,
+  добавлен `backdrop-filter: blur(20px)` для tab bar.
+
+**Splash & CreateSuccess:**
+- `pages/splash.rs` — `SplashView` overlay (`position:fixed; z-index:9999`).
+  Гейт `SplashDone(pub RwSignal<bool>)` живёт в App, запускается раз
+  на WASM bootstrap через `Timeout(1400)`. HomePage читает через
+  context, nav guard ждёт `splash_done` перед redirect-ом. Без этой
+  архитектуры re-mount HomePage из tab bar повторял бы splash.
+- `pages/wallet.rs` и `pages/restore.rs` — добавлен `Step::Success`
+  (96 px green-check disc + Continue CTA). Auth+nav отложены до
+  Continue tap; при kill-on-Success startup probe всё равно сажает
+  юзера на Home.
+
+**Settings toggle:**
+- `pages/settings.rs` — Appearance section с `ToggleRow "Light mode"`
+  через `use_context::<RwSignal<ThemeKind>>()`. Прямой
+  `toggle_theme` callback вместо Effect-sync — нет idempotent
+  re-writes localStorage на каждый mount Settings.
+
+**Коммиты:**
+- `92e82c0` `feat(ui): theme infrastructure (CSS vars + ThemeKind)`
+- `c7b6f09` `fix(ui): move anti-FOUC to external file for CSP compliance`
+- `b2a81d4` `feat(ui): switch recurring screens to CSS variables`
+- `4a46bb6` `feat(ui): light mode toggle in settings`
+- `688bce0` `feat(ui): cold-start splash overlay`
+- `2c46153` `feat(ui): create success screen after wallet creation`
+- + `docs: theme parity wrap-up` (этот коммит)
+
+**Что НЕ покрыто (вынесено в backlog):**
+- Pixel_8 emulator пропустили — QA проведено через `cargo tauri dev`
+  на macOS. Android APK build при следующем release-цикле повторит
+  валидацию.
+- Create success экран в этой сессии не дёргали (только restore).
+- BIP-39 autocomplete в restore — suggestion от тестировщика во
+  время QA, отдельный feature PR.
 
 ---
 

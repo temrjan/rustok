@@ -170,20 +170,29 @@ App (не в workspace):
 
 **Технология:** Leptos 0.7 (CSR) + leptos_router
 
-**Страницы (11):**
-1. `welcome.rs` — navy hero + логотип + Create / Restore CTA (route `/welcome`, дефолт для `Uninit`)
-2. `home.rs` — Main wallet greeting + copy-address pill + hero balance card + 3 action buttons (Send/Receive/Scan) + Networks list
+**Страницы (12):**
+1. `welcome.rs` — navy hero + логотип + Create / Restore CTA (route `/welcome`, дефолт для `Uninit`). Static dark — onboarding не следует theme toggle.
+2. `home.rs` — Main wallet greeting + copy-address pill + hero balance card + 3 action buttons (Send/Receive/Scan) + Networks list. Хостит Splash overlay через `SplashDone` context.
 3. `balance.rs` — детализация баланса по сетям (old, не редизайн)
 4. `send.rs` — 3-step DarkShell wizard (input → preview с txguard pill → result). Input: mono recipient + 24px amount + MAX + 25/50/75% presets (`type="text" inputmode="decimal" pattern`)
 5. `receive.rs` — DarkShell + chain pills + white QR card + Copy address (tauri-plugin-clipboard-manager) + cross-chain warning
 6. `analyze.rs` — DarkShell txguard: risk badge (ALLOW/WARN/BLOCK) + per-finding строки + Nexus Mutual CTA (блок при high risk)
 7. `activity.rs` — Recent/Activity header + dark cards с direction icons + chain badges
-8. `settings.rs` — WalletHeader (MW periwinkle avatar) + Face ID ToggleRow + Create new wallet / Lock wallet NavRows. Create new wallet ведёт на `/welcome`
-9. `wallet.rs` — 5-step PIN create wizard: SetPin → ConfirmPin → ShowPhrase → Quiz → BackupConfirm
-10. `restore.rs` — phrase input + 3-step PIN wizard (маршрут `/wallet/restore`)
-11. `unlock.rs` — разблокировка (6-digit PIN keypad + Face ID)
+8. `settings.rs` — WalletHeader (MW periwinkle avatar) + Appearance section с Light mode toggle (через `ThemeKind` context) + Face ID ToggleRow + Create new wallet / Lock wallet NavRows. Create new wallet ведёт на `/welcome`
+9. `wallet.rs` — 6-step PIN create wizard: SetPin → ConfirmPin → ShowPhrase → Quiz → BackupConfirm → Success (green-check + Continue)
+10. `restore.rs` — phrase input + 4-step PIN wizard: Phrase → SetPin → ConfirmPin → Success (маршрут `/wallet/restore`)
+11. `unlock.rs` — разблокировка (6-digit PIN keypad + Face ID). Recurring — следует theme toggle.
+12. `splash.rs` — `SplashView` overlay (logo + wordmark + 3 пульсирующих dots, static dark). Рендерится поверх HomePage пока `SplashDone(false)`, гейт инициализируется один раз на WASM bootstrap через 1.4 s `Timeout`.
 
 Навигация: `use_navigate()` из `leptos_router`.
+
+**Контекст (provided в App):**
+- `RwSignal<WalletState>` — Loading / Uninit / Locked / Unlocked.
+- `RwSignal<ThemeKind>` — Dark (default) / Light. Persist в
+  `localStorage["rustok.theme"]` через Effect в App.
+- `SplashDone(pub RwSignal<bool>)` — newtype gate для cold-start
+  splash overlay. Поднят в App, чтобы tab-навигация не повторяла
+  splash на каждый mount HomePage.
 
 **Shared компоненты (`components/`):**
 - `icons.rs` — 23 SVG-иконки (IconArrowUp/Down/Swap/Shield/Copy/Check/QR/Lock/FaceId/Info/Alert/…) через макрос `icon_component!`
@@ -192,7 +201,7 @@ App (не в workspace):
 - `dark_shell.rs` — `DarkShell` (navbar + back chevron + контент) + `DarkFieldLabel` для форм
 - `passcode.rs` — `Keypad` + `PasscodeDots` + `PASSCODE_LENGTH = 6`
 
-**Design system:** `app/src/src/tokens.rs` (186 строк — navy+periwinkle palette, типографика `rw_type::FAMILY`, радиусы `rw_radius::{SM,MD,LG,XL,PILL}`, тени, градиенты).
+**Design system:** `app/src/src/tokens.rs` — navy+periwinkle palette, типографика `rw_type::FAMILY`, радиусы `rw_radius::{SM,MD,LG,XL,PILL}`, тени, градиенты. Модуль `tokens::css` отдаёт 9 `var(--rw-*)` ссылок для switchable surfaces (`BG / SURFACE / SURFACE_2 / BORDER / TEXT / CARD / SWITCH_OFF / TAB_BG / NEUTRAL_MID`); определения переменных живут в `app/src/index.html` `<style>` блоке (`:root` dark default + `:root[data-theme="light"]` overrides).
 
 **Зависимости:** rustok-types, leptos, wasm-bindgen, web-sys, gloo-timers
 

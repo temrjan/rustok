@@ -124,9 +124,9 @@ cargo install tauri-cli --version "^2.10" --locked
 cargo tauri dev
 ```
 
-Pages: Welcome (brand landing + Create/Restore CTA), Home (hero balance + Send/Receive/Scan + chains list), Send (3-step DarkShell wizard: input → preview with txguard verdict → result), Receive (chain pills + white QR card + copy address), Analyze/TxGuard (risk badge + per-finding rows + Nexus Mutual CTA when blocked), Activity (dark cards with direction icons — ↑ DANGER, ↓ SUCCESS, swap ACCENT), Settings (wallet card + Face ID toggle + Lock + Create new wallet → Welcome), Wallet (5-step PIN create wizard: SetPin → Confirm → ShowPhrase → Quiz → BackupConfirm), Restore (phrase + PIN), Unlock (PIN keypad + Face ID).
+Pages: Splash (1.4 s brand overlay on cold start), Welcome (brand landing + Create/Restore CTA), Home (hero balance + Send/Receive/Scan + chains list), Send (3-step DarkShell wizard: input → preview with txguard verdict → result), Receive (chain pills + white QR card + copy address), Analyze/TxGuard (risk badge + per-finding rows + Nexus Mutual CTA when blocked), Activity (dark cards with direction icons — ↑ DANGER, ↓ SUCCESS, swap ACCENT), Settings (wallet card + Appearance toggle Light/Dark + Face ID toggle + Lock + Create new wallet → Welcome), Wallet (6-step PIN create wizard: SetPin → Confirm → ShowPhrase → Quiz → BackupConfirm → Success), Restore (phrase + PIN + Success), Unlock (PIN keypad + Face ID).
 Navigation: bottom tab bar (Wallet / Activity / Settings) with SVG icons. Send / Receive / Scan push fullscreen from Home action buttons.
-Branding: navy + periwinkle palette (`#0A1123` / `#8387C3`), 6-digit PIN onboarding, periwinkle diamond logo. Design foundation: `app/src/src/tokens.rs` + `components/{icons,button,logo,dark_shell}.rs`. Copy address uses `tauri-plugin-clipboard-manager`.
+Branding: navy + periwinkle palette (`#0A1123` / `#8387C3`), 6-digit PIN onboarding, periwinkle diamond logo. Theme: light/dark switch via Settings → Appearance toggle; choice persists across launches with anti-FOUC pre-paint. Recurring surfaces (Unlock + main app) follow the toggle, one-time onboarding stays light by design. Design foundation: `app/src/src/tokens.rs` (palette + `tokens::css` module exposing `var(--rw-*)` references) + `components/{icons,button,logo,dark_shell}.rs`. Copy address uses `tauri-plugin-clipboard-manager`.
 
 ## iOS App
 
