@@ -76,6 +76,16 @@ pub fn parse(
         return Ok(parsed);
     }
 
-    // Unknown selector
-    Err(ParseError::UnknownSelector(selector))
+    // Unknown selector — still produce a ParsedTransaction so the rules engine
+    // can analyse it (e.g. unknown_function warning + address blacklist).
+    Ok(ParsedTransaction {
+        to,
+        value,
+        action: TransactionAction::Unknown {
+            selector: alloy_primitives::hex::encode(selector),
+            calldata_len: calldata.len(),
+        },
+        function_name: None,
+        function_selector: Some(selector),
+    })
 }

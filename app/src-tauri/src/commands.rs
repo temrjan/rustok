@@ -564,6 +564,7 @@ pub async fn biometric_unlock_wallet(
         aead::{Aead, KeyInit},
         Aes256Gcm, Nonce,
     };
+    use zeroize::Zeroizing;
 
     // 1. Read biometric.dat.
     let data_dir = app_handle
@@ -582,11 +583,15 @@ pub async fn biometric_unlock_wallet(
         Nonce::from(<[u8; 12]>::try_from(&blob[..12]).map_err(|_| "invalid nonce".to_string())?);
     let cipher =
         Aes256Gcm::new_from_slice(BIOMETRIC_KEY).map_err(|e| format!("cipher init: {e}"))?;
-    let password_bytes = cipher
-        .decrypt(&nonce, &blob[12..])
-        .map_err(|_| "failed to decrypt biometric data — re-enable biometric".to_string())?;
-    let password =
-        String::from_utf8(password_bytes).map_err(|_| "corrupted password data".to_string())?;
+    let password_bytes = Zeroizing::new(
+        cipher
+            .decrypt(&nonce, &blob[12..])
+            .map_err(|_| "failed to decrypt biometric data — re-enable biometric".to_string())?,
+    );
+    let password = Zeroizing::new(
+        String::from_utf8(password_bytes.to_vec())
+            .map_err(|_| "corrupted password data".to_string())?,
+    );
 
     // 3. Unlock wallet with decrypted password.
     unlock_with_password(&password, &data_dir, &state)

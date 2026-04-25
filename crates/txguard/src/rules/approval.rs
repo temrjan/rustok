@@ -10,7 +10,7 @@ use super::engine::RuleContext;
 
 /// Run all approval rules against a parsed transaction.
 pub(crate) fn check(parsed: &ParsedTransaction, ctx: &RuleContext, findings: &mut Vec<Finding>) {
-    check_unlimited_approval(parsed, findings);
+    check_unlimited_approval(parsed, ctx, findings);
     check_set_approval_for_all(parsed, ctx, findings);
 }
 
@@ -18,8 +18,25 @@ pub(crate) fn check(parsed: &ParsedTransaction, ctx: &RuleContext, findings: &mu
 ///
 /// This allows the spender to transfer ALL tokens from the user's wallet
 /// at any time in the future, even tokens deposited after the approval.
-fn check_unlimited_approval(parsed: &ParsedTransaction, findings: &mut Vec<Finding>) {
-    if let TransactionAction::TokenApproval { amount, .. } = &parsed.action {
+fn check_unlimited_approval(
+    parsed: &ParsedTransaction,
+    ctx: &RuleContext,
+    findings: &mut Vec<Finding>,
+) {
+    if let TransactionAction::TokenApproval { amount, spender } = &parsed.action {
+        if ctx.known_scam_addresses.contains(spender) {
+            findings.push(Finding {
+                rule: "approval_to_known_scam",
+                severity: Severity::Forbidden,
+                category: RuleCategory::Approval,
+                description: format!(
+                    "Approval to known scam/drainer address {}. This will allow the scammer to steal your tokens.",
+                    spender
+                ),
+            });
+            return;
+        }
+
         if *amount == alloy_primitives::U256::MAX {
             findings.push(Finding {
                 rule: "unlimited_approval",
@@ -45,6 +62,19 @@ fn check_set_approval_for_all(
         approved: true,
     } = &parsed.action
     {
+        if ctx.known_scam_addresses.contains(operator) {
+            findings.push(Finding {
+                rule: "set_approval_for_all_to_known_scam",
+                severity: Severity::Forbidden,
+                category: RuleCategory::Approval,
+                description: format!(
+                    "setApprovalForAll to known scam/drainer {} grants FULL access to ALL your tokens in this collection.",
+                    operator
+                ),
+            });
+            return;
+        }
+
         let severity = if ctx.known_verified_addresses.contains(operator) {
             Severity::Info
         } else {

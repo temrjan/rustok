@@ -118,14 +118,16 @@ impl LocalKeyring {
     /// blanks, tabs, newlines, or mixed case that users often introduce when
     /// pasting from notes or terminals.
     pub fn from_mnemonic(phrase: &str, password: &str) -> Result<Self, KeyringError> {
-        let normalised: String = phrase
-            .split_whitespace()
-            .map(str::to_lowercase)
-            .collect::<Vec<_>>()
-            .join(" ");
+        let normalised = zeroize::Zeroizing::new(
+            phrase
+                .split_whitespace()
+                .map(str::to_lowercase)
+                .collect::<Vec<_>>()
+                .join(" ")
+        );
 
         let signer = MnemonicBuilder::<English>::default()
-            .phrase(normalised)
+            .phrase(normalised.as_str())
             .build()
             .map_err(|e| KeyringError::KeyGen(e.to_string()))?;
 
@@ -146,9 +148,10 @@ impl LocalKeyring {
     /// Restore a keyring from encrypted bytes + password.
     pub fn from_encrypted(encrypted: &[u8], password: &str) -> Result<Self, KeyringError> {
         let key_bytes = Zeroizing::new(decrypt_key(encrypted, password)?);
-        let key = B256::from_slice(&key_bytes);
+        let mut key = B256::from_slice(&key_bytes);
         let signer =
             PrivateKeySigner::from_bytes(&key).map_err(|e| KeyringError::KeyGen(e.to_string()))?;
+        key.as_mut_slice().fill(0);
 
         Ok(Self {
             info: KeyInfo {

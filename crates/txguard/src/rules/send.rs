@@ -51,6 +51,21 @@ fn check_known_scam_recipient(
             });
         }
     }
+
+    // For transferFrom, check the destination address
+    if let TransactionAction::TokenTransferFrom { to, .. } = &parsed.action {
+        if ctx.known_scam_addresses.contains(to) {
+            findings.push(Finding {
+                rule: "known_scam",
+                severity: Severity::Forbidden,
+                category: RuleCategory::Address,
+                description: format!(
+                    "Recipient {} is flagged as a known scam/drainer. DO NOT send tokens to this address.",
+                    to
+                ),
+            });
+        }
+    }
 }
 
 /// Detects native ETH transfers sent to a contract address (value > 0, no calldata).

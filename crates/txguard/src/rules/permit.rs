@@ -26,6 +26,19 @@ fn check_permit_to_unknown(
     findings: &mut Vec<Finding>,
 ) {
     if let TransactionAction::Permit { spender, .. } = &parsed.action {
+        if ctx.known_scam_addresses.contains(spender) {
+            findings.push(Finding {
+                rule: "permit_to_known_scam",
+                severity: Severity::Forbidden,
+                category: RuleCategory::Permit,
+                description: format!(
+                    "Permit signature to KNOWN scam/drainer {}. This is a permit phishing attack — DO NOT sign.",
+                    spender
+                ),
+            });
+            return;
+        }
+
         if !ctx.known_verified_addresses.contains(spender) {
             findings.push(Finding {
                 rule: "permit_to_unknown",
