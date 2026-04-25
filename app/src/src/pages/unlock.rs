@@ -9,6 +9,8 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 use rustok_types::WalletInfo;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::app::WalletState;
 use crate::bridge::tauri_invoke;
@@ -59,36 +61,58 @@ pub fn UnlockPage() -> impl IntoView {
     let bio_available = RwSignal::new(false);
     let bio_enabled = RwSignal::new(false);
 
+    let alive = Arc::new(AtomicBool::new(true));
+    let alive_cleanup = alive.clone();
+    on_cleanup(move || {
+        alive_cleanup.store(false, Ordering::Relaxed);
+    });
+
     // Check biometric availability on mount.
+    let alive_bio = alive.clone();
     spawn_local(async move {
+        if !alive_bio.load(Ordering::Relaxed) { return; }
         if let Ok(s) =
             tauri_invoke::<_, BiometricStatus>("plugin:biometric|status", &EmptyArgs {}).await
         {
-            bio_available.set(s.is_available);
+            if alive_bio.load(Ordering::Relaxed) {
+                bio_available.set(s.is_available);
+            }
         }
+        if !alive_bio.load(Ordering::Relaxed) { return; }
         if let Ok(en) = tauri_invoke::<_, bool>("is_biometric_enabled", &EmptyArgs {}).await {
-            bio_enabled.set(en);
+            if alive_bio.load(Ordering::Relaxed) {
+                bio_enabled.set(en);
+            }
         }
     });
 
     let do_unlock = {
         let navigate = navigate.clone();
+        let alive_unlock = alive.clone();
         move |pw: String| {
             loading.set(true);
             let navigate = navigate.clone();
+            let alive_u = alive_unlock.clone();
             spawn_local(async move {
+                if !alive_u.load(Ordering::Relaxed) { return; }
                 match tauri_invoke::<_, WalletInfo>("unlock_wallet", &UnlockArgs { password: pw })
                     .await
                 {
                     Ok(_) => {
-                        auth_state.set(WalletState::Unlocked);
+                        if alive_u.load(Ordering::Relaxed) {
+                            auth_state.set(WalletState::Unlocked);
+                        }
                         navigate("/", Default::default());
                     }
                     Err(_) => {
-                        error.set(true);
-                        shake.set(true);
+                        if alive_u.load(Ordering::Relaxed) {
+                            error.set(true);
+                            shake.set(true);
+                        }
+                        let alive_t = alive_u.clone();
                         set_timeout(
                             move || {
+                                if !alive_t.load(Ordering::Relaxed) { return; }
                                 pin.set(String::new());
                                 error.set(false);
                                 shake.set(false);
@@ -131,10 +155,13 @@ pub fn UnlockPage() -> impl IntoView {
 
     let bio_unlock = {
         let navigate = navigate.clone();
+        let alive_bio_unlock = alive.clone();
         move |_| {
             loading.set(true);
             let navigate = navigate.clone();
+            let alive_bu = alive_bio_unlock.clone();
             spawn_local(async move {
+                if !alive_bu.load(Ordering::Relaxed) { return; }
                 if let Err(_) = tauri_invoke::<_, ()>(
                     "plugin:biometric|authenticate",
                     &BiometricAuthArgs {
@@ -143,20 +170,29 @@ pub fn UnlockPage() -> impl IntoView {
                 )
                 .await
                 {
-                    loading.set(false);
+                    if alive_bu.load(Ordering::Relaxed) {
+                        loading.set(false);
+                    }
                     return;
                 }
+                if !alive_bu.load(Ordering::Relaxed) { return; }
                 match tauri_invoke::<_, WalletInfo>("biometric_unlock_wallet", &EmptyArgs {}).await
                 {
                     Ok(_) => {
-                        auth_state.set(WalletState::Unlocked);
+                        if alive_bu.load(Ordering::Relaxed) {
+                            auth_state.set(WalletState::Unlocked);
+                        }
                         navigate("/", Default::default());
                     }
                     Err(_) => {
-                        error.set(true);
-                        shake.set(true);
+                        if alive_bu.load(Ordering::Relaxed) {
+                            error.set(true);
+                            shake.set(true);
+                        }
+                        let alive_bt = alive_bu.clone();
                         set_timeout(
                             move || {
+                                if !alive_bt.load(Ordering::Relaxed) { return; }
                                 error.set(false);
                                 shake.set(false);
                                 loading.set(false);

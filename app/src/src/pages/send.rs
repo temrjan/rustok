@@ -9,6 +9,8 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 use rustok_types::{SendPreviewDto, SendResponseDto, UnifiedBalance};
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::bridge::tauri_invoke;
 use crate::components::icons::IconCheck;
@@ -52,10 +54,20 @@ pub fn SendPage() -> impl IntoView {
     let error = RwSignal::new(None::<String>);
     let loading = RwSignal::new(false);
 
+    let alive = Arc::new(AtomicBool::new(true));
+    let alive_cleanup = alive.clone();
+    on_cleanup(move || {
+        alive_cleanup.store(false, Ordering::Relaxed);
+    });
+
+    let alive_bal = alive.clone();
     spawn_local(async move {
+        if !alive_bal.load(Ordering::Relaxed) { return; }
         if let Ok(b) = tauri_invoke::<_, UnifiedBalance>("get_wallet_balance", &EmptyArgs {}).await
         {
-            available.set(b.approximate_total_formatted);
+            if alive_bal.load(Ordering::Relaxed) {
+                available.set(b.approximate_total_formatted);
+            }
         }
     });
 
@@ -81,63 +93,95 @@ pub fn SendPage() -> impl IntoView {
         }
     };
 
-    let do_preview = Callback::new(move |()| {
-        let to_val = to_addr.get().trim().to_string();
-        let amt_val = amount.get();
-        if to_val.is_empty() || amt_val.is_empty() {
-            error.set(Some("Enter address and amount".into()));
-            return;
-        }
-        loading.set(true);
-        error.set(None);
-
-        spawn_local(async move {
-            match tauri_invoke::<_, SendPreviewDto>(
-                "preview_send",
-                &SendArgs {
-                    to: to_val,
-                    amount: amt_val,
-                },
-            )
-            .await
-            {
-                Ok(p) => {
-                    preview.set(Some(p));
-                    step.set(Step::Preview);
-                }
-                Err(e) => error.set(Some(e)),
+    let do_preview = {
+        let alive_preview = alive.clone();
+        Callback::new(move |()| {
+            if loading.get_untracked() {
+                return;
             }
-            loading.set(false);
-        });
-    });
-
-    let do_send = Callback::new(move |()| {
-        let to_val = to_addr.get().trim().to_string();
-        let amt_val = amount.get();
-        loading.set(true);
-        error.set(None);
-
-        spawn_local(async move {
-            match tauri_invoke::<_, SendResponseDto>(
-                "send_eth",
-                &SendArgs {
-                    to: to_val,
-                    amount: amt_val,
-                },
-            )
-            .await
-            {
-                Ok(r) => {
-                    result.set(Some(r));
-                    step.set(Step::Result);
-                }
-                Err(e) => error.set(Some(e)),
+            let to_val = to_addr.get().trim().to_string();
+            let amt_val = amount.get();
+            if to_val.is_empty() || amt_val.is_empty() {
+                error.set(Some("Enter address and amount".into()));
+                return;
             }
-            loading.set(false);
-        });
-    });
+            loading.set(true);
+            error.set(None);
+
+            let alive_p = alive_preview.clone();
+            spawn_local(async move {
+                if !alive_p.load(Ordering::Relaxed) { return; }
+                match tauri_invoke::<_, SendPreviewDto>(
+                    "preview_send",
+                    &SendArgs {
+                        to: to_val,
+                        amount: amt_val,
+                    },
+                )
+                .await
+                {
+                    Ok(p) => {
+                        if alive_p.load(Ordering::Relaxed) {
+                            preview.set(Some(p));
+                            step.set(Step::Preview);
+                        }
+                    }
+                    Err(e) => {
+                        if alive_p.load(Ordering::Relaxed) {
+                            error.set(Some(e));
+                        }
+                    }
+                }
+                if alive_p.load(Ordering::Relaxed) {
+                    loading.set(false);
+                }
+            });
+        })
+    };
+
+    let do_send = {
+        let alive_send = alive.clone();
+        Callback::new(move |()| {
+            let to_val = to_addr.get().trim().to_string();
+            let amt_val = amount.get();
+            loading.set(true);
+            error.set(None);
+
+            let alive_s = alive_send.clone();
+            spawn_local(async move {
+                if !alive_s.load(Ordering::Relaxed) { return; }
+                match tauri_invoke::<_, SendResponseDto>(
+                    "send_eth",
+                    &SendArgs {
+                        to: to_val,
+                        amount: amt_val,
+                    },
+                )
+                .await
+                {
+                    Ok(r) => {
+                        if alive_s.load(Ordering::Relaxed) {
+                            result.set(Some(r));
+                            step.set(Step::Result);
+                        }
+                    }
+                    Err(e) => {
+                        if alive_s.load(Ordering::Relaxed) {
+                            error.set(Some(e));
+                        }
+                    }
+                }
+                if alive_s.load(Ordering::Relaxed) {
+                    loading.set(false);
+                }
+            });
+        })
+    };
 
     let go_edit = Callback::new(move |()| {
+        if loading.get_untracked() {
+            return;
+        }
         step.set(Step::Input);
         error.set(None);
     });

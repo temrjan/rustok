@@ -9,6 +9,8 @@ use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 use rustok_types::{TransactionHistoryDto, UnifiedBalance};
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use wasm_bindgen::JsCast;
 use send_wrapper::SendWrapper;
 use wasm_bindgen::closure::Closure;
@@ -24,11 +26,14 @@ use crate::tokens::{self as t, rw_radius, rw_type};
 /// Interval between automatic balance refreshes while the tab is visible.
 const AUTO_REFRESH_MS: u32 = 30_000;
 
-fn silent_refresh(balance: RwSignal<Option<UnifiedBalance>>) {
+fn silent_refresh(balance: RwSignal<Option<UnifiedBalance>>, alive: Arc<AtomicBool>) {
     spawn_local(async move {
+        if !alive.load(Ordering::Relaxed) { return; }
         if let Ok(b) = tauri_invoke::<_, UnifiedBalance>("get_wallet_balance", &EmptyArgs {}).await
         {
-            balance.set(Some(b));
+            if alive.load(Ordering::Relaxed) {
+                balance.set(Some(b));
+            }
         }
     });
 }
@@ -63,6 +68,12 @@ pub fn HomePage() -> impl IntoView {
     let history_loading = RwSignal::new(false);
     let history_error = RwSignal::new(None::<String>);
 
+    let alive = Arc::new(AtomicBool::new(true));
+    let alive_cleanup = alive.clone();
+    on_cleanup(move || {
+        alive_cleanup.store(false, Ordering::Relaxed);
+    });
+
     // Cold-start splash gate — owned by App so re-mounting Home from
     // tab navigation doesn't replay the splash. The nav guard below
     // waits on `splash_done` so the splash plays in full even when
@@ -86,22 +97,24 @@ pub fn HomePage() -> impl IntoView {
     });
 
     // Auto-refresh balance every AUTO_REFRESH_MS while the tab is visible.
+    let alive_interval = alive.clone();
     let interval = SendWrapper::new(gloo_timers::callback::Interval::new(
         AUTO_REFRESH_MS,
         move || {
             if state.get_untracked() != WalletState::Unlocked || document_hidden() {
                 return;
             }
-            silent_refresh(balance);
+            silent_refresh(balance, alive_interval.clone());
         },
     ));
 
     // Refetch when the app returns from background (visibilitychange).
+    let alive_vis = alive.clone();
     let closure = SendWrapper::new(Closure::wrap(Box::new(move || {
         if state.get_untracked() != WalletState::Unlocked || document_hidden() {
             return;
         }
-        silent_refresh(balance);
+        silent_refresh(balance, alive_vis.clone());
     }) as Box<dyn FnMut()>));
     if let Some(doc) = web_sys::window().and_then(|w| w.document()) {
         let _ = doc
@@ -120,6 +133,7 @@ pub fn HomePage() -> impl IntoView {
 
     // Initial balance + history fetch when the wallet becomes Unlocked.
     // Android TLS can race the first RPC call — one retry after 800 ms.
+    let alive_effect = alive.clone();
     Effect::new(move |_| {
         if state.get() != WalletState::Unlocked {
             return;
@@ -129,57 +143,108 @@ pub fn HomePage() -> impl IntoView {
         history_loading.set(true);
         history_error.set(None);
 
+        let alive_eff1 = alive_effect.clone();
         spawn_local(async move {
+            if !alive_eff1.load(Ordering::Relaxed) { return; }
             if let Ok(Some(addr)) =
                 tauri_invoke::<_, Option<String>>("get_current_address", &EmptyArgs {}).await
             {
-                address.set(Some(addr));
+                if alive_eff1.load(Ordering::Relaxed) {
+                    address.set(Some(addr));
+                }
             }
 
+            if !alive_eff1.load(Ordering::Relaxed) { return; }
             match tauri_invoke::<_, UnifiedBalance>("get_wallet_balance", &EmptyArgs {}).await {
                 Ok(b) if b.chains.is_empty() && !b.errors.is_empty() => {
+                    let alive_retry = alive_eff1.clone();
                     gloo_timers::callback::Timeout::new(800, move || {
+                        if !alive_retry.load(Ordering::Relaxed) { return; }
                         spawn_local(async move {
+                            if !alive_retry.load(Ordering::Relaxed) { return; }
                             match tauri_invoke::<_, UnifiedBalance>(
                                 "get_wallet_balance",
                                 &EmptyArgs {},
                             )
                             .await
                             {
-                                Ok(b2) => balance.set(Some(b2)),
-                                Err(e) => error.set(Some(e)),
+                                Ok(b2) => {
+                                    if alive_retry.load(Ordering::Relaxed) {
+                                        balance.set(Some(b2));
+                                    }
+                                }
+                                Err(e) => {
+                                    if alive_retry.load(Ordering::Relaxed) {
+                                        error.set(Some(e));
+                                    }
+                                }
                             }
-                            loading.set(false);
+                            if alive_retry.load(Ordering::Relaxed) {
+                                loading.set(false);
+                            }
                         });
                     })
                     .forget();
                     return;
                 }
-                Ok(b) => balance.set(Some(b)),
-                Err(e) => error.set(Some(e)),
+                Ok(b) => {
+                    if alive_eff1.load(Ordering::Relaxed) {
+                        balance.set(Some(b));
+                    }
+                }
+                Err(e) => {
+                    if alive_eff1.load(Ordering::Relaxed) {
+                        error.set(Some(e));
+                    }
+                }
             }
-            loading.set(false);
+            if alive_eff1.load(Ordering::Relaxed) {
+                loading.set(false);
+            }
         });
 
+        let alive_eff2 = alive_effect.clone();
         spawn_local(async move {
+            if !alive_eff2.load(Ordering::Relaxed) { return; }
             match tauri_invoke::<_, TransactionHistoryDto>("get_transaction_history", &EmptyArgs {})
                 .await
             {
-                Ok(h) => history.set(Some(h)),
-                Err(e) => history_error.set(Some(e)),
+                Ok(h) => {
+                    if alive_eff2.load(Ordering::Relaxed) {
+                        history.set(Some(h));
+                    }
+                }
+                Err(e) => {
+                    if alive_eff2.load(Ordering::Relaxed) {
+                        history_error.set(Some(e));
+                    }
+                }
             }
-            history_loading.set(false);
+            if alive_eff2.load(Ordering::Relaxed) {
+                history_loading.set(false);
+            }
         });
     });
 
-    let copy_addr = move |_| {
-        let Some(addr) = address.get() else { return };
-        spawn_local(async move {
-            if copy_to_clipboard(&addr).await {
-                copied.set(true);
-                gloo_timers::callback::Timeout::new(1_600, move || copied.set(false)).forget();
-            }
-        });
+    let copy_addr = {
+        let alive_copy = alive.clone();
+        move |_| {
+            let Some(addr) = address.get() else { return };
+            let alive_copy2 = alive_copy.clone();
+            spawn_local(async move {
+                if !alive_copy2.load(Ordering::Relaxed) { return; }
+                if copy_to_clipboard(&addr).await {
+                    if !alive_copy2.load(Ordering::Relaxed) { return; }
+                    copied.set(true);
+                    let alive_copy3 = alive_copy2.clone();
+                    gloo_timers::callback::Timeout::new(1_600, move || {
+                        if alive_copy3.load(Ordering::Relaxed) {
+                            copied.set(false);
+                        }
+                    }).forget();
+                }
+            });
+        }
     };
 
     let send_nav = {

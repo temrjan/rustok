@@ -8,6 +8,8 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::hooks::use_navigate;
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::app::{BalanceHidden, ThemeKind, WalletState};
 use crate::bridge::tauri_invoke;
@@ -35,6 +37,12 @@ pub fn SettingsPage() -> impl IntoView {
     let bio_available = RwSignal::new(false);
     let bio_enabled = RwSignal::new(false);
 
+    let alive = Arc::new(AtomicBool::new(true));
+    let alive_cleanup = alive.clone();
+    on_cleanup(move || {
+        alive_cleanup.store(false, Ordering::Relaxed);
+    });
+
     // Local UI mirror of the global theme. Initial value matches the
     // persisted preference; the toggle is the only writer to `theme`,
     // so we stay in sync without an Effect (idempotent re-writes on
@@ -60,30 +68,45 @@ pub fn SettingsPage() -> impl IntoView {
         balance_hidden.set(now_hidden);
     };
 
+    let alive_init = alive.clone();
     spawn_local(async move {
+        if !alive_init.load(Ordering::Relaxed) { return; }
         if let Ok(Some(addr)) =
             tauri_invoke::<_, Option<String>>("get_current_address", &EmptyArgs {}).await
         {
-            address.set(Some(addr));
+            if alive_init.load(Ordering::Relaxed) {
+                address.set(Some(addr));
+            }
         }
+        if !alive_init.load(Ordering::Relaxed) { return; }
         if let Ok(status) =
             tauri_invoke::<_, BiometricStatus>("plugin:biometric|status", &EmptyArgs {}).await
         {
-            bio_available.set(status.is_available);
+            if alive_init.load(Ordering::Relaxed) {
+                bio_available.set(status.is_available);
+            }
         }
+        if !alive_init.load(Ordering::Relaxed) { return; }
         if let Ok(enabled) = tauri_invoke::<_, bool>("is_biometric_enabled", &EmptyArgs {}).await {
-            bio_enabled.set(enabled);
+            if alive_init.load(Ordering::Relaxed) {
+                bio_enabled.set(enabled);
+            }
         }
     });
 
+    let alive_stored = StoredValue::new(alive.clone());
     let toggle_bio = move || {
         if bio_enabled.get_untracked() {
+            let alive_b = alive_stored.get_value();
             spawn_local(async move {
+                if !alive_b.load(Ordering::Relaxed) { return; }
                 if tauri_invoke::<_, ()>("disable_biometric_unlock", &EmptyArgs {})
                     .await
                     .is_ok()
                 {
-                    bio_enabled.set(false);
+                    if alive_b.load(Ordering::Relaxed) {
+                        bio_enabled.set(false);
+                    }
                 }
             });
         }

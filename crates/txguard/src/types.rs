@@ -144,10 +144,15 @@ pub fn risk_score(findings: &[Finding]) -> u8 {
         .max()
         .unwrap_or(0);
 
-    let count_bonus = u8::try_from(findings.iter().filter(|f| f.severity > Severity::Info).count())
-        .unwrap_or(u8::MAX)
-        .min(10)
-        .saturating_mul(2);
+    let count_bonus = u8::try_from(
+        findings
+            .iter()
+            .filter(|f| f.severity > Severity::Info)
+            .count(),
+    )
+    .unwrap_or(u8::MAX)
+    .min(10)
+    .saturating_mul(2);
     max_severity.saturating_add(count_bonus).min(100)
 }
 

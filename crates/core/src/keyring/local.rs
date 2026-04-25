@@ -123,7 +123,7 @@ impl LocalKeyring {
                 .split_whitespace()
                 .map(str::to_lowercase)
                 .collect::<Vec<_>>()
-                .join(" ")
+                .join(" "),
         );
 
         let signer = MnemonicBuilder::<English>::default()

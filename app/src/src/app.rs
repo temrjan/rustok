@@ -2,7 +2,10 @@ use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos_router::components::*;
 use leptos_router::path;
+use send_wrapper::SendWrapper;
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use crate::bridge::tauri_invoke;
 use crate::pages::{
@@ -117,7 +120,12 @@ pub fn App() -> impl IntoView {
     // so re-mounts from tab navigation don't replay the splash.
     let splash_done = RwSignal::new(false);
     provide_context(SplashDone(splash_done));
-    gloo_timers::callback::Timeout::new(1400, move || splash_done.set(true)).forget();
+    let splash_timeout = StoredValue::new(SendWrapper::new(Some(
+        gloo_timers::callback::Timeout::new(1400, move || splash_done.set(true))
+    )));
+    on_cleanup(move || {
+        splash_timeout.update_value(|t| { *t = SendWrapper::new(None); });
+    });
 
     Effect::new(move |_| {
         let (attr, color) = match theme.get() {
@@ -155,18 +163,41 @@ pub fn App() -> impl IntoView {
         }
     });
 
+    let alive = Arc::new(AtomicBool::new(true));
+    let alive_cleanup = alive.clone();
+    on_cleanup(move || {
+        alive_cleanup.store(false, Ordering::Relaxed);
+    });
+
     // Startup probe: does a keystore exist? Is the wallet already unlocked?
     //
     // On invoke error we stay in Loading — failing open to Uninit could hide
     // an existing wallet behind the "create" flow. User recovers via restart.
+    let alive_startup = alive.clone();
     spawn_local(async move {
+        if !alive_startup.load(Ordering::Relaxed) { return; }
         match tauri_invoke::<_, bool>("has_wallet", &EmptyArgs {}).await {
-            Ok(false) => state.set(WalletState::Uninit),
-            Ok(true) => match tauri_invoke::<_, bool>("is_wallet_unlocked", &EmptyArgs {}).await {
-                Ok(true) => state.set(WalletState::Unlocked),
-                Ok(false) => state.set(WalletState::Locked),
-                Err(_) => {}
-            },
+            Ok(false) => {
+                if alive_startup.load(Ordering::Relaxed) {
+                    state.set(WalletState::Uninit);
+                }
+            }
+            Ok(true) => {
+                if !alive_startup.load(Ordering::Relaxed) { return; }
+                match tauri_invoke::<_, bool>("is_wallet_unlocked", &EmptyArgs {}).await {
+                    Ok(true) => {
+                        if alive_startup.load(Ordering::Relaxed) {
+                            state.set(WalletState::Unlocked);
+                        }
+                    }
+                    Ok(false) => {
+                        if alive_startup.load(Ordering::Relaxed) {
+                            state.set(WalletState::Locked);
+                        }
+                    }
+                    Err(_) => {}
+                }
+            }
             Err(_) => {}
         }
     });
