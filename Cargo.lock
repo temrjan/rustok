@@ -5744,6 +5744,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.23",
  "txguard",
+ "zeroize",
 ]
 
 [[package]]

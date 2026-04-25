@@ -291,7 +291,7 @@ fn unlock_with_password(
         alloy_primitives::hex::decode(encrypted_hex).map_err(|e| format!("invalid hex: {e}"))?;
 
     let keyring = LocalKeyring::from_encrypted(&encrypted, password)
-        .map_err(|e| format!("wrong password or corrupted keystore: {e}"))?;
+        .map_err(|_| "unlock failed".to_string())?;
     let address = format!("{}", keyring.address());
 
     let mut wallet_lock = state
@@ -502,6 +502,10 @@ pub async fn enable_biometric_unlock(
         Aes256Gcm, Nonce,
     };
     use rand::RngCore;
+    use zeroize::Zeroizing;
+
+    // Wrap password in Zeroizing so it's cleared from memory when dropped.
+    let password = Zeroizing::new(password);
 
     let mut nonce_bytes = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
