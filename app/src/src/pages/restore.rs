@@ -1,9 +1,11 @@
-//! Restore wallet — 3-step wizard: phrase input → set PIN → confirm PIN.
+//! Restore wallet — 4-step wizard: phrase input → set PIN → confirm PIN → success.
 //!
 //! On PIN confirmation the wizard calls `import_wallet_from_mnemonic` with the
 //! collected phrase and PIN as the password. A mismatch between the two PIN
 //! entries shakes the dots and clears the confirm field. A backend error (bad
 //! phrase) shakes and returns the user to Step 1 with an error message.
+//! On success the wizard parks on a confirmation step until the user taps
+//! Continue, which flips `auth_state` to `Unlocked` and navigates to home.
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -41,6 +43,7 @@ enum Step {
     Phrase,
     SetPin,
     ConfirmPin,
+    Success,
 }
 
 /// Restore wallet component.
@@ -101,44 +104,51 @@ pub fn RestorePage() -> impl IntoView {
     });
 
     // Step 3 — confirm PIN, then import wallet.
-    let do_restore = {
-        let navigate = navigate.clone();
-        move |confirmed: String| {
-            loading.set(true);
-            let navigate = navigate.clone();
-            spawn_local(async move {
-                match tauri_invoke::<_, WalletInfo>(
-                    "import_wallet_from_mnemonic",
-                    &ImportArgs {
-                        phrase: phrase.get_untracked().trim().to_string(),
-                        password: confirmed,
-                    },
-                )
-                .await
-                {
-                    Ok(_) => {
-                        auth_state.set(WalletState::Unlocked);
-                        navigate("/", Default::default());
-                    }
-                    Err(e) => {
-                        // Phrase rejected by backend — shake, then return to Step 1.
-                        phrase_error.set(Some(e));
-                        error.set(true);
-                        shake.set(true);
-                        set_timeout(
-                            move || {
-                                confirm_pin.set(String::new());
-                                pin.set(String::new());
-                                error.set(false);
-                                shake.set(false);
-                                loading.set(false);
-                                step.set(Step::Phrase);
-                            },
-                            std::time::Duration::from_millis(500),
-                        );
-                    }
+    let do_restore = move |confirmed: String| {
+        loading.set(true);
+        spawn_local(async move {
+            match tauri_invoke::<_, WalletInfo>(
+                "import_wallet_from_mnemonic",
+                &ImportArgs {
+                    phrase: phrase.get_untracked().trim().to_string(),
+                    password: confirmed,
+                },
+            )
+            .await
+            {
+                // Defer auth_state + navigate until the user taps Continue
+                // on the Success step — keeps the wizard symmetric with
+                // Create and gives the user a clear "all done" beat.
+                Ok(_) => {
+                    loading.set(false);
+                    step.set(Step::Success);
                 }
-            });
+                Err(e) => {
+                    // Phrase rejected by backend — shake, then return to Step 1.
+                    phrase_error.set(Some(e));
+                    error.set(true);
+                    shake.set(true);
+                    set_timeout(
+                        move || {
+                            confirm_pin.set(String::new());
+                            pin.set(String::new());
+                            error.set(false);
+                            shake.set(false);
+                            loading.set(false);
+                            step.set(Step::Phrase);
+                        },
+                        std::time::Duration::from_millis(500),
+                    );
+                }
+            }
+        });
+    };
+
+    let go_home = {
+        let navigate = navigate.clone();
+        move |_| {
+            auth_state.set(WalletState::Unlocked);
+            navigate("/", Default::default());
         }
     };
 
@@ -374,6 +384,54 @@ pub fn RestorePage() -> impl IntoView {
 
                 <div style="flex:1;"/>
                 <Keypad on_press=on_confirm_press on_backspace=on_confirm_back/>
+            </div>
+
+            // ── Step 4: Success ──────────────────────────────────────────────
+            <div style=move || format!(
+                "flex-direction:column;flex:1;display:{};",
+                if step.get() == Step::Success { "flex" } else { "none" }
+            )>
+                <div style="display:flex;flex-direction:column;align-items:center;\
+                            text-align:center;padding:48px 32px 0;flex:1;">
+                    <div style=format!(
+                        "width:96px;height:96px;border-radius:50%;\
+                         background:rgba(74,179,123,0.14);\
+                         border:1px solid rgba(74,179,123,0.32);\
+                         display:flex;align-items:center;justify-content:center;\
+                         color:{SUCCESS};"
+                    )>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+
+                    <div style=format!(
+                        "margin-top:24px;font-family:{FONT};font-size:24px;\
+                         font-weight:700;color:{BRAND};letter-spacing:-0.4px;"
+                    )>"Wallet restored"</div>
+
+                    <div style=format!(
+                        "margin-top:8px;font-family:{FONT};font-size:14px;\
+                         color:{MUTED};line-height:1.45;max-width:280px;"
+                    )>
+                        "Your funds are back. The recovery phrase you entered "
+                        "is the only way in — keep it safe."
+                    </div>
+                </div>
+
+                <div style="padding:0 24px max(24px,env(safe-area-inset-bottom));">
+                    <button
+                        on:click=go_home
+                        style=format!(
+                            "width:100%;height:56px;border:none;border-radius:16px;\
+                             font-family:{FONT};font-size:16px;font-weight:700;\
+                             letter-spacing:-0.2px;cursor:pointer;color:#FFFFFF;\
+                             background:{ACCENT};transition:background 0.15s;"
+                        )
+                    >"Continue"</button>
+                </div>
             </div>
         </div>
     }

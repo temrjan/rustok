@@ -1,6 +1,6 @@
-//! Create wallet — 5-step PIN wizard.
+//! Create wallet — 6-step PIN wizard.
 //!
-//! SetPin → ConfirmPin → ShowPhrase → Quiz → BackupConfirm → import → /
+//! SetPin → ConfirmPin → ShowPhrase → Quiz → BackupConfirm → import → Success → /
 
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -47,6 +47,7 @@ enum Step {
     ShowPhrase,
     Quiz,
     BackupConfirm,
+    Success,
 }
 
 // ─── CheckboxItem ─────────────────────────────────────────────────────────────
@@ -218,33 +219,40 @@ pub fn WalletPage() -> impl IntoView {
 
     // ── Create wallet ─────────────────────────────────────────────────────────
 
-    let create_wallet = {
+    let create_wallet = move |_| {
+        let ph = phrase.get_untracked().unwrap_or_default();
+        let pw = pin.get_untracked();
+        loading.set(true);
+        spawn_local(async move {
+            match tauri_invoke::<_, WalletInfo>(
+                "import_wallet_from_mnemonic",
+                &ImportArgs {
+                    phrase: ph,
+                    password: pw,
+                },
+            )
+            .await
+            {
+                // Defer auth_state + navigate until the user taps Continue
+                // on the Success screen — this gives the wizard a clean
+                // tail and matches the rust-design reference flow.
+                Ok(_) => {
+                    loading.set(false);
+                    step.set(Step::Success);
+                }
+                Err(e) => {
+                    create_error.set(Some(e));
+                    loading.set(false);
+                }
+            }
+        });
+    };
+
+    let go_home = {
         let navigate = navigate.clone();
         move |_| {
-            let ph = phrase.get_untracked().unwrap_or_default();
-            let pw = pin.get_untracked();
-            loading.set(true);
-            let navigate = navigate.clone();
-            spawn_local(async move {
-                match tauri_invoke::<_, WalletInfo>(
-                    "import_wallet_from_mnemonic",
-                    &ImportArgs {
-                        phrase: ph,
-                        password: pw,
-                    },
-                )
-                .await
-                {
-                    Ok(_) => {
-                        auth_state.set(WalletState::Unlocked);
-                        navigate("/", Default::default());
-                    }
-                    Err(e) => {
-                        create_error.set(Some(e));
-                        loading.set(false);
-                    }
-                }
-            });
+            auth_state.set(WalletState::Unlocked);
+            navigate("/", Default::default());
         }
     };
 
@@ -670,6 +678,53 @@ pub fn WalletPage() -> impl IntoView {
                     >
                         {move || if loading.get() { "Creating wallet\u{2026}" } else { "Create wallet" }}
                     </button>
+                </div>
+            </div>
+
+            // ── Step 6: Success ───────────────────────────────────────────────
+            <div style=move || format!(
+                "flex-direction:column;flex:1;display:{};",
+                if step.get() == Step::Success { "flex" } else { "none" }
+            )>
+                <div style="display:flex;flex-direction:column;align-items:center;\
+                            text-align:center;padding:48px 32px 0;flex:1;">
+                    <div style=format!(
+                        "width:96px;height:96px;border-radius:50%;\
+                         background:rgba(74,179,123,0.14);\
+                         border:1px solid rgba(74,179,123,0.32);\
+                         display:flex;align-items:center;justify-content:center;\
+                         color:{SUCCESS};"
+                    )>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2.5"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M5 13l4 4L19 7"/>
+                        </svg>
+                    </div>
+
+                    <div style=format!(
+                        "margin-top:24px;font-family:{FONT};font-size:24px;\
+                         font-weight:700;color:{BRAND};letter-spacing:-0.4px;"
+                    )>"Wallet ready"</div>
+
+                    <div style=format!(
+                        "margin-top:8px;font-family:{FONT};font-size:14px;\
+                         color:{MUTED};line-height:1.45;max-width:280px;"
+                    )>
+                        "Your recovery phrase is the only way back in. Keep it safe."
+                    </div>
+                </div>
+
+                <div style="padding:0 24px max(24px,env(safe-area-inset-bottom));">
+                    <button
+                        on:click=go_home
+                        style=format!(
+                            "width:100%;height:56px;border:none;border-radius:16px;\
+                             font-family:{FONT};font-size:16px;font-weight:700;\
+                             letter-spacing:-0.2px;cursor:pointer;color:#FFFFFF;\
+                             background:{ACCENT};transition:background 0.15s;"
+                        )
+                    >"Continue"</button>
                 </div>
             </div>
         </div>
