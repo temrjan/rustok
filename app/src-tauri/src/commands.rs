@@ -117,6 +117,14 @@ fn persist_keyring(
 ) -> Result<WalletInfo, String> {
     let address = keyring.address();
 
+    // Lock FIRST to prevent concurrent wallet creation from interleaving
+    // filesystem operations (delete old → write new) and leaving stale
+    // keystore files or losing the wallet entirely.
+    let mut wallet_lock = state
+        .wallet
+        .lock()
+        .map_err(|e| format!("state lock: {e}"))?;
+
     let data_dir = app_handle
         .path()
         .app_data_dir()
@@ -147,13 +155,9 @@ fn persist_keyring(
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&keystore_path, std::fs::Permissions::from_mode(0o600));
+        std::fs::set_permissions(&keystore_path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("failed to restrict keystore permissions: {e}"))?;
     }
-
-    let mut wallet_lock = state
-        .wallet
-        .lock()
-        .map_err(|e| format!("state lock: {e}"))?;
     *wallet_lock = Some(WalletState {
         keyring,
         keystore_path,

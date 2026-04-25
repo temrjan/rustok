@@ -79,6 +79,7 @@
 - **PR #2** — `audit/kimi-k2.5-fixes` (a11y WCAG fixes, zeroize biometric password, interval/listener leak fix, BalanceHidden toggle)
 - **A1** — BIP-39 autocomplete в restore.rs (cursor-aware insertion, controlled textarea)
 - **A2** — "Scan Again" кнопка на Analyze (resets result without leaving page)
+- **Security audit fixes** — txguard unknown selector bypass, scam checks in approval/permit/transferFrom, zeroize leaks (B256 stack, biometric password, mnemonic), frontend cancel tokens for all async signal writes
 
 ### 📋 Known gaps (не блокеры)
 
