@@ -11,7 +11,7 @@ use tauri::AppHandle;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod platform {
     use super::*;
-    use tauri_plugin_keystore::{models::*, KeystoreExt};
+    use tauri_plugin_keystore::{KeystoreExt, RemoveRequest, RetrieveRequest, StoreRequest};
 
     const SERVICE: &str = "com.rustok.app";
     const USER: &str = "biometric";
