@@ -115,13 +115,34 @@ To opt in:
 
 ---
 
-## 4. CI/CD (future work)
+## 4. CI/CD
 
-Automated Android release via GitHub Actions is planned (see `A5.3` and `A5.4` in `docs/SESSION.md`).
+### 4.1 GitHub Actions — Release Build
 
-When ready, the workflow will:
-1. Build signed AAB from GitHub Secrets
-2. Upload to Google Play Internal Testing track automatically
+The repository includes `.github/workflows/android-release.yml`:
+
+1. Go to **Actions → Android Release Build → Run workflow**
+2. Optionally enable **Build universal AAB for all ABIs** (default: `false`, builds `aarch64` only)
+3. The workflow produces a **signed release AAB** artifact
+
+**Required GitHub Secrets:**
+
+| Secret | Description |
+|--------|-------------|
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded release keystore file |
+| `ANDROID_KEY_ALIAS` | Key alias inside the keystore |
+| `ANDROID_KEY_PASSWORD` | Password for the keystore and key |
+
+**To encode your keystore:**
+
+```bash
+base64 -i ~/Keys/rustok-release.keystore | pbcopy
+# Paste into GitHub Secret ANDROID_KEYSTORE_BASE64
+```
+
+### 4.2 Automated Play Console Upload (future work)
+
+See `A5.4` in `docs/SESSION.md` — automated upload to Google Play Internal Testing track is planned.
 
 ---
 
