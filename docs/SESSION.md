@@ -106,7 +106,7 @@
 | A1 | ~~BIP-39 autocomplete в restore.rs~~ ✅ | `pages/restore.rs` | Medium | — |
 | A2 | ~~"Scan Again" кнопка на Analyze~~ ✅ | `pages/analyze.rs` | Low | — |
 | A3 | ~~Biometric testing + enrollment docs~~ ✅ | `docs/TESTING.md` | Low | Enrollment guide added; manual testing pending |
-| A4 | **Privacy policy page** | новый `pages/privacy.rs` | Low | Нет |
+| A4 | ~~Privacy policy page~~ ✅ | `settings.rs` → external link | Low | Link to rustokwallet.com/privacy |
 | A5 | **Google Play Internal Testing release** | signing, CI | Medium | Release signing keys |
 
 **A1 — BIP-39 autocomplete (приоритет #1):**

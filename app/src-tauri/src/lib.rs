@@ -32,7 +32,9 @@ fn init_tracing() {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     init_tracing();
-    let builder = tauri::Builder::default().plugin(tauri_plugin_clipboard_manager::init());
+    let builder = tauri::Builder::default()
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_shell::init());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_biometric::init());
     #[cfg(mobile)]

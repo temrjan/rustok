@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use crate::app::{BalanceHidden, ThemeKind, WalletState};
 use crate::bridge::tauri_invoke;
-use crate::components::icons::{IconChevronRight, IconEye, IconEyeOff, IconFaceId, IconLock, IconPlus};
+use crate::components::icons::{IconArrowUpRight, IconChevronRight, IconEye, IconEyeOff, IconFaceId, IconLock, IconPlus};
 use crate::tokens::{self as t, rw_radius, rw_type};
 
 #[derive(Serialize)]
@@ -220,6 +220,25 @@ pub fn SettingsPage() -> impl IntoView {
                 />
             </Section>
 
+            // ── About ───────────────────────────────────────
+            <SectionTitle label="About"/>
+            <Section>
+                <LinkRow
+                    label="Privacy Policy"
+                    icon=IconKind::ArrowUpRight
+                    on_click=Callback::new(move |_| {
+                        spawn_local(async move {
+                            #[derive(Serialize)]
+                            struct OpenArgs { path: String }
+                            let _ = tauri_invoke::<_, ()>(
+                                "plugin:shell|open",
+                                &OpenArgs { path: "https://rustokwallet.com/privacy".into() },
+                            ).await;
+                        });
+                    })
+                />
+            </Section>
+
             // ── Footer ──────────────────────────────────────
             <div style=format!(
                 "margin-top:24px;text-align:center;font-family:{family};\
@@ -280,6 +299,7 @@ enum IconKind {
     Plus,
     Eye,
     EyeOff,
+    ArrowUpRight,
 }
 
 #[component]
@@ -292,6 +312,7 @@ fn RowIcon(kind: IconKind) -> impl IntoView {
         IconKind::Plus => view! { <IconPlus size=18 stroke_width=2.0 color=color/> }.into_any(),
         IconKind::Eye => view! { <IconEye size=18 stroke_width=2.0 color=color/> }.into_any(),
         IconKind::EyeOff => view! { <IconEyeOff size=18 stroke_width=2.0 color=color/> }.into_any(),
+        IconKind::ArrowUpRight => view! { <IconArrowUpRight size=18 stroke_width=2.0 color=color/> }.into_any(),
     };
     view! {
         <div style=format!(
@@ -321,6 +342,30 @@ fn NavRow(
                 white = t::css::TEXT,
             )>{label}</span>
             <IconChevronRight size=16 stroke_width=2.0 color=t::NEUTRAL_SOFT.to_string()/>
+        </button>
+    }
+}
+
+#[component]
+fn LinkRow(
+    label: &'static str,
+    icon: IconKind,
+    #[prop(into)] on_click: Callback<()>,
+) -> impl IntoView {
+    view! {
+        <button
+            on:click=move |_| on_click.run(())
+            style="width:100%;display:flex;align-items:center;gap:14px;\
+                   padding:14px 16px;background:transparent;border:none;cursor:pointer;"
+        >
+            <RowIcon kind=icon/>
+            <span style=format!(
+                "flex:1;text-align:left;font-family:{family};font-size:14px;\
+                 color:{white};font-weight:500;letter-spacing:-0.1px;",
+                family = rw_type::FAMILY,
+                white = t::css::TEXT,
+            )>{label}</span>
+            <IconArrowUpRight size=16 stroke_width=2.0 color=t::NEUTRAL_SOFT.to_string()/>
         </button>
     }
 }
