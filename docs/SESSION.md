@@ -90,7 +90,7 @@
 | Router игнорирует L2 data fees | `router/` | Actual cost may be higher |
 | No token support | — | ETH only, Phase 4+ |
 | Multiple keystores → unlock picks first | `commands.rs` | Fixed, но архитектура single-wallet |
-| No "Scan Again" button | `analyze.rs` | Consider #8 в REVIEW.md |
+| ~~No "Scan Again" button~~ | `analyze.rs` | ✅ Done |
 | Biometric не протестирован на реальном устройстве | — | Требует enrollment |
 
 ---
@@ -258,5 +258,5 @@ adb logcat -s rustok:V
 
 ---
 
-*Документ создан: 2026-04-25. Последняя сессия: audit fixes (PR #2) + theme parity (v0.1.2).*
-*Следующий приоритет: A1 — BIP-39 autocomplete в restore.rs.*
+*Документ создан: 2026-04-25. Последняя сессия: BIOMETRIC_KEY hardcoded → platform-native secure storage (Android Keystore / iOS Keychain / desktop keyring).*
+*Следующий приоритет: A3 — Biometric testing + enrollment docs, или A4 — Privacy policy page.*
