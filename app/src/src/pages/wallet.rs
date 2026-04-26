@@ -63,14 +63,7 @@ fn CheckboxItem(checked: RwSignal<bool>, label: &'static str) -> impl IntoView {
                  cursor:pointer;"
             )
         >
-            <div style=move || format!(
-                "width:22px;height:22px;border-radius:6px;flex-shrink:0;\
-                 border:2px solid {};background:{};\
-                 display:flex;align-items:center;justify-content:center;\
-                 transition:all 0.15s;margin-top:1px;",
-                if checked.get() { ACCENT } else { SURFACE_BORDER },
-                if checked.get() { ACCENT } else { "transparent" },
-            )>
+            <div class=move || if checked.get() { "rw-check-box rw-check-box-checked" } else { "rw-check-box" }>
                 {move || checked.get().then(|| view! {
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
                         stroke="#FFFFFF" stroke-width="3"
@@ -266,10 +259,7 @@ pub fn WalletPage() -> impl IntoView {
         )>
 
             // ── Step 1: SetPin ────────────────────────────────────────────────
-            <div style=move || format!(
-                "flex-direction:column;flex:1;display:{};",
-                if step.get() == Step::SetPin { "flex" } else { "none" }
-            )>
+            <div class=move || if step.get() == Step::SetPin { "rw-step rw-step-active" } else { "rw-step" }>
                 <div style="display:flex;flex-direction:column;\
                             align-items:center;padding:32px 24px 0;">
                     <div style=format!(
@@ -306,10 +296,7 @@ pub fn WalletPage() -> impl IntoView {
             </div>
 
             // ── Step 2: ConfirmPin ────────────────────────────────────────────
-            <div style=move || format!(
-                "flex-direction:column;flex:1;display:{};",
-                if step.get() == Step::ConfirmPin { "flex" } else { "none" }
-            )>
+            <div class=move || if step.get() == Step::ConfirmPin { "rw-step rw-step-active" } else { "rw-step" }>
                 <div style="display:flex;flex-direction:column;\
                             align-items:center;padding:32px 24px 0;">
                     <div style=move || format!(
@@ -349,10 +336,7 @@ pub fn WalletPage() -> impl IntoView {
             </div>
 
             // ── Step 3: ShowPhrase ────────────────────────────────────────────
-            <div style=move || format!(
-                "flex-direction:column;flex:1;display:{};",
-                if step.get() == Step::ShowPhrase { "flex" } else { "none" }
-            )>
+            <div class=move || if step.get() == Step::ShowPhrase { "rw-step rw-step-active" } else { "rw-step" }>
                 <div style="padding:0 24px;">
                     <button
                         on:click=move |_| {
@@ -411,9 +395,8 @@ pub fn WalletPage() -> impl IntoView {
 
                 // Word grid with blur overlay
                 <div style="position:relative;margin:16px 24px 0;">
-                    <div style=move || format!(
-                        "display:grid;grid-template-columns:1fr 1fr;gap:8px;\
-                         filter:{};transition:filter 0.2s;user-select:none;",
+                    <div class="mnemonic-grid" style=move || format!(
+                        "filter:{};transition:filter 0.2s;user-select:none;",
                         if phrase_revealed.get() { "none" } else { "blur(6px)" }
                     )>
                         {move || phrase.get().map(|p| {
@@ -485,10 +468,7 @@ pub fn WalletPage() -> impl IntoView {
             </div>
 
             // ── Step 4: Quiz ──────────────────────────────────────────────────
-            <div style=move || format!(
-                "flex-direction:column;flex:1;display:{};",
-                if step.get() == Step::Quiz { "flex" } else { "none" }
-            )>
+            <div class=move || if step.get() == Step::Quiz { "rw-step rw-step-active" } else { "rw-step" }>
                 <div style="padding:0 24px;">
                     <button
                         on:click=move |_| {
@@ -583,17 +563,7 @@ pub fn WalletPage() -> impl IntoView {
                                                     );
                                                 }
                                             }
-                                            style=move || format!(
-                                                "padding:14px;\
-                                                 border:1.5px solid {};\
-                                                 border-radius:12px;background:{};\
-                                                 font-family:{FONT};font-size:15px;\
-                                                 font-weight:500;color:{};\
-                                                 cursor:pointer;transition:all 0.15s;",
-                                                if quiz_wrong.get() { DANGER } else { SURFACE_BORDER },
-                                                if quiz_wrong.get() { DANGER_BG } else { "#FFFFFF" },
-                                                if quiz_wrong.get() { DANGER } else { BRAND },
-                                            )
+                                            class=move || if quiz_wrong.get() { "rw-quiz-option rw-quiz-option-wrong" } else { "rw-quiz-option" }
                                         >
                                             {opt}
                                         </button>
@@ -607,10 +577,7 @@ pub fn WalletPage() -> impl IntoView {
             </div>
 
             // ── Step 5: BackupConfirm ─────────────────────────────────────────
-            <div style=move || format!(
-                "flex-direction:column;flex:1;display:{};",
-                if step.get() == Step::BackupConfirm { "flex" } else { "none" }
-            )>
+            <div class=move || if step.get() == Step::BackupConfirm { "rw-step rw-step-active" } else { "rw-step" }>
                 <div style="padding:0 24px;">
                     <button
                         on:click=move |_| {
@@ -682,10 +649,7 @@ pub fn WalletPage() -> impl IntoView {
             </div>
 
             // ── Step 6: Success ───────────────────────────────────────────────
-            <div style=move || format!(
-                "flex-direction:column;flex:1;display:{};",
-                if step.get() == Step::Success { "flex" } else { "none" }
-            )>
+            <div class=move || if step.get() == Step::Success { "rw-step rw-step-active" } else { "rw-step" }>
                 <WizardSuccess
                     title="Wallet ready"
                     subtitle="Your recovery phrase is the only way back in. Keep it safe."

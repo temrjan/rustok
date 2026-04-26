@@ -17,6 +17,10 @@ use crate::tokens::{self as t, rw_radius, rw_type};
 /// `dark = true` (default) renders a dark button on light surfaces
 /// (e.g. the Continue button on a white sheet). `dark = false` renders a
 /// white-on-dark button (e.g. the primary CTA on the dark Welcome screen).
+///
+/// Uses CSS classes for Android WebView compatibility — reactive inline
+/// styles (`style=move || { ... }`) are not reliably applied in Android
+/// WebView (Chrome 123+ inside Tauri 2.0).
 #[component]
 pub fn PrimaryButton(
     /// Button label / inner content.
@@ -30,47 +34,24 @@ pub fn PrimaryButton(
     /// Render dark-on-light (`true`) or light-on-dark (`false`).
     #[prop(optional, default = true)]
     dark: bool,
-    /// Extra inline style override (merged at end).
+    /// Extra inline style override (applied as a static attribute).
     #[prop(into, optional, default = String::new())]
     style: String,
 ) -> impl IntoView {
-    let extra = std::sync::Arc::new(style);
-
-    let full_style = {
-        let extra = std::sync::Arc::clone(&extra);
-        move || {
-            let is_disabled = disabled.get();
-            let (bg, color, shadow) = match (is_disabled, dark) {
-                (true, true) => ("rgba(10,17,35,0.35)".to_string(), t::WHITE, "none"),
-                (true, false) => ("rgba(131,135,195,0.4)".to_string(), t::BRAND, "none"),
-                (false, true) => (t::BRAND.to_string(), t::WHITE, t::SHADOW_BTN),
-                (false, false) => (
-                    "linear-gradient(180deg, #FFFFFF 0%, #F6F7FB 100%)".to_string(),
-                    t::BRAND,
-                    "0 10px 28px rgba(131,135,195,0.35), 0 2px 6px rgba(10,17,35,0.3)",
-                ),
-            };
-            let cursor = if is_disabled {
-                "not-allowed"
-            } else {
-                "pointer"
-            };
-            format!(
-                "width:100%;height:56px;background:{bg};color:{color};\
-                 border:none;border-radius:{radius}px;font-family:{family};\
-                 font-size:16px;font-weight:{semibold};letter-spacing:-0.2px;\
-                 cursor:{cursor};transition:all 0.15s;box-shadow:{shadow};{extra}",
-                radius = rw_radius::LG,
-                family = rw_type::FAMILY,
-                semibold = rw_type::SEMIBOLD,
-                extra = extra.as_str(),
-            )
+    let class_str = move || {
+        let is_disabled = disabled.get();
+        match (is_disabled, dark) {
+            (true, true)  => "rw-btn-primary-dark",
+            (true, false) => "rw-btn-primary-light",
+            (false, true) => "rw-btn-primary-dark",
+            (false, false)=> "rw-btn-primary-light",
         }
     };
 
     view! {
         <button
-            style=full_style
+            class=class_str
+            style=style
             prop:disabled=move || disabled.get()
             on:click=move |_| {
                 if !disabled.get_untracked() {
@@ -111,6 +92,10 @@ pub fn SecondaryButton(
 }
 
 /// Flat text button — used for inline links and ghost CTAs.
+///
+/// Uses a static CSS class for layout and an inline `color` override.
+/// The inline `style` is built once at mount time (not reactive), so it
+/// is safe on Android WebView.
 #[component]
 pub fn TextButton(
     /// Button label / inner content.
@@ -121,21 +106,16 @@ pub fn TextButton(
     /// Text color. Defaults to white (for dark backgrounds).
     #[prop(into, optional, default = t::WHITE.to_string())]
     color: String,
-    /// Extra inline style override (merged at end).
+    /// Extra inline style override (applied statically).
     #[prop(into, optional, default = String::new())]
     style: String,
 ) -> impl IntoView {
-    let full_style = format!(
-        "background:transparent;border:none;color:{color};\
-         font-family:{family};font-size:15px;font-weight:{semibold};\
-         cursor:pointer;padding:12px;{extra}",
-        family = rw_type::FAMILY,
-        semibold = rw_type::SEMIBOLD,
-        extra = style,
-    );
-
     view! {
-        <button style=full_style on:click=move |_| on_click.run(())>
+        <button
+            class="rw-btn-text"
+            style=format!("color:{color};{extra}", color = color, extra = style)
+            on:click=move |_| on_click.run(())
+        >
             {children()}
         </button>
     }
