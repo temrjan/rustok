@@ -1,5 +1,6 @@
 #![deny(clippy::await_holding_lock)]
 
+mod biometric_storage;
 mod commands;
 
 use commands::AppState;
@@ -34,6 +35,8 @@ pub fn run() {
     let builder = tauri::Builder::default().plugin(tauri_plugin_clipboard_manager::init());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_biometric::init());
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_keystore::init());
     builder
         .manage(AppState {
             provider: MultiProvider::default_chains(),

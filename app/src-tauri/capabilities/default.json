@@ -5,6 +5,7 @@
   "permissions": [
     "core:default",
     "biometric:default",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "keystore:default"
   ]
 }

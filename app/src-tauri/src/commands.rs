@@ -474,130 +474,90 @@ pub async fn get_transaction_history(
 // ─── Biometric unlock ─────────────────────────────────────────────
 //
 // Security model:
-// - iOS app sandbox prevents other apps from reading biometric.dat.
-// - Biometric prompt (Face ID / Touch ID) prevents unauthorized local access.
-// - AES-256-GCM provides at-rest obfuscation, NOT a cryptographic boundary.
-//   The key is app-static — the real protection is the sandbox + biometric.
+// - Password is stored directly in OS-native secure storage.
+// - Mobile: Android Keystore / iOS Keychain (via tauri-plugin-keystore).
+// - Desktop: system keyring (via keyring crate).
+// - No app-static encryption key. Legacy biometric.dat is cleaned up on disable.
 
-/// Static obfuscation key for biometric password storage.
-/// NOT a security boundary — see module-level comment.
-const BIOMETRIC_KEY: &[u8; 32] = b"rustok-biometric-storage-key-v1!";
-const BIOMETRIC_FILE: &str = "biometric.dat";
+/// Marker file indicating that biometric unlock has been enabled.
+/// The file itself is empty and contains no secrets; it exists solely so that
+/// `is_biometric_enabled` can check status without querying secure storage
+/// (which on mobile would trigger a biometric prompt).
+const BIOMETRIC_ENABLED_FILE: &str = "biometric.enabled";
 
-/// Check if biometric unlock is enabled (stored password file exists).
+/// Check if biometric unlock is enabled by looking for the marker file.
 #[tauri::command]
 pub async fn is_biometric_enabled(app_handle: tauri::AppHandle) -> Result<bool, String> {
     let data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("no app data dir: {e}"))?;
-    Ok(data_dir.join(BIOMETRIC_FILE).exists())
+    Ok(data_dir.join(BIOMETRIC_ENABLED_FILE).exists())
 }
 
-/// Store encrypted password for biometric unlock.
+/// Store password for biometric unlock in platform-native secure storage.
 /// Called after user successfully unlocks with password + confirms biometric.
 #[tauri::command]
 pub async fn enable_biometric_unlock(
     password: String,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    use aes_gcm::{
-        aead::{Aead, KeyInit},
-        Aes256Gcm, Nonce,
-    };
-    use rand::RngCore;
     use zeroize::Zeroizing;
 
-    // Wrap password in Zeroizing so it's cleared from memory when dropped.
     let password = Zeroizing::new(password);
+    crate::biometric_storage::store_password(&app_handle, &password)?;
 
-    let mut nonce_bytes = [0u8; 12];
-    rand::thread_rng().fill_bytes(&mut nonce_bytes);
-
-    let cipher =
-        Aes256Gcm::new_from_slice(BIOMETRIC_KEY).map_err(|e| format!("cipher init: {e}"))?;
-    let nonce = Nonce::from(nonce_bytes);
-    let ciphertext = cipher
-        .encrypt(&nonce, password.as_bytes())
-        .map_err(|e| format!("encrypt: {e}"))?;
-
-    let mut blob = Vec::with_capacity(12 + ciphertext.len());
-    blob.extend_from_slice(&nonce_bytes);
-    blob.extend_from_slice(&ciphertext);
-
+    // Create marker file so `is_biometric_enabled` can check without prompting.
     let data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("no app data dir: {e}"))?;
     std::fs::create_dir_all(&data_dir).map_err(|e| format!("create dir: {e}"))?;
-
-    let path = data_dir.join(BIOMETRIC_FILE);
-    std::fs::write(&path, &blob).map_err(|e| format!("write biometric.dat: {e}"))?;
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-    }
+    let marker = data_dir.join(BIOMETRIC_ENABLED_FILE);
+    std::fs::write(&marker, []).map_err(|e| format!("write marker: {e}"))?;
 
     Ok(())
 }
 
-/// Remove stored biometric password.
+/// Remove stored biometric password from secure storage.
 #[tauri::command]
 pub async fn disable_biometric_unlock(app_handle: tauri::AppHandle) -> Result<(), String> {
+    crate::biometric_storage::remove_password(&app_handle)?;
+
     let data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("no app data dir: {e}"))?;
-    let path = data_dir.join(BIOMETRIC_FILE);
-    if path.exists() {
-        std::fs::remove_file(&path).map_err(|e| format!("remove biometric.dat: {e}"))?;
+
+    // Remove marker file.
+    let marker = data_dir.join(BIOMETRIC_ENABLED_FILE);
+    if marker.exists() {
+        let _ = std::fs::remove_file(&marker);
+    }
+
+    // Clean up legacy biometric.dat if it exists.
+    let legacy = data_dir.join("biometric.dat");
+    if legacy.exists() {
+        let _ = std::fs::remove_file(&legacy);
     }
     Ok(())
 }
 
-/// Unlock wallet using stored biometric password.
-/// Frontend must call plugin:biometric|authenticate BEFORE this command.
+/// Unlock wallet using the biometric-stored password.
+/// On mobile the secure storage itself triggers the biometric prompt.
 #[tauri::command]
 pub async fn biometric_unlock_wallet(
     app_handle: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<WalletInfo, String> {
-    use aes_gcm::{
-        aead::{Aead, KeyInit},
-        Aes256Gcm, Nonce,
-    };
     use zeroize::Zeroizing;
 
-    // 1. Read biometric.dat.
+    let password = Zeroizing::new(crate::biometric_storage::retrieve_password(&app_handle)?);
+
     let data_dir = app_handle
         .path()
         .app_data_dir()
         .map_err(|e| format!("no app data dir: {e}"))?;
-    let blob = std::fs::read(data_dir.join(BIOMETRIC_FILE))
-        .map_err(|_| "biometric not enabled — unlock with password first".to_string())?;
-
-    if blob.len() < 13 {
-        return Err("corrupted biometric data".into());
-    }
-
-    // 2. Decrypt password.
-    let nonce =
-        Nonce::from(<[u8; 12]>::try_from(&blob[..12]).map_err(|_| "invalid nonce".to_string())?);
-    let cipher =
-        Aes256Gcm::new_from_slice(BIOMETRIC_KEY).map_err(|e| format!("cipher init: {e}"))?;
-    let password_bytes = Zeroizing::new(
-        cipher
-            .decrypt(&nonce, &blob[12..])
-            .map_err(|_| "failed to decrypt biometric data — re-enable biometric".to_string())?,
-    );
-    let password = Zeroizing::new(
-        String::from_utf8(password_bytes.to_vec())
-            .map_err(|_| "corrupted password data".to_string())?,
-    );
-
-    // 3. Unlock wallet with decrypted password.
     unlock_with_password(&password, &data_dir, &state)
 }
 

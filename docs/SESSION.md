@@ -76,10 +76,11 @@
 
 ### 🔄 Что в работе / PR
 
-- **PR #2** — `audit/kimi-k2.5-fixes` (a11y WCAG fixes, zeroize biometric password, interval/listener leak fix, BalanceHidden toggle)
-- **A1** — BIP-39 autocomplete в restore.rs (cursor-aware insertion, controlled textarea)
-- **A2** — "Scan Again" кнопка на Analyze (resets result without leaving page)
+- **PR #2** — `audit/kimi-k2.5-fixes` merged (a11y WCAG fixes, zeroize biometric password, interval/listener leak fix, BalanceHidden toggle)
+- **A1** — BIP-39 autocomplete в restore.rs ✅
+- **A2** — "Scan Again" кнопка на Analyze ✅
 - **Security audit fixes** — txguard unknown selector bypass, scam checks in approval/permit/transferFrom, zeroize leaks (B256 stack, biometric password, mnemonic), frontend cancel tokens for all async signal writes
+- **BIOMETRIC_KEY hardcoded** — заменён на platform-native secure storage (Android Keystore / iOS Keychain / desktop keyring). Убран `aes-gcm` и `biometric.dat`.
 
 ### 📋 Known gaps (не блокеры)
 
