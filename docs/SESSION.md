@@ -73,6 +73,7 @@
 - **CI** — GitHub Actions 5 jobs, все зелёные
 - **Infra** — API live (`api.rustokwallet.com`), landing live (`rustokwallet.com`), Cloudflare Worker (`rpc.rustokwallet.com`)
 - **Cloudflare proxy toggle** — runtime switch via Settings → Network, marker file persistence, tokio::fs I/O
+- **Android upload key** — documented in `docs/ANDROID-RELEASE.md` §6 (`~/Keys/rustok-release.jks`, SHA1 registered with Google Play)
 - **Audit fixes** — PR #2 open (a11y, security, leak fixes, balance hidden toggle)
 
 ### 🔄 Что в работе / PR

@@ -187,3 +187,29 @@ Enable **Upload to Google Play Console** in the workflow dispatch options.
 | `Invalid keystore format` | Ensure the keystore path is absolute or relative to `gen/android/` |
 | Build fails with NDK error | Install Android NDK via Android Studio or `sdkmanager` |
 | AAB too large | Enable ProGuard (already enabled in `build.gradle.kts` release builds) |
+
+---
+
+## 6. Upload Key Reference (DO NOT CHANGE)
+
+> **For AI agents and future sessions:** This section documents the exact upload key registered with Google Play Console. Do not generate a new keystore — it will be rejected.
+
+| Property | Value |
+|----------|-------|
+| **Keystore file** | `~/Keys/rustok-release.jks` |
+| **Key alias** | `rustok` |
+| **Password source** | `~/Keys/rustok-release.password` or `app/src-tauri/gen/android/keystore.properties` |
+| **Expected SHA1** (Google Play) | `E4:20:40:0C:FF:00:8F:B6:6B:43:FB:64:08:D1:08:29:44:9C:90:35` |
+| **GitHub Secret** | `ANDROID_KEYSTORE_BASE64` = base64 of `~/Keys/rustok-release.jks` |
+
+**Wrong keystore (do NOT use):**
+- `~/Keys/rustok-release.keystore` — created by mistake during session 2026-04-26, SHA1 mismatch
+
+**To verify the correct keystore:**
+```bash
+keytool -list -v \
+  -keystore ~/Keys/rustok-release.jks \
+  -alias rustok \
+  -storepass "$(cat ~/Keys/rustok-release.password)" \
+  | grep "SHA1:"
+```
