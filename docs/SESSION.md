@@ -79,6 +79,9 @@
 - **PR #2** — `audit/kimi-k2.5-fixes` merged (a11y WCAG fixes, zeroize biometric password, interval/listener leak fix, BalanceHidden toggle)
 - **A1** — BIP-39 autocomplete в restore.rs ✅
 - **A2** — "Scan Again" кнопка на Analyze ✅
+- **A3** — Biometric enrollment guide в TESTING.md ✅
+- **A4** — Privacy Policy link в Settings (открывает rustokwallet.com/privacy) ✅
+- **A5.1** — Security fix: keystore.properties убран из Git, добавлен example + docs/ANDROID-RELEASE.md ✅
 - **Security audit fixes** — txguard unknown selector bypass, scam checks in approval/permit/transferFrom, zeroize leaks (B256 stack, biometric password, mnemonic), frontend cancel tokens for all async signal writes
 - **BIOMETRIC_KEY hardcoded** — заменён на platform-native secure storage (Android Keystore / iOS Keychain / desktop keyring). Убран `aes-gcm` и `biometric.dat`.
 
@@ -261,5 +264,5 @@ adb logcat -s rustok:V
 
 ---
 
-*Документ создан: 2026-04-25. Последняя сессия: BIOMETRIC_KEY hardcoded → platform-native secure storage (Android Keystore / iOS Keychain / desktop keyring).*
-*Следующий приоритет: A3 — Biometric testing + enrollment docs, или A4 — Privacy policy page.*
+*Документ создан: 2026-04-25. Последняя сессия: A3 (biometric docs) + A4 (privacy link) + A5.1 (keystore security) + AGENTS.md principles update.*
+*Следующий приоритет: A5.2 — CI foundation: Android debug build.*
