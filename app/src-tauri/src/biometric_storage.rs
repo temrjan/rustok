@@ -11,7 +11,7 @@ use tauri::AppHandle;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod platform {
     use super::*;
-    use tauri_plugin_keystore::{KeystoreExt, models::*};
+    use tauri_plugin_keystore::{models::*, KeystoreExt};
 
     const SERVICE: &str = "com.rustok.app";
     const USER: &str = "biometric";
@@ -44,7 +44,6 @@ mod platform {
             })
             .map_err(|e| format!("keystore remove: {e}"))
     }
-
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -64,7 +63,9 @@ mod platform {
 
     pub fn retrieve_password(_app: &AppHandle) -> Result<String, String> {
         let entry = Entry::new(SERVICE, USER).map_err(|e| format!("keyring entry: {e}"))?;
-        entry.get_password().map_err(|e| format!("keyring get: {e}"))
+        entry
+            .get_password()
+            .map_err(|e| format!("keyring get: {e}"))
     }
 
     pub fn remove_password(_app: &AppHandle) -> Result<(), String> {
@@ -73,7 +74,6 @@ mod platform {
             .delete_credential()
             .map_err(|e| format!("keyring delete: {e}"))
     }
-
 }
 
 pub use platform::*;
