@@ -111,7 +111,7 @@
 | A3 | ~~Biometric testing + enrollment docs~~ ✅ | `docs/TESTING.md` | Low | Enrollment guide added; manual testing pending |
 | A4 | ~~Privacy policy page~~ ✅ | `settings.rs` → external link | Low | Link to rustokwallet.com/privacy |
 | A5.1 | ~~Security fix: keystore из Git~~ ✅ | `gen/android/` | Medium | keystore.properties в .gitignore, example + docs |
-| A5.2 | **CI foundation: Android debug build** | `.github/workflows/` | Medium | Проверить сборку в GitHub Actions |
+| A5.2 | ~~CI foundation: Android debug build~~ ✅ | `.github/workflows/` | Medium | Проверить сборку в GitHub Actions |
 | A5.3 | **CI signed release AAB** | GitHub Secrets | Medium | Keystore из secrets, artifact |
 | A5.4 | **Google Play automated upload** | Play Console API | Low | Сервисный аккаунт Google Play |
 
@@ -264,5 +264,5 @@ adb logcat -s rustok:V
 
 ---
 
-*Документ создан: 2026-04-25. Последняя сессия: A3 (biometric docs) + A4 (privacy link) + A5.1 (keystore security) + AGENTS.md principles update.*
-*Следующий приоритет: A5.2 — CI foundation: Android debug build.*
+*Документ создан: 2026-04-25. Последняя сессия: A5.2 (Android debug CI workflow) + biometric_storage import fix.*
+*Следующий приоритет: A5.3 — CI signed release AAB.*
