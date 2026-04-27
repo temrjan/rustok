@@ -13,6 +13,8 @@ const SURFACE_ALT: &str = "#F6F7FB";
 const ACCENT: &str = "#8387C3";
 const DANGER: &str = "#E06B6B";
 const DANGER_BG: &str = "rgba(224,107,107,0.12)";
+// Kept for the post-diagnostic restoration; see DIAGNOSTIC comment in `Keypad`.
+#[allow(dead_code)]
 const FONT: &str =
     r#"Roboto, -apple-system, "SF Pro Display", "SF Pro Text", system-ui, sans-serif"#;
 
@@ -82,9 +84,14 @@ pub fn Keypad(
     #[prop(into)]
     on_backspace: Callback<()>,
 ) -> impl IntoView {
+    // DIAGNOSTIC: font-family removed temporarily to test whether quoted font names
+    // ("SF Pro Display") inside an inline style attribute are silently breaking the
+    // attribute on Android WebView. If keypad buttons render with the cream bg and
+    // 18px radius after this change → hypothesis confirmed; the proper fix is to
+    // either escape the font string or move font-family to a CSS class.
     let btn = format!(
         "height:64px;background:{SURFACE_ALT};border:none;\
-         border-radius:18px;font-family:{FONT};font-size:28px;\
+         border-radius:18px;font-size:28px;\
          font-weight:500;color:{BRAND};cursor:pointer;\
          letter-spacing:-0.5px;transition:background 0.1s;"
     );
