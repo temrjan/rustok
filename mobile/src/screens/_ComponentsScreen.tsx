@@ -22,7 +22,6 @@ import { generateMnemonic } from 'react-native-rustok-bridge';
 import {
   Button,
   Input,
-  Modal,
   PageHeader,
   Spinner,
   Switch,
@@ -43,8 +42,6 @@ function ComponentsScreen({ onBack }: ComponentsScreenProps) {
   const insets = useSafeAreaInsets();
 
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>('idle');
-  const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
   const [switchValue, setSwitchValue] = useState(false);
   const [textValue, setTextValue] = useState('');
   const [passwordValue, setPasswordValue] = useState('');
@@ -197,26 +194,11 @@ function ComponentsScreen({ onBack }: ComponentsScreenProps) {
         </View>
       </View>
 
-      {/* ─── Modal (M2) ──────────────────────────────────── */}
-      <Text className="text-ink-muted text-xs uppercase mt-2 mb-2">
-        Modal
-      </Text>
-      <View className="mb-6 gap-2">
-        <Button
-          variant="primary"
-          onPress={() => setIsSheetOpen(true)}
-          accessibilityLabel="Open bottom sheet"
-        >
-          Open sheet (50%)
-        </Button>
-        <Button
-          variant="secondary"
-          onPress={() => setIsFullscreenOpen(true)}
-          accessibilityLabel="Open fullscreen modal"
-        >
-          Open fullscreen
-        </Button>
-      </View>
+      {/* ─── Modal (M2) — temporarily disabled in M3 ─────────────────────
+          Reanimated 4 / Worklets native bridge не initialized в текущей
+          сборке (RN 0.85 + Reanimated 4.3 + Worklets 0.8 autolink issue).
+          Restore в M4 chore commit. Source code остаётся в
+          src/components/Modal.tsx. */}
 
       {/* ─── Toast (M2) ──────────────────────────────────── */}
       <Text className="text-ink-muted text-xs uppercase mt-2 mb-2">
@@ -261,46 +243,7 @@ function ComponentsScreen({ onBack }: ComponentsScreenProps) {
         />
       </View>
 
-      {/* ─── Modals — rendered overlay-style; portal-mounted via gorhom Provider ── */}
-      <Modal
-        isOpen={isSheetOpen}
-        onClose={() => setIsSheetOpen(false)}
-        variant="sheet"
-      >
-        <Text className="text-ink-primary text-lg font-semibold mb-2">
-          Bottom sheet
-        </Text>
-        <Text className="text-ink-muted text-sm mb-4">
-          Swipe down or press Close to dismiss.
-        </Text>
-        <Button
-          variant="primary"
-          onPress={() => setIsSheetOpen(false)}
-          accessibilityLabel="Close bottom sheet"
-        >
-          Close
-        </Button>
-      </Modal>
-
-      <Modal
-        isOpen={isFullscreenOpen}
-        onClose={() => setIsFullscreenOpen(false)}
-        variant="fullscreen"
-      >
-        <Text className="text-ink-primary text-lg font-semibold mb-2">
-          Fullscreen modal
-        </Text>
-        <Text className="text-ink-muted text-sm mb-4">
-          Takes the full screen height (100% snap point).
-        </Text>
-        <Button
-          variant="primary"
-          onPress={() => setIsFullscreenOpen(false)}
-          accessibilityLabel="Close fullscreen modal"
-        >
-          Close
-        </Button>
-      </Modal>
+      {/* Modals removed in M3 — restore in M4 with Reanimated 4 fix. */}
     </ScrollView>
   );
 }

@@ -16,8 +16,19 @@
  *     <ToastProvider />     — react-native-toast-message singleton overlay
  */
 
-// Side-effect import: required by react-native-gesture-handler on Android
-// for system back gesture / native handler registration. Must be first.
+// Side-effect imports — order matters:
+// 1. react-native-gesture-handler — required on Android for system back gesture
+//    and native handler registration.
+// 2. global.css — NativeWind v4 entry; must execute before any className usage.
+//
+// TODO M4: BottomSheetModalProvider + ToastProvider временно отключены —
+// Reanimated 4 / Worklets native bridge не initialized в текущей сборке.
+// Известная проблема autolinking RN 0.85 + Reanimated 4 + Worklets 0.8.
+// Modal и Toast не используются в M3 primary user paths (navigation
+// skeleton с placeholder tabs); восстановятся в M4 chore commit вместе
+// с CI updates + jest+NativeWind babel pipeline fix + bridge mock surface.
+// _ComponentsScreen DEV catalog временно показывает Modal/Toast секции
+// без работающих кнопок — это acceptable для DEV-only.
 import 'react-native-gesture-handler';
 import './global.css';
 
@@ -25,9 +36,7 @@ import React from 'react';
 import { StatusBar, StyleSheet, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ThemeProvider } from './src/components/ThemeProvider';
-import { ToastProvider } from './src/components';
 import AppShell from './src/navigation/AppShell';
 
 function App() {
@@ -35,15 +44,12 @@ function App() {
   return (
     <ThemeProvider>
       <GestureHandlerRootView style={styles.rootFlex}>
-        <BottomSheetModalProvider>
-          <SafeAreaProvider>
-            <StatusBar
-              barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-            />
-            <AppShell />
-            <ToastProvider />
-          </SafeAreaProvider>
-        </BottomSheetModalProvider>
+        <SafeAreaProvider>
+          <StatusBar
+            barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+          />
+          <AppShell />
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     </ThemeProvider>
   );
