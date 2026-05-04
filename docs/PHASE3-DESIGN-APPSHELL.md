@@ -1,6 +1,6 @@
 # PHASE 3 — Design system + AppShell
 
-**Status:** In progress · M1 + M2 closed (5 commits) · M3 next · awaiting visual smoke (Хэд) before push
+**Status:** In progress · M1 + M2 + **M3 Commit 1 partial** (6 commits) · M3 Commit 2 + M4 next · ⚠ Reanimated 4 / Worklets init issue (см. `docs/REANIMATED-WORKLETS-INCIDENT.md`) — Modal + Toast + theme visual swap deferred to M4 chore commit fix
 **Created:** 2026-05-04
 **Owner:** temrjan
 **Source plan:** `docs/NATIVE-MIGRATION-PLAN.md` § Phase 3
@@ -88,9 +88,11 @@
 
 **Gate:** все компоненты рендерятся корректно в light + dark (visual smoke на устройстве — Хэдов финальный gate), accessibility labels на всех интерактивных, dev screen открывается через `__DEV__` button в App.tsx.
 
-### M3 — AppShell + navigation skeleton (2 commits)
+### M3 — AppShell + navigation skeleton (2 commits) — **Commit 1 PARTIAL 2026-05-04**
 
 **Goal:** структура приложения с реальным state-based роутингом.
+
+> **M3 Commit 1 (`cf2fd5b`) status:** navigation skeleton ✅ работает на устройстве (4 tabs, DEV stack routes, system-back). ⚠ Modal + Toast + theme visual swap **отключены** workaround'ом (Reanimated 4 / Worklets native init issue — см. `docs/REANIMATED-WORKLETS-INCIDENT.md`). M3 Commit 2 (3-state routing) запускаемся следующая сессия. Restoration scope добавлен в M4 expanded deliverables.
 
 **Deliverables:**
 - `<AppShell>` — `react-native-safe-area-context` + общая оболочка
@@ -110,25 +112,32 @@
 
 **Gate:** все 4 таба переключаются native gestures на Android (Pixel 8 emulator + JFLFG6MZSSL7WCF6 Xiaomi), три ветки routing'a покрыты smoke-тестами вручную, system-back на Android корректно работает. **iOS swipe-back gate откладывается до M5-iOS-Phase3 (Mac session).**
 
-### M4 — Stores + bridge wiring + init flow + CI (3 commits)
+### M4 — Stores + bridge wiring + init flow + CI + tech debt (**EXPANDED 2026-05-04**, 4-5 commits)
 
-**Goal:** stores подключены к WalletHandle, cold-start app корректно определяет state, CI обновлён.
+**Goal:** stores подключены к WalletHandle, cold-start app корректно определяет state, CI обновлён, **накопленный tech debt из M1-M3 закрыт**.
 
-**Deliverables:**
+**Deliverables (production goals):**
 - `walletStore` — address, balance, locked state, refresh actions, **error state** (на bridge throw → Toast notification)
 - `networkStore` — chainId через `getChainId()`, refresh
 - `uiStore` — `balanceHidden`, активные модалки
 - `<NetworkBadge>` — теперь с реальным store (перенесено из M2)
 - Hooks: `useWallet()`, `useNetwork()`, `useTheme()`, `useUI()` — типизированные обёртки над Zustand-селекторами
 - App init flow: при cold-start `Splash` → bridge ready → `has_wallet()` + `is_wallet_unlocked()` → store hydration → правильный route без flash
-- **CI updates:** `.github/workflows/ci.yml` — npm cache keys для новых deps, jest test step для `mobile/src/components/__tests__/` и `mobile/src/stores/__tests__/`
+
+**Deliverables (tech debt из M1-M3):**
+- **Reanimated 4 / Worklets native bridge fix** (`docs/REANIMATED-WORKLETS-INCIDENT.md` restoration checklist) — restore `BottomSheetModalProvider` + `ToastProvider` в App.tsx, `Modal` export в barrel, Modal sections в `_ComponentsScreen`. Критичный fix: theme dark variant также не применяется без Worklets, ThemeSwitcher visual broken.
+- **Component tests восстановлены** (deferred from M2) — jest setup исправляет NativeWind babel pipeline conflict, snapshot existence tests на 7 components (Button/Input/Spinner/Switch/Modal/Toast/PageHeader)
+- **App.test.tsx bridge mock surface** (broken since Phase 2) — `react-native-rustok-bridge` mock в `__mocks__/`, `App.test.tsx` снова passing
+- **CI updates:** `.github/workflows/ci.yml` — npm cache keys для новых deps (semver/cva/clsx/gorhom/gesture-handler/screens/toast-message/navigation × 3/zustand/mmkv/nitro-modules), jest test step для `mobile/src/components/__tests__/` и `mobile/src/stores/__tests__/`
 
 **Commits:**
+- `chore(mobile): restore Modal + Toast + theme visual after Worklets fix`  ← **NEW** (от incident doc)
 - `feat(mobile): wallet/network/ui stores + NetworkBadge`
 - `feat(mobile): app init flow + splash screen + bridge integration`
+- `chore(mobile): jest setup for components + restore App.test bridge mock`  ← **NEW** (deferred from M2)
 - `chore(ci): update workflows for Phase 3 mobile deps + jest`
 
-**Gate:** cold-start корректно ведёт в одну из 3 веток без flash, NetworkBadge показывает текущий chainId, balance скрывается тумблером в Settings, bridge errors попадают в Toast (не crash).
+**Gate:** cold-start корректно ведёт в одну из 3 веток без flash, NetworkBadge показывает текущий chainId, balance скрывается тумблером в Settings, bridge errors попадают в Toast (не crash), **theme dark/light/system визуально применяется**, Modal sheet/fullscreen открываются на устройстве.
 
 ---
 
@@ -335,5 +344,6 @@ Phase 3 закрыт когда **все** ниже = true:
 - **Phase 4 что блокируется:** `docs/NATIVE-MIGRATION-PLAN.md` § Phase 4 (Onboarding flow)
 - **Bridge:** `packages/react-native-rustok-bridge/` — 24 commands via WalletHandle
 - **Mobile root:** `mobile/`
+- **Incident report (M3 visual smoke):** `docs/REANIMATED-WORKLETS-INCIDENT.md` — Reanimated 4 / Worklets native init issue, attempted fixes, M4 restoration checklist
 
 > **Удалены устаревшие refs:** `docs/COMPONENTS.md` (помечен в CLAUDE.md как deprecated, удаляется в Phase 8), `docs/REDESIGN.md` (status неясен — verify в M1 spike перед использованием).
