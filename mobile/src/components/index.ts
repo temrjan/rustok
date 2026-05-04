@@ -11,4 +11,5 @@ export { Modal } from './Modal';
 export { PageHeader } from './PageHeader';
 export { Spinner } from './Spinner';
 export { Switch } from './Switch';
+export { ThemeSwitcher } from './ThemeSwitcher';
 export { toast, ToastProvider } from './Toast';

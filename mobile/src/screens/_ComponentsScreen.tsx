@@ -19,7 +19,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { generateMnemonic } from 'react-native-rustok-bridge';
-import { useThemeStore, VALID_MODES } from '../stores/themeStore';
 import {
   Button,
   Input,
@@ -27,6 +26,7 @@ import {
   PageHeader,
   Spinner,
   Switch,
+  ThemeSwitcher,
   toast,
 } from '../components';
 
@@ -41,8 +41,6 @@ const BUTTON_SIZES = ['sm', 'md', 'lg'] as const;
 
 function ComponentsScreen({ onBack }: ComponentsScreenProps) {
   const insets = useSafeAreaInsets();
-  const mode = useThemeStore((s) => s.mode);
-  const setMode = useThemeStore((s) => s.setMode);
 
   const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus>('idle');
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -93,31 +91,10 @@ function ComponentsScreen({ onBack }: ComponentsScreenProps) {
         Phase 3 M2 — component library catalog
       </Text>
 
-      {/* ─── Theme mode (M1) ─────────────────────────────── */}
+      {/* ─── Theme mode (M1, refactored to shared ThemeSwitcher in M3) ── */}
       <Text className="text-ink-muted text-xs uppercase mb-2">Theme mode</Text>
-      <View
-        accessibilityRole="radiogroup"
-        accessibilityLabel="Theme mode"
-        className="mb-6"
-      >
-        {VALID_MODES.map((m) => {
-          const selected = mode === m;
-          return (
-            <TouchableOpacity
-              key={m}
-              accessibilityRole="radio"
-              accessibilityState={{ selected }}
-              accessibilityLabel={`Theme mode ${m}`}
-              onPress={() => setMode(m)}
-              className="py-3 flex-row items-center"
-            >
-              <Text className="text-ink-primary text-base">
-                {selected ? '● ' : '○ '}
-                {m}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+      <View className="mb-6">
+        <ThemeSwitcher />
       </View>
 
       {/* ─── Bridge smoke (M1) ───────────────────────────── */}
