@@ -2,7 +2,7 @@
 
 **Дата:** 2026-05-04
 **Phase:** 3 M3 (AppShell + navigation skeleton) visual smoke
-**Status:** Active — workaround applied, real fix deferred to M4 chore commit
+**Status:** **RESOLVED 2026-05-05 (M4 C1)** — see Resolution section below. Dark-theme side effect is a separate bug, deferred to M4 C1.5.
 **Affected device:** JFLFG6MZSSL7WCF6 (Xiaomi Redmi, Android)
 
 ---
@@ -97,7 +97,7 @@ Cascade #3 — следствие #1+#2: Worklets native bridge не иници�
 
 ---
 
-## Hypothesis (root cause не подтверждён)
+## Hypothesis (исходная — частично неверна, см. Resolution)
 
 NativeWind v4 / react-native-css-interop использует Reanimated 4 worklets для:
 1. CSS variable swapping (theme variant resolution)
@@ -110,6 +110,36 @@ Possible reasons (не verified):
 - Conflict с `react-native-nitro-modules` (peer для MMKV) — Worklets тоже C++ Nitro module
 - Reanimated 4 ожидает explicit init point, который не triggered (например `import 'react-native-reanimated'` в `index.js` entry, а не в App.tsx)
 - Hermes engine + RN 0.85 имеет regressed JSI install order
+
+> **Update 2026-05-05:** «Autolinking config issue» оказалось верной строкой. Конкретный механизм и фикс — ниже.
+> «NativeWind dark variant resolution также depends на Worklets» (Появление #3) **оказалось НЕВЕРНЫМ** — после восстановления Worklets bridge dark theme всё равно не применяется. Это отдельный баг (M4 C1.5).
+
+---
+
+## Resolution (M4 C1, 2026-05-05)
+
+**Root cause (verified):** `react-native-worklets` и `react-native-reanimated` присутствовали в `<repo-root>/node_modules/` (npm workspaces hoist из NativeWind transitive deps), но **не были объявлены как explicit `dependencies` в `mobile/package.json`**. React Native 0.85 autolinking сканирует `dependencies` именно workspace package.json (а не весь hoisted dependency tree) → пакеты пропускались → `librnworklets.so` / `libreanimated.so` НЕ собирались gradle и НЕ пакетировались в APK → `WorkletsTurboModule.installInRuntime()` не находил native counterpart → "Worklets not initialized" на module load → cascade в gorhom/bottom-sheet undefined exports.
+
+**Доказательство:** до фикса `gradle app:installDebug` build graph не содержал `:react-native-worklets:buildCMakeDebug` и `:react-native-reanimated:buildCMakeDebug` (видны были только mmkv, nitro-modules, rustok-bridge, safe-area-context, screens). После добавления explicit deps те же tasks появились для всех 4 ABI (`arm64-v8a`, `armeabi-v7a`, `x86`, `x86_64`).
+
+**Fix applied:**
+1. `mobile/package.json` — добавить explicit `"react-native-reanimated": "^4.3.0"` и `"react-native-worklets": "^0.8.1"` в `dependencies`.
+2. `mobile/index.js` — `import 'react-native-worklets';` первой строкой (entry-point timing — не App.tsx; раньше attempt #6 в App.tsx был too late).
+3. `mobile/App.tsx` — restore `BottomSheetModalProvider` wrap + `ToastProvider` mount.
+4. `mobile/src/components/index.ts` — restore `export { Modal } from './Modal'`.
+5. Re-run `npm install` (workspaces re-hoist; новых пакетов не добавляется, но workspace package.json теперь объявляет → autolink picks up).
+6. Gradle clean rebuild через `app:installDebug`.
+
+**Visual smoke verified (2026-05-05, JFLFG6MZSSL7WCF6):**
+- App boots без red screen / WorkletsError ✓
+- `<BottomSheetModalProvider>` mounted без краша ✓
+- `Modal` import из barrel не вызывает module-load error ✓
+- Toast overlay (success/error/info) появляется ✓
+- Dark theme через ThemeSwitcher **по-прежнему не применяется** → отдельный root cause, не Worklets (см. M4 C1.5).
+
+**What is NOT in this commit (deferred):**
+- `_ComponentsScreen.tsx` Modal JSX restoration (DEV catalog) — отдельный mini-step.
+- Dark theme fix — M4 C1.5 (новое расследование, гипотезы: `colorScheme.set()` not wired, tailwind `darkMode` strategy mismatch с NW v4).
 
 ---
 
@@ -166,6 +196,10 @@ M4 уже планирует:
 4. **Single error в multiple places — root cause analysis обязательный.** "Cannot read property 'BottomSheetModalProvider' of undefined" surface-level looked как gorhom issue. Root cause — Worklets native init. Без stack trace deep dive — пришлось бы revert весь gorhom что не fixed бы проблему.
 
 5. **Bundle size implications учитывать заранее.** Reanimated 4 + Worklets adds 200+ KB. Если эта стек staying — должна быть explicit decision, не accidental transitive.
+
+6. **npm workspaces + RN autolinking — explicit deps обязательны.** Hoisting в root `node_modules/` обманывает eyeball-проверку «пакет есть, значит должен работать». RN 0.85 autolinking сканирует `dependencies:` workspace package.json, не весь hoisted tree. **Любой native-bringing transitive dep должен дублироваться как explicit dep в workspace package.json**, иначе autolink молча пропустит. Применимо ко всем будущим NativeWind-style transitives.
+
+7. **Side-effect симптомы могут иметь разные root causes.** Incident doc записал dark theme как «depends on Worklets internally» — при фактической проверке после Worklets fix dark theme остался сломан. Совпадение по surface-симптому ≠ shared root cause. Lesson: при documenting hypothesis маркировать её **unverified** до прямой проверки исключения.
 
 ---
 
