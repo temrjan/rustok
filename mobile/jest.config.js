@@ -1,17 +1,22 @@
 module.exports = {
   preset: '@react-native/jest-preset',
+  setupFiles: ['<rootDir>/jest.setup.js'],
   moduleNameMapper: {
     '\\.css$': '<rootDir>/__mocks__/styleMock.js',
   },
-  // Skip the Phase 1 M2 App.test.tsx — it imports the real bridge which
-  // calls TurboModuleRegistry.getEnforcing() at module-load and throws in
-  // a Jest environment. Restoring it requires a full bridge mock surface
-  // (deferred to Phase 3 M4 along with the broader CI updates).
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/__tests__/App.test.tsx'],
+  // The preset's default transformIgnorePatterns whitelists `(jest-)?react-native`
+  // and `@react-native` only; `nativewind` and its bundled `react-native-css-interop`
+  // ship JSX (and `.native.js` files) under node_modules that need Babel
+  // transformation, otherwise Jest sees raw `<jsx>` and throws SyntaxError.
+  transformIgnorePatterns: [
+    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|nativewind|react-native-css-interop))',
+  ],
+  // App.test.tsx restored in M4 C4 — `__mocks__/react-native-rustok-bridge.ts`
+  // and `__mocks__/react-native-fs.ts` stand in for the native packages so
+  // App can be rendered in the Jest environment. `jest.setup.ts` wires
+  // the gesture-handler / reanimated / gorhom / safe-area mocks shipped
+  // by those libraries.
   collectCoverageFrom: ['src/stores/**/*.ts'],
-  // Component tests deferred to M4 (alongside CI updates + App.test bridge
-  // mock surface). Visual smoke for components is manual via
-  // _ComponentsScreen on a real device.
   coverageThreshold: {
     './src/stores/': {
       lines: 80,
