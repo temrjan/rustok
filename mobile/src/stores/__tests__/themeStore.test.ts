@@ -12,7 +12,14 @@
  *
  * Jest factory restriction: only references prefixed with `mock` may be
  * captured from outer scope.
+ *
+ * `export {}` keeps this file module-scoped so the top-level
+ * `mockStorage` does not collide with the equivalent in other store
+ * test files at TypeScript-project level (Jest runs each file in
+ * isolation, but `tsc` sees them all together).
  */
+
+export {};
 
 const mockStorage: Map<string, string> = new Map();
 

@@ -23,9 +23,7 @@ type Nav = NativeStackNavigationProp<SettingsStackParamList, 'SettingsMain'>;
 function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
-  const setNoWallet = useWalletStore((s) => s._devSetNoWallet);
-  const setLocked = useWalletStore((s) => s._devSetLocked);
-  const setUnlocked = useWalletStore((s) => s._devSetUnlocked);
+  const forcePhase = useWalletStore((s) => s._qaForcePhase);
 
   return (
     <ScrollView
@@ -70,34 +68,34 @@ function SettingsScreen() {
           </View>
 
           {/*
-           * Wallet-state mock toggles — duplicated in WelcomeScreen and
-           * UnlockPinScreen so QA can flip between routing branches
-           * from any state. M4 removes these once the bridge wires
-           * `walletStore` to `WalletHandle.hasWallet()` /
-           * `.isWalletUnlocked()` for real.
+           * Wallet-phase QA escape hatch — duplicated in WelcomeScreen
+           * and UnlockPinScreen so QA can flip between routing branches
+           * from any state. Stays around even after M4 wires the
+           * bridge: it is a permanent `__DEV__`-only override (D3=a),
+           * not a removable shim.
            */}
           <Text className="text-ink-muted text-xs uppercase mb-2">
-            Dev — wallet state
+            Dev — wallet phase
           </Text>
           <View className="mb-6 gap-2">
             <Button
               variant="secondary"
-              onPress={setNoWallet}
-              accessibilityLabel="Set wallet state to no wallet"
+              onPress={() => forcePhase('no_wallet')}
+              accessibilityLabel="Set wallet phase to no_wallet"
             >
               No wallet
             </Button>
             <Button
               variant="secondary"
-              onPress={setLocked}
-              accessibilityLabel="Set wallet state to locked"
+              onPress={() => forcePhase('locked')}
+              accessibilityLabel="Set wallet phase to locked"
             >
               Locked
             </Button>
             <Button
               variant="secondary"
-              onPress={setUnlocked}
-              accessibilityLabel="Set wallet state to unlocked"
+              onPress={() => forcePhase('unlocked')}
+              accessibilityLabel="Set wallet phase to unlocked"
             >
               Unlocked
             </Button>

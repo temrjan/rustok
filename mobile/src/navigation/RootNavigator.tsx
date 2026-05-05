@@ -1,24 +1,23 @@
 /**
- * RootNavigator — Phase 3 M3 Commit 2.
+ * RootNavigator — Phase 3 M4 C2.
  *
- * Top-level routing switch driven by `walletStore`. The store is
- * mocked in M3 (in-memory only, default = unlocked); M4 replaces the
- * mock with `WalletHandle.hasWallet()` / `.isWalletUnlocked()`
- * hydration on app boot.
+ * Top-level routing switch driven by `walletStore.phase`. Replaces
+ * the M3 two-boolean conditional with a discriminated-union switch
+ * plus an `assertNever` exhaustive check.
  *
  * Branches:
- *   !hasWallet               → OnboardingNavigator (Welcome → Phase 4)
- *   hasWallet && !isUnlocked → LockedNavigator     (UnlockPin → Phase 4)
- *   hasWallet && isUnlocked  → TabsNavigator       (4 tabs)
+ *   'loading'   — return null (placeholder; C3 adds <SplashScreen />)
+ *   'no_wallet' → OnboardingNavigator (Welcome → Phase 4)
+ *   'locked'    → LockedNavigator     (UnlockPin → Phase 4)
+ *   'unlocked'  → TabsNavigator       (4 tabs)
  *
- * Each branch renders its own native-stack so `useNavigation` works
- * inside every screen. Switching between branches unmounts the
- * previous navigator — acceptable for M3 placeholder screens which
- * hold no nav state worth preserving.
+ * `assertNever` is inlined; if a second discriminated union appears
+ * in the codebase, lift it to `src/utils/assertNever.ts`.
  *
- * Two separate `useWalletStore` selectors keep rerenders narrow:
- * the component re-renders only when one of the two selected fields
- * actually changes.
+ * Each non-loading branch renders its own native-stack so
+ * `useNavigation` works inside every screen. Switching branches
+ * unmounts the previous navigator — acceptable for placeholder
+ * screens which hold no nav state worth preserving.
  */
 
 import React from 'react';
@@ -27,13 +26,27 @@ import OnboardingNavigator from './OnboardingNavigator';
 import TabsNavigator from './TabsNavigator';
 import { useWalletStore } from '../stores/walletStore';
 
-function RootNavigator() {
-  const hasWallet = useWalletStore((s) => s.hasWallet);
-  const isUnlocked = useWalletStore((s) => s.isUnlocked);
+// TODO Phase 4: lift to `src/utils/assertNever.ts` when a 2nd
+// discriminated union appears (likely the onboarding step state).
+function assertNever(x: never): never {
+  throw new Error(`Unhandled wallet phase: ${String(x)}`);
+}
 
-  if (!hasWallet) return <OnboardingNavigator />;
-  if (!isUnlocked) return <LockedNavigator />;
-  return <TabsNavigator />;
+function RootNavigator() {
+  const phase = useWalletStore((s) => s.phase);
+
+  switch (phase) {
+    case 'loading':
+      return null;
+    case 'no_wallet':
+      return <OnboardingNavigator />;
+    case 'locked':
+      return <LockedNavigator />;
+    case 'unlocked':
+      return <TabsNavigator />;
+    default:
+      return assertNever(phase);
+  }
 }
 
 export default RootNavigator;

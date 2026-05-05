@@ -8,6 +8,7 @@
 export { Button } from './Button';
 export { Input } from './Input';
 export { Modal } from './Modal';
+export { NetworkBadge } from './NetworkBadge';
 export { PageHeader } from './PageHeader';
 export { Spinner } from './Spinner';
 export { Switch } from './Switch';

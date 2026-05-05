@@ -22,12 +22,14 @@ import { generateMnemonic } from 'react-native-rustok-bridge';
 import {
   Button,
   Input,
+  NetworkBadge,
   PageHeader,
   Spinner,
   Switch,
   ThemeSwitcher,
   toast,
 } from '../components';
+import { useNetworkStore } from '../stores/networkStore';
 
 interface ComponentsScreenProps {
   onBack: () => void;
@@ -199,6 +201,46 @@ function ComponentsScreen({ onBack }: ComponentsScreenProps) {
           сборке (RN 0.85 + Reanimated 4.3 + Worklets 0.8 autolink issue).
           Restore в M4 chore commit. Source code остаётся в
           src/components/Modal.tsx. */}
+
+      {/* ─── NetworkBadge (M4 C2) ────────────────────────── */}
+      <Text className="text-ink-muted text-xs uppercase mt-2 mb-2">
+        Network badge
+      </Text>
+      <View className="mb-3">
+        <NetworkBadge />
+      </View>
+      {__DEV__ && (
+        <View className="mb-6 gap-2">
+          <Button
+            variant="secondary"
+            onPress={() => useNetworkStore.getState().setChainId(1n)}
+            accessibilityLabel="Set chain to Ethereum"
+          >
+            Set Ethereum (1)
+          </Button>
+          <Button
+            variant="secondary"
+            onPress={() => useNetworkStore.getState().setChainId(42161n)}
+            accessibilityLabel="Set chain to Arbitrum"
+          >
+            Set Arbitrum (42161)
+          </Button>
+          <Button
+            variant="secondary"
+            onPress={() => useNetworkStore.getState().setChainId(99999n)}
+            accessibilityLabel="Set chain to unknown"
+          >
+            Set Unknown (99999)
+          </Button>
+          <Button
+            variant="secondary"
+            onPress={() => useNetworkStore.getState().setChainId(undefined)}
+            accessibilityLabel="Clear chain"
+          >
+            Clear
+          </Button>
+        </View>
+      )}
 
       {/* ─── Toast (M2) ──────────────────────────────────── */}
       <Text className="text-ink-muted text-xs uppercase mt-2 mb-2">

@@ -1,9 +1,8 @@
 /**
- * UnlockPinScreen — Phase 3 M3 Commit 2 placeholder.
+ * UnlockPinScreen — Phase 3 M3 placeholder, QA toggles updated in M4 C2.
  *
  * Real PIN unlock UI (numeric keypad + biometric prompt) ships in
- * Phase 4 alongside the onboarding flow. M3 = navigation skeleton +
- * state-based routing only.
+ * Phase 4 alongside the onboarding flow.
  *
  * The `__DEV__` panel mirrors the panel in `WelcomeScreen` and the
  * Settings DEV section. See `WelcomeScreen.tsx` header for the
@@ -18,9 +17,7 @@ import { useWalletStore } from '../../stores/walletStore';
 
 function UnlockPinScreen() {
   const insets = useSafeAreaInsets();
-  const setNoWallet = useWalletStore((s) => s._devSetNoWallet);
-  const setLocked = useWalletStore((s) => s._devSetLocked);
-  const setUnlocked = useWalletStore((s) => s._devSetUnlocked);
+  const forcePhase = useWalletStore((s) => s._qaForcePhase);
 
   return (
     <ScrollView
@@ -45,22 +42,22 @@ function UnlockPinScreen() {
           <View className="gap-2">
             <Button
               variant="secondary"
-              onPress={setNoWallet}
-              accessibilityLabel="Set wallet state to no wallet"
+              onPress={() => forcePhase('no_wallet')}
+              accessibilityLabel="Set wallet phase to no_wallet"
             >
               No wallet
             </Button>
             <Button
               variant="secondary"
-              onPress={setLocked}
-              accessibilityLabel="Set wallet state to locked"
+              onPress={() => forcePhase('locked')}
+              accessibilityLabel="Set wallet phase to locked"
             >
               Locked
             </Button>
             <Button
               variant="secondary"
-              onPress={setUnlocked}
-              accessibilityLabel="Set wallet state to unlocked"
+              onPress={() => forcePhase('unlocked')}
+              accessibilityLabel="Set wallet phase to unlocked"
             >
               Unlocked
             </Button>
