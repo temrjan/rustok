@@ -3,8 +3,16 @@
 @tailwind utilities;
 
 /*
- * Design tokens — Phase 3 M1.
- * Light mode = :root, dark mode = .dark.
+ * Design tokens — Phase 3 M1, fixed in M4 C1.5.
+ * Light mode = :root, dark mode = .dark:root.
+ *
+ * The compound `.dark:root` selector (rather than plain `.dark`) is
+ * required by NativeWind v4: when `colorScheme.set('dark')` is called,
+ * NativeWind toggles the `dark` class on the root element. CSS
+ * variables under a plain `.dark` selector do not swap, only those
+ * scoped to `.dark:root` (or `:root.dark`) do. See
+ * https://github.com/nativewind/nativewind/issues/702.
+ *
  * Values are space-separated RGB channels (Tailwind opacity syntax).
  *
  * Existing palette (Phase 1 App.tsx StyleSheet):
@@ -27,7 +35,7 @@
   --color-semantic-danger: 239 68 68;
 }
 
-.dark {
+.dark:root {
   --color-canvas: 10 17 35;
   --color-ink-primary: 255 255 255;
   --color-ink-muted: 138 140 172;
