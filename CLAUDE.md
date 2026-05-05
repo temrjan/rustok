@@ -77,6 +77,7 @@ adb reverse tcp:8081 tcp:8081
 - Phase 3 final state: `docs/PHASE3-HANDOFF.md` (16 commits trail, Worklets root cause, soft DONE notes)
 - Phase 3 design: `docs/PHASE3-DESIGN-APPSHELL.md` (C1-C4 with Resolution sections — closed)
 - Worklets incident: `docs/REANIMATED-WORKLETS-INCIDENT.md` (root cause + restoration)
+- Jest setup incident: `docs/JEST-SETUP-INCIDENT.md` (RN+NativeWind+MMKV+gorhom test infrastructure post-mortem — chain of 6 cascading fixes)
 - Mobile overview: `mobile/README.md`
 - Reviewer constitution: `docs/REVIEWER-CONSTITUTION.md`
 - Repo: https://github.com/temrjan/rustok
