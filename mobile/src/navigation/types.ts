@@ -31,3 +31,10 @@ export type SettingsStackParamList = {
 export type OnboardingStackParamList = {
   Welcome: undefined;
 };
+
+// Locked stack — UnlockPin placeholder for M3 (rendered when the user
+// has a wallet but it is locked). Phase 4 may add biometric-retry or
+// PIN-reset routes here.
+export type LockedStackParamList = {
+  UnlockPin: undefined;
+};
