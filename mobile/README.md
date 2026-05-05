@@ -1,97 +1,147 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# rustok-mobile
 
-# Getting Started
+React Native 0.85.2 client for the Rustok wallet (Phase 3 close: Design system + AppShell + bridge integration). Uses `react-native-rustok-bridge` (uniffi-bindgen-react-native) to talk to the Rust core (`crates/core` + `crates/txguard`).
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+> **Phase status:** Phase 3 DONE 2026-05-05. Onboarding flow + real wallet UI ship in Phase 4-5. См. `../docs/PHASE3-HANDOFF.md` (final state) and `../docs/NATIVE-MIGRATION-PLAN.md` (overall roadmap).
 
-## Step 1: Start Metro
+## Source layout
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
-
-To start the Metro dev server, run the following command from the root of your React Native project:
-
-```sh
-# Using npm
-npm start
-
-# OR using Yarn
-yarn start
+```
+mobile/
+├── App.tsx                    Root: providers + mount-time hydrate effect
+├── index.js                   Entry point (Worklets imported here)
+├── global.css                 NativeWind v4 + design token CSS variables
+├── tailwind.config.js         NativeWind preset + semantic color mapping
+├── babel.config.js            Worklets plugin at root (per troubleshooting docs)
+├── jest.config.js             Setup files + transformIgnorePatterns + coverage
+├── jest.setup.js              gesture-handler / reanimated / gorhom / safe-area mocks
+├── __mocks__/                 Auto-loaded package mocks (bridge / fs / mmkv / styleMock)
+├── android/                   Native Android project (Gradle)
+├── ios/                       Native iOS project (CocoaPods, deferred to Mac session)
+└── src/
+    ├── theme/
+    │   └── tokens.ts          palette.{light,dark} hex strings (single source of truth
+    │                          for non-NativeWind code, e.g. NavigationContainer theme)
+    ├── components/            8 design-system primitives + dev-only NetworkBadge mount
+    │   ├── Button.tsx         cva variants × sizes
+    │   ├── Input.tsx          label + error + secureTextEntry
+    │   ├── Modal.tsx          @gorhom/bottom-sheet wrapper, declarative isOpen API
+    │   ├── NetworkBadge.tsx   Pill rendering chain name from networkStore
+    │   ├── PageHeader.tsx     title + onBack + rightAction
+    │   ├── Spinner.tsx        ActivityIndicator wrapper, sm/md/lg
+    │   ├── Switch.tsx         Controlled
+    │   ├── ThemeProvider.tsx  Pushes themeStore.mode into NativeWind colorScheme
+    │   ├── ThemeSwitcher.tsx  Radio group: light/dark/system
+    │   ├── Toast.tsx          react-native-toast-message singleton wrapper
+    │   ├── index.ts           Public barrel
+    │   └── __tests__/         8 render-smoke tests (not.toThrow pattern)
+    ├── stores/                Zustand 5 + MMKV persist where indicated
+    │   ├── walletStore.ts     phase: 'loading'|'no_wallet'|'locked'|'unlocked'
+    │   │                      + address + balance + error + hydrate/refresh +
+    │   │                      _qaForcePhase (__DEV__ override, D3=a)
+    │   ├── networkStore.ts    chainId: bigint | undefined (MMKV decimal-string round-trip)
+    │   ├── uiStore.ts         balanceHidden: boolean (MMKV persist)
+    │   ├── themeStore.ts      mode: 'light'|'dark'|'system' (sync MMKV hydrate)
+    │   └── __tests__/         27 unit tests (4 stores)
+    ├── hooks/                 1-line selector wrappers via useShallow (zustand 5)
+    │   ├── useWallet.ts       phase + address + balance + error + refresh
+    │   ├── useNetwork.ts      chainId + setChainId + hydrate
+    │   ├── useTheme.ts        mode + setMode
+    │   └── useUI.ts           balanceHidden + toggle/setBalanceHidden
+    ├── lib/
+    │   └── walletHandle.ts    Lazy singleton: getWalletHandle() — one
+    │                          WalletHandle per app session (DevHarness uses this too)
+    ├── navigation/
+    │   ├── AppShell.tsx       NavigationContainer + brand theme (light/dark)
+    │   ├── RootNavigator.tsx  Switch on walletStore.phase + assertNever exhaustive
+    │   ├── OnboardingNavigator.tsx   no_wallet branch (Welcome → Phase 4)
+    │   ├── LockedNavigator.tsx       locked branch (UnlockPin → Phase 4)
+    │   ├── TabsNavigator.tsx         unlocked branch (Wallet/Activity/TxGuard/Settings)
+    │   ├── SettingsStackNavigator.tsx  Settings tab + DEV routes
+    │   ├── ComponentsScreenRoute.tsx + DevHarnessRoute.tsx   DEV-only stack screens
+    │   └── types.ts                  ParamList types per stack
+    └── screens/
+        ├── SplashScreen.tsx          Loading + error UI (rendered when phase='loading')
+        ├── _ComponentsScreen.tsx     DEV catalog (Phase 5 placeholder marker)
+        ├── _DevHarness.tsx           DEV FFI smoke screen
+        ├── onboarding/WelcomeScreen.tsx   Phase 4 placeholder + DEV phase toggles
+        ├── locked/UnlockPinScreen.tsx     Phase 4 placeholder + DEV phase toggles
+        └── tabs/{Wallet,Activity,TxGuard,Settings}Screen.tsx
+                                       Phase 5 placeholder + Settings has DEV section
 ```
 
-## Step 2: Build and run your app
+## Run on Android (Windows host, real device)
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+Path **must be ASCII** — Android Gradle Plugin doesn't accept Cyrillic paths on Windows.
 
-### Android
+```powershell
+# Terminal 1 — Metro (visible logs help when debugging bridge / bundle errors)
+cd C:/Claude/projects/rustok/mobile
+npx react-native start --port 8081
 
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+# Terminal 2 — gradle install (~2 min cold, < 1 min incremental)
+cd C:/Claude/projects/rustok/mobile/android
+.\gradlew.bat app:installDebug -PreactNativeDevServerPort=8081
 ```
 
-### iOS
+For physical Android device, after every USB reconnect (lesson from `docs/REANIMATED-WORKLETS-INCIDENT.md` Attempted fix #1 — adb reverse mapping is lost):
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```powershell
+adb reverse tcp:8081 tcp:8081
 ```
 
-Then, and every time you update your native dependencies, run:
+To trigger a JS reload from the host (cold-start measurement / dev cycles):
 
-```sh
-bundle exec pod install
+```powershell
+adb shell input keyevent 46
+adb shell input keyevent 46  # double-R = RN reload
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+To force a true cold-start (bypassing warm process):
 
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+```powershell
+adb shell am force-stop com.rustok
+adb shell am start -W com.rustok/.MainActivity   # -W prints TotalTime / WaitTime
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+## Local pre-commit gates
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+Match the CI `mobile` job in `.github/workflows/ci.yml`:
 
-## Step 3: Modify your app
+```powershell
+cd C:/Claude/projects/rustok/mobile
+npm run typecheck
+npm run lint
+npm test
+```
 
-Now that you have successfully run the app, let's make changes!
+## Routing branches — DEV phase override
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+The app has 4 phases (`loading | no_wallet | locked | unlocked`) driven by `walletStore.phase`. Real bridge hydration on cold-start lands the user on a phase based on actual wallet state. To exercise other branches without going through real flows, use the `__DEV__`-only QA escape hatch:
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+- **Welcome / UnlockPin / Settings → Settings tab** all have a "Dev — wallet phase" panel with three buttons:
+  - **No wallet** → forces `phase: 'no_wallet'` (Onboarding → Welcome)
+  - **Locked** → forces `phase: 'locked'` (LockedNavigator → UnlockPin)
+  - **Unlocked** → forces `phase: 'unlocked'` (Tabs → Wallet)
+- Each forced phase clears `address` / `balance` / `error` to `undefined` so stale data does not leak across branches.
+- The override stays in `production` bundle but is only invoked from `__DEV__`-guarded JSX (Metro strips the call sites in release builds).
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+## Bridge surface (Phase 3 consumers)
 
-## Congratulations! :tada:
+`packages/react-native-rustok-bridge` exports `WalletHandle` (24 commands total). Phase 3 wires only 6 of them via `lib/walletHandle.getWalletHandle()`:
 
-You've successfully run and modified your React Native App. :partying_face:
+- `hasWallet()` / `isWalletUnlocked()` — phase determination (`walletStore.hydrate`)
+- `getCurrentAddress()` / `getWalletBalance()` — populated state for `unlocked` (`walletStore.hydrate` second stage)
+- `getChainId()` — chain badge (`networkStore.hydrate`)
+- `lockWallet()` — Phase 4 will use it from UnlockPin retry / app-lock flow
 
-### Now what?
+The remaining 18 commands (`createWalletWithMnemonic`, `unlockWallet`, `sendEth`, `previewSend`, swap functions, biometric, proxy, transaction history) ship through Phase 4-5 screens.
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+## References
 
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+- **Phase 3 final state:** `../docs/PHASE3-HANDOFF.md`
+- **Phase 3 design plan:** `../docs/PHASE3-DESIGN-APPSHELL.md`
+- **Worklets incident report:** `../docs/REANIMATED-WORKLETS-INCIDENT.md`
+- **Strategy:** `../docs/NATIVE-MIGRATION-PLAN.md`
+- **Reviewer rules:** `../docs/REVIEWER-CONSTITUTION.md`
+- **CI:** https://github.com/temrjan/rustok/actions

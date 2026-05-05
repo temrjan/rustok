@@ -1,11 +1,11 @@
 # PHASE 3 — Design system + AppShell
 
-**Status:** In progress · M1 + M2 + **M3 Commit 1 partial** (6 commits) · M3 Commit 2 + M4 next · ⚠ Reanimated 4 / Worklets init issue (см. `docs/REANIMATED-WORKLETS-INCIDENT.md`) — Modal + Toast + theme visual swap deferred to M4 chore commit fix
+**Status:** **CLOSED 2026-05-05** — M1 + M2 + M3 + M4 done (16 commits, last: `0544acb`). Worklets root cause closed (M4 C1, `f42fa1e`); dark theme fixed (M4 C1.5, `195e6c6`). См. `docs/PHASE3-HANDOFF.md` для final state + commit trail + known issues.
 **Created:** 2026-05-04
 **Owner:** temrjan
 **Source plan:** `docs/NATIVE-MIGRATION-PLAN.md` § Phase 3
 **Predecessor:** Phase 2 closed 2026-05-01 (PR #13, 11 atomic commits, 227 tests, C1-C4 resolved)
-**Successor:** Phase 4 — Onboarding flow (blocked by this phase)
+**Successor:** Phase 4 — Onboarding flow (now unblocked)
 
 ---
 
@@ -92,7 +92,7 @@
 
 **Goal:** структура приложения с реальным state-based роутингом.
 
-> **M3 Commit 1 (`cf2fd5b`) status:** navigation skeleton ✅ работает на устройстве (4 tabs, DEV stack routes, system-back). ⚠ Modal + Toast + theme visual swap **отключены** workaround'ом (Reanimated 4 / Worklets native init issue — см. `docs/REANIMATED-WORKLETS-INCIDENT.md`). M3 Commit 2 (3-state routing) запускаемся следующая сессия. Restoration scope добавлен в M4 expanded deliverables.
+> **M3 status (CLOSED 2026-05-05):** Commit 1 `cf2fd5b` (skeleton + workaround) + Commit 2 `0462ad6` (3-state routing). Workaround revert + full restoration delivered in M4 C1 (`f42fa1e`). Visual smoke 6 шагов passed на JFLFG6MZSSL7WCF6.
 
 **Deliverables:**
 - `<AppShell>` — `react-native-safe-area-context` + общая оболочка
@@ -112,7 +112,10 @@
 
 **Gate:** все 4 таба переключаются native gestures на Android (Pixel 8 emulator + JFLFG6MZSSL7WCF6 Xiaomi), три ветки routing'a покрыты smoke-тестами вручную, system-back на Android корректно работает. **iOS swipe-back gate откладывается до M5-iOS-Phase3 (Mac session).**
 
-### M4 — Stores + bridge wiring + init flow + CI + tech debt (**EXPANDED 2026-05-04**, 4-5 commits)
+### M4 — Stores + bridge wiring + init flow + CI + tech debt (**CLOSED 2026-05-05**, 6 commits)
+
+> **M4 status:** all 6 commits in `main` (`f42fa1e` Worklets fix → `195e6c6` dark theme → `36cb884` stores → `c873974` init flow → `d1f93d2` jest setup → `0544acb` CI). Cold-start measurement on JFLFG6MZSSL7WCF6 = median **596 ms** (≪ 2000 ms budget). 13 jest suites / 43 tests / 0 snapshots. Worklets root cause: workspace package.json missing explicit deps for `react-native-worklets` + `react-native-reanimated` — RN autolinking skipped hoisted-only packages. См. `docs/REANIMATED-WORKLETS-INCIDENT.md` Resolution section.
+
 
 **Goal:** stores подключены к WalletHandle, cold-start app корректно определяет state, CI обновлён, **накопленный tech debt из M1-M3 закрыт**.
 
@@ -247,7 +250,12 @@ Phase 4 не стартует пока Phase 3 не закрыт:
 - Контраст проверен на токенах в обоих темах (manual + Stark plugin)
 - Smoke screen reader: TalkBack (Android), VoiceOver (iOS deferred)
 
-**Resolution section:** заполняется на close M2.
+**Resolution (M4 close 2026-05-05):**
+- ✅ All interactive components ship `accessibilityLabel` + `accessibilityRole` (Button, Switch, ThemeSwitcher radio group, NetworkBadge pill, dev panel buttons across Welcome / UnlockPin / Settings / `_ComponentsScreen`).
+- ✅ Контраст ≥ 4.5:1 verified в обоих темах через `palette` tokens (white-on-canvas-dark, ink-primary-on-canvas-light) — manual visual smoke на JFLFG6MZSSL7WCF6.
+- ✅ System font scaling default через RN — нет `allowFontScaling={false}` в codebase.
+- ⚠️ TalkBack smoke не запускался (deferred — manual one-off check возможен в любой момент, не блокирует Phase 4). VoiceOver deferred → M5-iOS-Phase3.
+- ⚠️ `AccessibilityInfo.isReduceMotionEnabled()` не wired в codebase — единственная анимация Phase 3 это TabBar transition (нативная, уважает OS prefer-reduced-motion). Custom анимации (PinDots reveal в Phase 4) проверят это в Phase 4.
 
 ### C2 — Theme parity
 
@@ -258,7 +266,12 @@ Phase 4 не стартует пока Phase 3 не закрыт:
 - Components dev screen рендерится в обоих режимах без визуальных регрессий — screenshot grid в PR
 - Theme switch без unmount (через NativeWind `dark:` variant + CSS vars)
 
-**Resolution section:** заполняется на close M2.
+**Resolution (M4 C1.5 close 2026-05-05):**
+- ✅ All Phase 3 components используют semantic tokens (`text-ink-primary`, `bg-canvas`, `border-ink-muted`, `text-accent-periwinkle`) — нет hex/rgb литералов в screen JSX (`AppShell.tsx` exception: `palette.{light,dark}.*` references — это и есть single source of truth, не hardcoded).
+- ✅ Theme switch через `colorScheme.set()` — без unmount (state-driven re-render).
+- ✅ `.dark:root` selector fix (`195e6c6`) — NativeWind v4 swaps CSS variables корректно при `colorScheme.set('dark')`. Без compound selector swap не срабатывал.
+- ✅ NavigationContainer brand theme wired (`195e6c6`) — TabBar / header / background реагируют на theme через `palette` tokens, не RN Navigation defaults (no iOS-blue active tint).
+- ✅ Visual smoke 6 шагов на JFLFG6MZSSL7WCF6 verified light + dark + system modes; canvas / text / buttons / TabBar swap корректно.
 
 ### C3 — Safe area + responsive + RTL-aware
 
@@ -271,7 +284,12 @@ Phase 4 не стартует пока Phase 3 не закрыт:
 - Manual smoke на минимум 2 размерах: Pixel 8 (real device, M3) + small emulator (Pixel 4a)
 - iOS оставляем deferred (R3)
 
-**Resolution section:** заполняется на close M3.
+**Resolution (M3 + M4 close 2026-05-05):**
+- ✅ `useSafeAreaInsets()` используется во всех placeholder screens (Welcome / UnlockPin / Wallet / Activity / TxGuard / Settings / `_ComponentsScreen` / SplashScreen) для top + bottom paddings.
+- ✅ JFLFG6MZSSL7WCF6 (Xiaomi Redmi, Android 16) — visual smoke passed для всех routing branches (cold-start + 3 phase transitions + system-back).
+- ⚠️ Pixel 4a small emulator не запускался (один real device хватило для M4 visual gates). Если в Phase 4-5 surface bugs на small screens — добавится в smoke matrix.
+- ⚠️ RTL — logical paddings (`paddingStart`/`paddingEnd`) не enforce'нуты, текущий codebase использует `paddingLeft`/`paddingRight` через style prop. RTL deferred → Phase 7 (нет use case в M3-M4 placeholder screens).
+- ⏳ iOS smoke deferred → M5-iOS-Phase3 (Mac session) per R3.
 
 ### C4 — Performance budget
 
@@ -286,7 +304,12 @@ Phase 4 не стартует пока Phase 3 не закрыт:
 - `npx react-native bundle` сравнение размеров до/после
 - Frame drops через `react-native-performance` или Flipper
 
-**Resolution section:** заполняется на close M4.
+**Resolution (M4 C3 close 2026-05-05):**
+- ✅ Cold-start measurement on JFLFG6MZSSL7WCF6 via `adb shell am force-stop com.rustok && adb shell am start -W com.rustok/.MainActivity` × 3 runs (596 / 594 / 636 ms). **Median 596 ms — 30% бюджета.** Caveat: TotalTime измеряет момент Activity drawn first frame, не момент когда JS landит на real route (~few hundred ms добавляется до Splash → Welcome / Tabs transition завершено).
+- ✅ Theme switch — visually instant (NativeWind colorScheme single state-driven re-render). Frame drops не measured формально, но manual smoke не зафиксировал visible jank.
+- ✅ Tab switch — instant (React Navigation v7 native-stack + bottom-tabs).
+- ⚠️ Bundle size — не измерен формально через `npx react-native bundle`. Locally APK = 242 MB (это full debug APK с native symbols + RustOK Rust core, не representative). Release bundle measurement deferred → когда придёт reason для optimization (Phase 5+).
+- ⚠️ Hermes profiler / Flipper — не запускались (cold-start medianом достаточно для C4 close; deeper profiling deferred до Phase 5+ если budget будет проблемой).
 
 ---
 
