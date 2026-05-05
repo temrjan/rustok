@@ -27,9 +27,18 @@ jest.mock('react-native-mmkv', () => ({
   }),
 }));
 
+const mockHandle = {
+  getChainId: jest.fn(),
+};
+
+jest.mock('../../lib/walletHandle', () => ({
+  getWalletHandle: () => mockHandle,
+}));
+
 describe('networkStore', () => {
   beforeEach(() => {
     mockStorage.clear();
+    mockHandle.getChainId.mockReset();
     jest.resetModules();
   });
 
@@ -77,9 +86,36 @@ describe('networkStore', () => {
     expect(useNetworkStore.getState().chainId).toBeUndefined();
   });
 
-  it('hydrate stub resolves without throwing', async () => {
+  it('hydrate writes bridge chainId to store + MMKV', async () => {
+    mockHandle.getChainId.mockResolvedValue(137n);
+    const { useNetworkStore } =
+      require('../networkStore') as typeof import('../networkStore');
+    await useNetworkStore.getState().hydrate();
+    expect(useNetworkStore.getState().chainId).toBe(137n);
+    expect(mockStorage.get('networkChainId')).toBe('137');
+  });
+
+  it('hydrate guard: bridge undefined leaves persisted cache intact', async () => {
+    // Pre-seed cache (simulates prior session).
+    mockStorage.set('networkChainId', '8453');
+    mockHandle.getChainId.mockResolvedValue(undefined);
+    const { useNetworkStore } =
+      require('../networkStore') as typeof import('../networkStore');
+    // Initial state from MMKV cache.
+    expect(useNetworkStore.getState().chainId).toBe(8453n);
+    await useNetworkStore.getState().hydrate();
+    // Bridge said undefined → cache must NOT be wiped.
+    expect(useNetworkStore.getState().chainId).toBe(8453n);
+    expect(mockStorage.get('networkChainId')).toBe('8453');
+  });
+
+  it('hydrate silent on bridge throw — persisted cache stays', async () => {
+    mockStorage.set('networkChainId', '1');
+    mockHandle.getChainId.mockRejectedValue(new Error('rpc down'));
     const { useNetworkStore } =
       require('../networkStore') as typeof import('../networkStore');
     await expect(useNetworkStore.getState().hydrate()).resolves.toBeUndefined();
+    expect(useNetworkStore.getState().chainId).toBe(1n);
+    expect(mockStorage.get('networkChainId')).toBe('1');
   });
 });

@@ -21,13 +21,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import RNFS from 'react-native-fs';
 import {
-  WalletHandle,
   analyzeTransaction,
   generateMnemonic,
   type SwapQuoteParams,
+  type WalletHandle,
 } from 'react-native-rustok-bridge';
+import { getWalletHandle } from '../lib/walletHandle';
 
 interface DevHarnessProps {
   onBack: () => void;
@@ -98,14 +98,15 @@ function TestSection({ label, run, sensitive }: TestSectionProps) {
 }
 
 function DevHarness({ onBack }: DevHarnessProps) {
-  // Construct WalletHandle once per session. The Rust constructor is
-  // currently infallible (commit 9) but its uniffi-generated TS
-  // signature is `/* throws */` — wrap defensively so any future Err
-  // surfaces as in-screen UI rather than a React crash.
+  // One WalletHandle per session — shared with the rest of the app
+  // via `getWalletHandle()` (M4 C3). The Rust constructor is currently
+  // infallible but its uniffi-generated TS signature is `/* throws */`
+  // — wrap defensively so any future Err surfaces as in-screen UI
+  // rather than a React crash.
   const [handle, handleErr] = useMemo<[WalletHandle | null, string | null]>(
     () => {
       try {
-        return [new WalletHandle(RNFS.DocumentDirectoryPath), null];
+        return [getWalletHandle(), null];
       } catch (e: unknown) {
         return [null, describeError(e)];
       }

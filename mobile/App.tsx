@@ -26,7 +26,7 @@
 import 'react-native-gesture-handler';
 import './global.css';
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StatusBar, StyleSheet, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -34,9 +34,32 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { ThemeProvider } from './src/components/ThemeProvider';
 import { ToastProvider } from './src/components';
 import AppShell from './src/navigation/AppShell';
+import { useWalletStore } from './src/stores/walletStore';
+import { useNetworkStore } from './src/stores/networkStore';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
+
+  // M4 C3 init flow: fire both bridge hydrations on mount.
+  // walletStore default phase = 'loading' → RootNavigator renders
+  // <SplashScreen /> until hydrate() resolves. networkStore renders
+  // its persisted chainId immediately and overwrites it once the
+  // bridge confirms the live value.
+  //
+  // Both `hydrate()` bodies catch their own errors and update store
+  // state; the `.catch()` here is a defensive no-op for any future
+  // bare throw and to satisfy the lint rule against floating Promises.
+  useEffect(() => {
+    useWalletStore
+      .getState()
+      .hydrate()
+      .catch(() => undefined);
+    useNetworkStore
+      .getState()
+      .hydrate()
+      .catch(() => undefined);
+  }, []);
+
   return (
     <ThemeProvider>
       <GestureHandlerRootView style={styles.rootFlex}>

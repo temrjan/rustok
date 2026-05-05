@@ -6,7 +6,7 @@
  * plus an `assertNever` exhaustive check.
  *
  * Branches:
- *   'loading'   — return null (placeholder; C3 adds <SplashScreen />)
+ *   'loading'   → SplashScreen        (cold-start before bridge hydrate)
  *   'no_wallet' → OnboardingNavigator (Welcome → Phase 4)
  *   'locked'    → LockedNavigator     (UnlockPin → Phase 4)
  *   'unlocked'  → TabsNavigator       (4 tabs)
@@ -24,6 +24,7 @@ import React from 'react';
 import LockedNavigator from './LockedNavigator';
 import OnboardingNavigator from './OnboardingNavigator';
 import TabsNavigator from './TabsNavigator';
+import SplashScreen from '../screens/SplashScreen';
 import { useWalletStore } from '../stores/walletStore';
 
 // TODO Phase 4: lift to `src/utils/assertNever.ts` when a 2nd
@@ -37,7 +38,7 @@ function RootNavigator() {
 
   switch (phase) {
     case 'loading':
-      return null;
+      return <SplashScreen />;
     case 'no_wallet':
       return <OnboardingNavigator />;
     case 'locked':
