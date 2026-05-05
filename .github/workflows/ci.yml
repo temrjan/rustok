@@ -78,3 +78,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
+
+  mobile:
+    name: Mobile (typecheck + lint + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          # Lockfile lives at the repo root (npm workspaces).
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+      # `npm ci` must run at the repo root so workspaces resolve and
+      # all hoisted deps land in <root>/node_modules. The `mobile`
+      # working-directory above only applies to the script steps below.
+      - name: Install workspace deps
+        working-directory: .
+        run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
