@@ -20,10 +20,12 @@ export type TabsParamList = {
 
 // Stack inside the Settings tab — main settings screen + DEV-only routes.
 // The `__` prefix matches the `_DevHarness` / `_ComponentsScreen` file pattern.
+// `__KeychainSmoke` added Phase 4 M0.1 (TEMPORARY, removed in M0.3).
 export type SettingsStackParamList = {
   SettingsMain: undefined;
   __DevHarness: undefined;
   __ComponentsScreen: undefined;
+  __KeychainSmoke: undefined;
 };
 
 // Onboarding stack — Welcome placeholder for M3; expands in Phase 4
