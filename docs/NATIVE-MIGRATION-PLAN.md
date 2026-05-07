@@ -593,7 +593,7 @@ rustok/
 
 ---
 
-### Фаза 3 — Design system + AppShell (2-3 недели, 2-3 коммита)
+### Фаза 3 — Design system + AppShell (2-3 недели, 2-3 коммита) — **DONE 2026-05-05**
 
 **Цель:** Базовая инфраструктура UI: navigation, темы, дизайн-токены, переиспользуемые компоненты.
 
@@ -634,9 +634,20 @@ rustok/
 
 ---
 
-### Фаза 4 — Onboarding flow (3 недели, 2-3 коммита)
+### Фаза 4 — Onboarding flow (3 недели, 2-3 коммита) — **IN PROGRESS — M0+M1 closed 2026-05-07**
 
 **Цель:** Welcome → KeepItSafe → ShowPhrase → Quiz → CreatePin → ConfirmPin → Wallet.
+
+**Текущий статус (2026-05-07):**
+- M0 ✅ Secure unlock secret (3 commits: `4fff9e4` smoke spike + `699bd78` wrapper + `bf4a091` mock+tests)
+- M1 ✅ Welcome + KeepItSafe screens (2 commits: `cea84b8` Welcome production + stack expansion + `d1453dc` KeepItSafe 3-checkbox gate)
+- M2 ⏳ PIN setup + atomic wallet commit (5 commits — next)
+- M3 ⏳ Phrase backup screens (3 commits)
+- M4 ⏳ Unlock + HomeBanner + Restore + prod-strip + manual smoke (5 commits)
+
+Working branch: `feat/phase4-onboarding` (12 commits ahead of main, all pushed). PR #14 Draft. Detailed spec + М2 prereqs: `docs/PHASE4-DESIGN-ONBOARDING.md` § 2.
+
+**Original 2-3 commit estimate revised в Phase 4 design doc:** scope grew к 13-18 atomic commits per § 2 (см. NATIVE-MIGRATION-PLAN-deviation rationale в design doc § Risks R1+R7).
 
 **Deliverables:**
 - `WelcomeScreen` — `logo-new.png`, кнопки Create / Restore

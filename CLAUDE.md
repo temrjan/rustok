@@ -8,7 +8,9 @@
 
 Production Ethereum wallet (Android + iOS). React Native 0.85.2 + uniffi-bindgen-react-native + Rust core (rustok-core + txguard). Мигрировали с Tauri+Leptos на 2026-04-28.
 
-**Текущая фаза:** **Phase 3 DONE 2026-05-05** — Design system + AppShell + bridge integration. M1+M2+M3+M4 closed (16 atomic commits в `main`, last `0544acb`). 43 jest tests (0→43) + 27 store unit tests с ≥80% coverage; 227 Rust tests inherited from Phase 2 без регрессий. C1-C4 constraints closed (см. `docs/PHASE3-DESIGN-APPSHELL.md` § 5 Resolution sections). Cold-start median 596ms (≪ 2000ms budget) на JFLFG6MZSSL7WCF6. Worklets root cause closed (M4 C1) + dark theme fixed (M4 C1.5). Mobile CI job добавлен (`.github/workflows/ci.yml`). iOS smoke deferred → M5-iOS-Phase3 (Mac session). **Phase 4 next** — Onboarding flow (Welcome → KeepItSafe → ShowPhrase → Quiz → CreatePin → ConfirmPin), теперь unblocked. Working branch: `main`. См. `docs/PHASE3-HANDOFF.md` (final state) + `docs/NATIVE-MIGRATION-PLAN.md`.
+**Текущая фаза:** **Phase 4 IN PROGRESS — M0+M1 closed 2026-05-07** — Onboarding flow. M0 (secure unlock secret) + M1 (Welcome + KeepItSafe screens) shipped (5 atomic commits, last `d1453dc`); 70 jest tests / 18 suites (был 43/13 в Phase 3 close); typecheck PASS, lint 0 errors, all CI green на PR #14. **М2 next** — PIN setup + Argon2id + atomic wallet commit (5 commits per design doc § 2 line 143). Working branch: `feat/phase4-onboarding` (12 commits ahead of main, all pushed; PR #14 stays Draft per session brief — eligible для promote ready-for-review после M0+M1+M2 close). См. `docs/PHASE4-DESIGN-ONBOARDING.md` (current design + М2 spec + § 5.1 Argon2id params + § 5.4 lockout ladder).
+
+**Predecessor:** **Phase 3 DONE 2026-05-05** — Design system + AppShell + bridge integration (16 atomic commits в `main`, last `0544acb`). 43 jest tests + 27 store unit tests с ≥80% coverage; 227 Rust tests inherited без регрессий. C1-C4 closed. Cold-start median 596ms на JFLFG6MZSSL7WCF6. Worklets root cause closed (M4 C1) + dark theme fixed (M4 C1.5). Mobile CI job добавлен. iOS smoke deferred → M5-iOS-Phase3 (Mac session). См. `docs/PHASE3-HANDOFF.md`.
 
 **Predecessor:** **Phase 2 DONE 2026-05-01** (PR #13 merged) — 11 atomic commits, 227 tests, C1-C4 closed. См. `docs/PHASE2-HANDOFF.md`.
 
@@ -76,6 +78,8 @@ adb reverse tcp:8081 tcp:8081
 - Phase 2 constraints: `docs/PHASE-2-CONSTRAINTS.md` (C1-C4 with Resolution sections)
 - Phase 3 final state: `docs/PHASE3-HANDOFF.md` (16 commits trail, Worklets root cause, soft DONE notes)
 - Phase 3 design: `docs/PHASE3-DESIGN-APPSHELL.md` (C1-C4 with Resolution sections — closed)
+- **Phase 4 design (current):** `docs/PHASE4-DESIGN-ONBOARDING.md` (M0-M5 specs + § 5.1 Argon2id + § 5.4 lockout + § 5.6 KeyPermanentlyInvalidated recovery + § 5.7 mid-onboarding crash recovery)
+- Mobile CI incident (closed 2026-05-07): `docs/CI-MOBILE-BROKEN-INCIDENT.md`
 - Worklets incident: `docs/REANIMATED-WORKLETS-INCIDENT.md` (root cause + restoration)
 - Jest setup incident: `docs/JEST-SETUP-INCIDENT.md` (RN+NativeWind+MMKV+gorhom test infrastructure post-mortem — chain of 6 cascading fixes)
 - Mobile overview: `mobile/README.md`

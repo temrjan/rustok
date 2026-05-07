@@ -309,8 +309,10 @@ M5-iOS-Phase4 main risks: (a) some errSec codes may not surface как rejection
 | State | `acknowledgements: { phrase: bool, control: bool, never: bool }` (local `useState`, not persisted) |
 | Validation | Continue button disabled until all 3 `true` |
 | Errors | None |
-| a11y | Each Switch `accessibilityLabel="Acknowledgement N: <copy>"`, `accessibilityState={{ checked }}`. Continue button `accessibilityState={{ disabled }}`. |
+| a11y | Each Switch `accessibilityLabel="Acknowledgement N: <copy>"`, `accessibilityState={{ checked }}`*. Continue button `accessibilityState={{ disabled }}`. |
 | Lock-back | Allowed (back to Welcome OK; mnemonic ещё не сгенерирован). |
+
+> *`accessibilityState.checked` для Switch DEFERRED к M5 a11y polish (M1.2 ship state d1453dc — 2026-05-07). Phase 3 Switch wrapper exposes only `disabled` в a11y state; RN core Switch (role=switch) auto-announces «on/off» к VoiceOver/TalkBack — practical UX satisfied без wrapper extension. Engineer judgment per design-doc-vs-existing-component trade-off; JSDoc в `mobile/src/screens/onboarding/KeepItSafeScreen.tsx` documents the deferral rationale.
 
 ### 4.3 `CreatePinScreen` (M2.4 — Head a' reorder + REC-1 split, was 4.5)
 
