@@ -36,7 +36,7 @@
 3. **`docs/POC-FOUNDATION.md`** — детальный план текущей фазы (если уже создан)
 4. **`C:/Users/omadg/.claude/projects/C--Claude/memory/project_rustok.md`** — проектная память
 5. **`app/src-tauri/src/commands.rs`** — baseline 22 команд которые мигрируют через uniffi
-6. **`docs/REVIEWER-CONSTITUTION.md`** — operating system для Reviewer-агента (v1.3). Загружать в начале каждой review-сессии.
+6. **`docs/TEAM-CONSTITUTION.md`** — operating system триадической команды (v2.0 — Engineer + Reviewer + Капитан). Загружать в начале каждой сессии. Преемник `REVIEWER-CONSTITUTION.md` v1.4 (deleted 2026-05-07).
 7. **`docs/PHASE2-HANDOFF.md`** — финальное состояние Phase 2 (11 commits, reviews, risks reconciliation)
 8. **`docs/PHASE-2-CONSTRAINTS.md`** — C1-C4 constraints с Resolution sections
 9. **`docs/_archive/FRONTEND-IMPLEMENTATION-WEBVIEW.md`** — отменённый план (только для понимания контекста; НЕ выполнять)

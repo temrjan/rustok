@@ -143,5 +143,5 @@ The remaining 18 commands (`createWalletWithMnemonic`, `unlockWallet`, `sendEth`
 - **Phase 3 design plan:** `../docs/PHASE3-DESIGN-APPSHELL.md`
 - **Worklets incident report:** `../docs/REANIMATED-WORKLETS-INCIDENT.md`
 - **Strategy:** `../docs/NATIVE-MIGRATION-PLAN.md`
-- **Reviewer rules:** `../docs/REVIEWER-CONSTITUTION.md`
+- **Team rules:** `../docs/TEAM-CONSTITUTION.md` (v2.0 triadic team)
 - **CI:** https://github.com/temrjan/rustok/actions

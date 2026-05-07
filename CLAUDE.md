@@ -79,7 +79,7 @@ adb reverse tcp:8081 tcp:8081
 - Worklets incident: `docs/REANIMATED-WORKLETS-INCIDENT.md` (root cause + restoration)
 - Jest setup incident: `docs/JEST-SETUP-INCIDENT.md` (RN+NativeWind+MMKV+gorhom test infrastructure post-mortem — chain of 6 cascading fixes)
 - Mobile overview: `mobile/README.md`
-- Reviewer constitution: `docs/REVIEWER-CONSTITUTION.md`
+- Team constitution: `docs/TEAM-CONSTITUTION.md` (v2.0 — triadic team: Engineer + Reviewer + Капитан)
 - Repo: https://github.com/temrjan/rustok
 - CI: https://github.com/temrjan/rustok/actions
 
