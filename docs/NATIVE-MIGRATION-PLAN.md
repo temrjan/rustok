@@ -185,7 +185,7 @@ ls docs/
 | Network | Readonly badge сейчас, полный селектор — отдельная задача после миграции |
 | Default theme | Light (с переключением dark) |
 | Tab bar | Wallet / Activity / TxGuard / Settings |
-| Onboarding | KeepItSafe → ShowPhrase → Quiz (6 опций) → CreatePin → ConfirmPin |
+| Onboarding | Welcome → KeepItSafe → CreatePin → ConfirmPin → ShowPhrase → Quiz (3-6 опций per OQ4) → Done (Head a' reorder 2026-05-06; см. `PHASE4-DESIGN-ONBOARDING.md` § 0 + § 5.5 + § 5.7) |
 | Hero block | Soft gradient bg + radial glow at balance |
 | Цвета | Periwinkle `#8387C3` основной, `#3A3E6C` pressed/active, `#8A8CAC` muted/borders |
 | Логотип Welcome | `logo-new.png` |
