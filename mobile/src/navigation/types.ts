@@ -26,10 +26,15 @@ export type SettingsStackParamList = {
   __ComponentsScreen: undefined;
 };
 
-// Onboarding stack — Welcome placeholder for M3; expands in Phase 4
-// (KeepItSafe / ShowPhrase / Quiz / CreatePin / ConfirmPin).
+// Onboarding stack — Phase 4 M1.1 expanded the route set with placeholders
+// для М3 (ShowPhrase) и M4.3 (ImportPhrase). KeepItSafeScreen ships in M1.1
+// as а placeholder body, replaced с production impl in M1.2. Quiz / CreatePin
+// / ConfirmPin land в later milestones (M2 + M3) и will join this list there.
 export type OnboardingStackParamList = {
   Welcome: undefined;
+  KeepItSafe: undefined;
+  ShowPhrase: undefined;     // M3 deliverable (stub в M1.1)
+  ImportPhrase: undefined;   // M4.3 deliverable (stub в M1.1)
 };
 
 // Locked stack — UnlockPin placeholder for M3 (rendered when the user
