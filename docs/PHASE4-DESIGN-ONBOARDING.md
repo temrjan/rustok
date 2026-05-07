@@ -7,6 +7,8 @@
 **Predecessor:** Phase 3 closed 2026-05-05 (16 atomic commits, 43 jest tests, 227 Rust tests, C1-C4 resolved). См. `docs/PHASE3-HANDOFF.md`.
 **Successor:** Phase 5 — Restore + Wallet (Home/Send/Receive). Phase 4 unblocks Phase 5 by producing first non-DEV `walletStore.phase === 'unlocked'` transition through real onboarding (vs `_qaForcePhase` shim).
 
+**Last update:** 2026-05-07 — F-D5 alignment: M0.2 error taxonomy and gate criterion (§ 2 M0) re-aligned with react-native-keychain v10 actual native error surface (was v9-style abstractions). Library-version-coupled; re-verify on `react-native-keychain` upgrade. iOS taxonomy deferred к M5-iOS-Phase4.
+
 **Reviewer-confirmed decisions (Discovery 2026-05-06):**
 - **F1**: Path 2 — Keystore-bound 256-bit secret via `react-native-keychain`. PIN gates access to device-bound secret; secret hex-encoded passed to existing `unlockWallet(password)` Rust API. `MIN_PASSWORD_LEN=8` satisfied trivially (64 hex chars). Rust API не меняется.
 - **F2**: Option A — lock-back navigation на ShowPhrase / Quiz (system-back + UI-back blocked). Heap window для plaintext mnemonic минимизируется через atomic-after-PIN sequencing.
@@ -60,7 +62,7 @@
 
 **Deliverables:**
 - **M0.1 — install + smoke spike (1 commit, throwaway smoke артефакт):** `npm install react-native-keychain@latest -w mobile` + `import 'react-native-keychain'` + minimal `Keychain.setGenericPassword('smoke', 'test', { service: 'rustok.smoke' })` + `Keychain.getGenericPassword({ service: 'rustok.smoke' })` в **temporary `_KeychainSmokeScreen.tsx`** (под `screens/_` prefix pattern). Visual smoke на JFLFG6MZSSL7WCF6 — verify TurboModule registers + biometric prompt появляется + secret round-trips.
-- **M0.2 — `mobile/src/lib/unlockSecret.ts` wrapper (1 commit):** typed API `getOrCreateUnlockSecret()`, `retrieveUnlockSecret()`, `wipeUnlockSecret()`, `hasUnlockSecret()`. Internal: `crypto.getRandomValues(new Uint8Array(32))` (256-bit) → hex encoding (64 chars, satisfies `MIN_PASSWORD_LEN=8`). Service name = `'com.rustok.unlock'`. Options pinned: `accessControl: BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE`, `securityLevel: SECURE_HARDWARE`, `accessible: WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` (iOS). **Strict error taxonomy** typed enum: `'auth_canceled' | 'biometric_lockout' | 'key_invalidated' | 'not_available' | 'unknown'`.
+- **M0.2 — `mobile/src/lib/unlockSecret.ts` wrapper (1 commit):** typed API `getOrCreateUnlockSecret()`, `retrieveUnlockSecret()`, `wipeUnlockSecret()`, `hasUnlockSecret()`. Internal: `crypto.getRandomValues(new Uint8Array(32))` (256-bit) → hex encoding (64 chars, satisfies `MIN_PASSWORD_LEN=8`). Service name = `'com.rustok.unlock'`. Options pinned: `accessControl: BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE`, `securityLevel: SECURE_HARDWARE`, `accessible: WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` (iOS). **Strict error taxonomy** typed enum (Android v10 native surface — F-D5 alignment 2026-05-07): `'empty_parameters' | 'crypto_failed' | 'keystore_access' | 'biometry_unsupported' | 'unknown'`. iOS errors → `'unknown'` pending M5-iOS-Phase4 (см. iOS deferral subsection ниже). Sub-discrimination of `'crypto_failed'` (e.g. `KeyPermanentlyInvalidated` для § 5.6 Recovery flow) — caller-side substring match на `nativeMessage` field, NOT в wrapper enum (Path D per Reviewer ruling 2026-05-07).
   - **Polyfill prerequisite (F-C2 IMPORTANT):** Hermes (RN 0.85 default JS engine) does NOT ship `crypto.getRandomValues` natively. Add dependency `react-native-get-random-values` (Expo-maintained, vetted) to `mobile/package.json` AND import первой строкой в `mobile/index.js`:
     ```javascript
     // mobile/index.js — line 1 (BEFORE 'react-native-worklets' import per Phase 3 M4 ordering!)
@@ -79,10 +81,46 @@
 
 **Gate:**
 - Visual smoke pass on JFLFG6MZSSL7WCF6 (M0.1) — biometric prompt appears, secret retrieved successfully после `setGenericPassword`.
-- M0.2 typed error taxonomy covers ≥5 documented `ERROR_CODE` mappings (`AUTH_CANCELED`, `BIOMETRIC_LOCKOUT`, `KEY_PERMANENTLY_INVALIDATED` if exposed, `NOT_AVAILABLE`, `UNKNOWN`).
+- M0.2 typed error taxonomy covers ≥5 documented Android `ERROR_CODE` mappings (`E_EMPTY_PARAMETERS`, `E_CRYPTO_FAILED`, `E_KEYSTORE_ACCESS_ERROR`, `E_SUPPORTED_BIOMETRY_ERROR`, `E_UNKNOWN_ERROR`) per `node_modules/react-native-keychain/android/src/main/java/com/oblador/keychain/KeychainModule.kt:92-103`. Sub-discrimination needed для UX (e.g., `AUTH_CANCELED`, `KEY_PERMANENTLY_INVALIDATED`) → caller substring match на `nativeMessage` field, NOT в wrapper enum (Path D per Reviewer ruling 2026-05-07). iOS deferred к M5-iOS-Phase4 (см. subsection ниже).
 - M0.3 jest tests ≥10 passing.
 - `/security-review` skill clean run on `unlockSecret.ts` (no findings beyond suggestion/nit/learning).
 - **M0 fail trigger → activate § 8 Pivot Plan (expo-secure-store).**
+
+### M0 iOS error taxonomy (deferred к M5-iOS-Phase4)
+
+iOS Promise rejection shape (per `node_modules/react-native-keychain/ios/RNKeychainManager/RNKeychainManager.m:85-93`):
+
+```objc
+NSString *codeForError(NSError *error) {
+  return [NSString stringWithFormat:@"%li", (long)error.code];  // numeric stringified
+}
+void rejectWithError(RCTPromiseRejectBlock reject, NSError *error) {
+  return reject(codeForError(error), messageForError(error), nil);
+}
+```
+
+`error.code` на JS = stringified Apple `errSec*` numeric code (e.g., `"-128"` для `errSecUserCanceled` per Apple `<Security/SecBase.h>` — well-known Carbon-era constant). Spectrum captured 2026-05-07 для M5-iOS bootstrapping (constant names per `messageForError` switch lines 35-83 в `RNKeychainManager.m` — exact decimal values defined в `<Security/SecBase.h>`, M5-iOS engineer should capture via runtime logs из iOS device для empirical mapping):
+
+| Apple constant | Suggested mapping (M5-iOS to verify) |
+|---|---|
+| `errSecUserCanceled` | `'crypto_failed'` (closest — user cancelled biometric prompt) |
+| `errSecAuthFailed` | `'crypto_failed'` |
+| `errSecItemNotFound` | not an exception path — get returns `false` analogous к Android (verify M5-iOS) |
+| `errSecInteractionNotAllowed` | `'biometry_unsupported'` |
+| `errSecNotAvailable` | `'keystore_access'` |
+| `errSecMissingEntitlement` | `'unknown'` (config/dev error) |
+| `errSecAllocate`, `errSecParam`, `errSecBadReq`, `errSecOpWr`, `errSecIO`, `errSecDuplicateItem`, `errSecDecode`, `errSecUnimplemented` | `'unknown'` (rare) |
+
+**M0.2 ship state:** все iOS errors маркируются как `'unknown'` через `Platform.OS === 'ios'` defensive branch в `mapKeychainError`. iOS spectrum выше = audit trail для M5-iOS-Phase4 expansion, не implemented.
+
+**M5-iOS-Phase4 deliverables:**
+- expand `mapKeychainError` с iOS branch implementing table выше
+- capture exact numeric values for each errSec constant via runtime logs from iOS device
+- add iOS variant `library-message-stability.test.ts` verifying numeric code parsing работает (errSec constants stable across Apple OS versions per `<Security/SecBase.h>` since macOS 10.0)
+- verify `errSecItemNotFound` actually surface'ится как rejection vs returns `false` similar to Android (re-read RNKeychainManager.m в Mac session с iOS device для confirmation)
+- update wrapper JSDoc removing «iOS pending M5» disclaimer
+
+M5-iOS-Phase4 main risks: (a) some errSec codes may not surface как rejections (handled inline as `false` returns or silently absorbed), (b) v10+ library may add additional error wrapping layer changing `messageForError` semantics.
 
 ### M1 — Welcome + KeepItSafe screens (2 commits)
 
