@@ -1,10 +1,10 @@
-# INCIDENT — Mobile CI broken on `main` since 2026-05-05
+# INCIDENT — Mobile CI broken on `main` since 2026-05-05 — **CLOSED 2026-05-07**
 
-**Status:** ACTIVE — `main` CI red, no remote mobile-job validation possible
+**Status:** **CLOSED 2026-05-07** — D4 fix landed (commit `45da6a2`), CI зелёный verified via Draft PR #14, run [`25482832379`](https://github.com/temrjan/rustok/actions/runs/25482832379) (6m41s, all 6 jobs green: fmt / clippy / test / docs / deny / mobile).
 **Discovered:** 2026-05-07 by Engineer during Phase 4 M0.1 push validation
-**Severity:** P2 — blocks remote `mobile` CI gate; **does NOT block** local development or pre-merge validation (local mirror remains usable)
-**Owner of fix:** next session pre-M3 start (per Reviewer ruling 2026-05-07)
-**Workaround in effect:** local CI mirror evidence in commit message (option E from incident triage)
+**Severity:** P2 — blocked remote `mobile` CI gate; did NOT block local development (local mirror remained usable)
+**Resolution:** D4 work item completed in same session as discovery (Captain prioritized fix between M0.2 ship и M0.3 start). Codegen step + Rust toolchain + Android NDK pin + cargo-ndk + Swatinem cache added к mobile job (per § 7).
+**Workaround retired:** local CI mirror per § 6 (a) остаётся available для feat-branch validation, но remote CI теперь работает на PR open для full matrix verification.
 
 ---
 
@@ -132,9 +132,16 @@ commit). Do not push N-commit batch where HEAD has red mirror.
 main** REQUIRES D4 landed first (otherwise PR check will reuse the broken
 mobile job and block merge).
 
-## 7. Work item D4 (= D1 from § 5 triage + trigger policy)
+## 7. Work item D4 (= D1 from § 5 triage + trigger policy) — **CLOSED 2026-05-07**
 
-**Scope:** add codegen step ONLY — invoke
+**Closure evidence:**
+- Commit: `45da6a2` («feat(ci): add uniffi codegen step to mobile job — D4 fix per CI-MOBILE-BROKEN-INCIDENT § 7»)
+- Actions run: [`25482832379`](https://github.com/temrjan/rustok/actions/runs/25482832379) — 6m41s, all 6 jobs green
+- Draft PR: [#14](https://github.com/temrjan/rustok/pull/14) (`feat/phase4-onboarding → main`, opened для verification, NOT for merge review — M0 milestone не закрыт)
+
+**Implementation diverged from original scope:** added 4 steps вместо «codegen step ONLY» — все необходимы per Engineer + Reviewer discovery (cargo-ndk обязателен для linker config, NDK version pin для local-CI parity, Swatinem cache для повторных runs). JDK setup explicitly omitted (ubrn writes templates без Gradle invocation). Trigger config UNCHANGED per original ruling.
+
+**Original scope (preserved для historical reference):** add codegen step ONLY — invoke
 `uniffi-bindgen-react-native` (or whatever the project's bindings build
 command is) before `npm run typecheck` in the mobile job of
 `.github/workflows/ci.yml`. Goal: make remote mobile job find
