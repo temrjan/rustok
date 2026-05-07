@@ -25,7 +25,7 @@
 - **Где живёт:** `C:\Claude\projects\rustok\` (ASCII-only после M2 path fix)
 - **Что делаем:** Мигрируем UI с Tauri+Leptos (WebView) на **React Native + uniffi-bindgen-react-native** (native UI, Rust core переиспользуется)
 - **Что НЕ делаем:** WebView в любой форме (Tauri+React план отменён 2026-04-28)
-- **Текущая фаза:** **Phase 2 DONE (2026-05-01 — PR #13 merged).** Phase 3 next (Design system + AppShell). 11 atomic коммитов, 227 tests, C1-C4 closed, Spike 0 validated. См. `docs/PHASE2-HANDOFF.md` и `docs/PHASE-2-CONSTRAINTS.md`.
+- **Текущая фаза:** **Phase 4 IN PROGRESS — M0+M1 closed 2026-05-07.** Onboarding flow (5 atomic commits ahead, last `d1453dc`). Working branch `feat/phase4-onboarding`. M2 next (PIN setup + Argon2id + atomic wallet commit, 5 commits per design doc § 2 line 143). См. `docs/PHASE4-DESIGN-ONBOARDING.md` (current design + М2 spec). Predecessors: Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
 - **Платформы:** Android + iOS only, desktop deferred
 - **Mainnet timeline:** свободный, фокус на качестве
 
@@ -251,7 +251,7 @@ ls mobile/ 2>/dev/null           # mobile dir уже создан?
 ls crates/rustok-mobile-bindings/ 2>/dev/null  # bindings crate существует?
 ```
 
-После этого — прочитать `docs/PHASE2-HANDOFF.md` (Phase 2 финальное состояние) и этот документ §4 (фазы). Текущая фаза: Phase 3 (Design system + AppShell).
+После этого — прочитать `docs/PHASE4-DESIGN-ONBOARDING.md` (Phase 4 design + M2 spec) + этот документ §4 (фазы). Текущая фаза: Phase 4 IN PROGRESS — M0+M1 closed 2026-05-07; M2 next.
 
 ## N. GitHub workflow + repo info
 
