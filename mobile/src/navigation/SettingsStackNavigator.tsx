@@ -13,7 +13,6 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SettingsScreen from '../screens/tabs/SettingsScreen';
 import DevHarnessRoute from './DevHarnessRoute';
 import ComponentsScreenRoute from './ComponentsScreenRoute';
-import KeychainSmokeRoute from './KeychainSmokeRoute';
 import type { SettingsStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<SettingsStackParamList>();
@@ -23,14 +22,12 @@ function SettingsStackNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="SettingsMain" component={SettingsScreen} />
       {/* DEV-only routes — wrapped in __DEV__ so tree-shaking can drop
-          _DevHarness (~470 LOC), _ComponentsScreen (~330 LOC) and
-          _KeychainSmokeScreen (M0.1 spike, removed in M0.3) bundles
+          _DevHarness (~470 LOC) and _ComponentsScreen (~330 LOC) bundles
           out of release builds. */}
       {__DEV__ && (
         <>
           <Stack.Screen name="__DevHarness" component={DevHarnessRoute} />
           <Stack.Screen name="__ComponentsScreen" component={ComponentsScreenRoute} />
-          <Stack.Screen name="__KeychainSmoke" component={KeychainSmokeRoute} />
         </>
       )}
     </Stack.Navigator>

@@ -65,13 +65,6 @@ function SettingsScreen() {
             >
               Open Components Screen
             </Button>
-            <Button
-              variant="secondary"
-              onPress={() => navigation.navigate('__KeychainSmoke')}
-              accessibilityLabel="Open Keychain Smoke (M0.1 spike)"
-            >
-              Open Keychain Smoke (M0.1)
-            </Button>
           </View>
 
           {/*
