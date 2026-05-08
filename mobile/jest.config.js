@@ -1,6 +1,12 @@
 module.exports = {
   preset: '@react-native/jest-preset',
   setupFiles: ['<rootDir>/jest.setup.js'],
+  // react-native-worklets ships an official jest resolver that strips the
+  // `.native` extension from worklets-internal resolution paths, so the
+  // package's TurboModule init (which throws in jest env) is bypassed
+  // and JS-only fallbacks load instead. Required since Reanimated 4 mock
+  // transitively imports worklets at module load.
+  resolver: 'react-native-worklets/jest/resolver',
   moduleNameMapper: {
     '\\.css$': '<rootDir>/__mocks__/styleMock.js',
   },
