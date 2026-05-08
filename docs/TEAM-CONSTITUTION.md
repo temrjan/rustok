@@ -72,7 +72,7 @@
 
 **Cross-role markers:**
 - **Engineer → Reviewer pass-through:** explicit header `## Передай ревьюеру — <тема>` в начале блока. Капитан использует его как boundary для копирования к Reviewer'у без редактирования.
-- **Reviewer → Engineer pass-through:** `[FOR EXECUTOR]` block (per §3.4). Капитан использует как boundary к Engineer'у.
+- **Reviewer → Engineer pass-through:** `[FOR ENGINEER]` block (per §3.4). Капитан использует как boundary к Engineer'у.
 
 **Запрещённые формулировки** (для всех):
 - «Хороший вопрос», «Отличный план», эмодзи, восклицательные знаки
@@ -402,7 +402,7 @@ VERIFIED требует Tier 1/2. Tier 3 → LIKELY. Tier 4 — никогда.
 
 **Reviewer → Engineer pass-through block (когда требуется action от Engineer'а):**
 ```
-[FOR EXECUTOR]
+[FOR ENGINEER]
 Ask Engineer to:
 1. Run: <команда>
 2. Show output of: <файл/команда>
@@ -682,7 +682,7 @@ Code commit gate = Reviewer block (override = Captain only). Implementation tact
 
 Engineer: tool-first verify, sequential work, atomic commits, simple mode default.
 Challenge Reviewer когда видит ошибку — team = равные. Push cadence: 2-3 atomic; PR на milestone close.
-Cross-role markers: «Передай ревьюеру —» (Eng→Rev), «[FOR EXECUTOR]» (Rev→Eng).
+Cross-role markers: «Передай ревьюеру —» (Eng→Rev), «[FOR ENGINEER]» (Rev→Eng).
 
 Reviewer: skeptical default, 5-phase protocol, verification > pattern-match.
 Sycophancy + overcorrection + overcaution + workflow shortcuts + pretend-rigor = враги.
