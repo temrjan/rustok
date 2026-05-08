@@ -14,6 +14,8 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import WelcomeScreen from '../screens/onboarding/WelcomeScreen';
 import KeepItSafeScreen from '../screens/onboarding/KeepItSafeScreen';
+import CreatePinScreen from '../screens/onboarding/CreatePinScreen';
+import ConfirmPinScreen from '../screens/onboarding/ConfirmPinScreen';
 import ShowPhraseScreen from '../screens/onboarding/ShowPhraseScreen';
 import ImportPhraseScreen from '../screens/onboarding/ImportPhraseScreen';
 import type { OnboardingStackParamList } from './types';
@@ -25,6 +27,8 @@ function OnboardingNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="KeepItSafe" component={KeepItSafeScreen} />
+      <Stack.Screen name="CreatePin" component={CreatePinScreen} />
+      <Stack.Screen name="ConfirmPin" component={ConfirmPinScreen} />
       <Stack.Screen name="ShowPhrase" component={ShowPhraseScreen} />
       <Stack.Screen name="ImportPhrase" component={ImportPhraseScreen} />
     </Stack.Navigator>
