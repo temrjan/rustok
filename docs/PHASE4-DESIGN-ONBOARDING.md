@@ -582,7 +582,7 @@ const KEYCHAIN_OPTIONS = {
 
 **Constraint:** PIN entry attempts limited via exponential backoff. App-side (Keychain provides only OS-level biometric lockout, which is orthogonal — applies when biometric prompt itself fails 5+ times per OS policy).
 
-**Ladder:**
+**Ladder (Captain ruling 2026-05-08 — supersedes earlier 60s cap; rationale в `docs/PHASE4-LOCKOUT-RESEARCH.md`):**
 | Failed attempts | Lockout duration | Cumulative wait |
 |---|---|---|
 | 1-2 | 0 (immediate retry) | 0s |
@@ -590,7 +590,9 @@ const KEYCHAIN_OPTIONS = {
 | 4 | 5s | 8s |
 | 5 | 10s | 18s |
 | 6 | 30s | 48s |
-| 7+ | 60s (constant after this point — escalation does not exceed 60s to avoid user lockout, but counter persists) | +60s per attempt |
+| 7 | 60s | 108s |
+| 8 | 120s | 228s |
+| 9+ | 300s (5min cap — stepped past 60s to limit partial-PIN-shoulder-surf hit chance over 16h to ~20%) | +300s per attempt |
 
 **Reset trigger:** successful PIN verification → `pinAttemptsStore.resetAttempts()` → counter = 0, lockout = null.
 
