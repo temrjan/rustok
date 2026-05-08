@@ -120,8 +120,8 @@ function KeepItSafeScreen() {
         variant="primary"
         size="lg"
         disabled={!allChecked}
-        onPress={() => navigation.navigate('ShowPhrase')}
-        accessibilityLabel="Continue to phrase reveal"
+        onPress={() => navigation.navigate('CreatePin')}
+        accessibilityLabel="Continue to PIN setup"
       >
         Continue
       </Button>

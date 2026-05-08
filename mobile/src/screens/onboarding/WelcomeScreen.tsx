@@ -17,12 +17,13 @@
  * permanent `__DEV__`-only override (D3=a), not removed when the bridge wires.
  */
 
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../../components';
+import { usePinSetupStore } from '../../stores/pinSetupStore';
 import { useWalletStore } from '../../stores/walletStore';
 import type { OnboardingStackParamList } from '../../navigation/types';
 
@@ -32,6 +33,14 @@ function WelcomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const forcePhase = useWalletStore((s) => s._qaForcePhase);
+
+  // Stale-state guard per design § 2 line 159 — clear any leftover PIN setup
+  // state from a previous interrupted onboarding (e.g., user died at ConfirmPin
+  // step 3 → MMKV holds stale pinHash + pending flag; clear on fresh entry).
+  // Idempotent: no-op if store already empty.
+  useEffect(() => {
+    usePinSetupStore.getState().clearAll();
+  }, []);
 
   return (
     <ScrollView
