@@ -17,6 +17,7 @@ import KeepItSafeScreen from '../screens/onboarding/KeepItSafeScreen';
 import CreatePinScreen from '../screens/onboarding/CreatePinScreen';
 import ConfirmPinScreen from '../screens/onboarding/ConfirmPinScreen';
 import ShowPhraseScreen from '../screens/onboarding/ShowPhraseScreen';
+import QuizScreen from '../screens/onboarding/QuizScreen';
 import ImportPhraseScreen from '../screens/onboarding/ImportPhraseScreen';
 import type { OnboardingStackParamList } from './types';
 
@@ -24,12 +25,21 @@ const Stack = createNativeStackNavigator<OnboardingStackParamList>();
 
 function OnboardingNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: true }}>
       <Stack.Screen name="Welcome" component={WelcomeScreen} />
       <Stack.Screen name="KeepItSafe" component={KeepItSafeScreen} />
       <Stack.Screen name="CreatePin" component={CreatePinScreen} />
       <Stack.Screen name="ConfirmPin" component={ConfirmPinScreen} />
-      <Stack.Screen name="ShowPhrase" component={ShowPhraseScreen} />
+      <Stack.Screen
+        name="ShowPhrase"
+        component={ShowPhraseScreen}
+        options={{ headerLeft: () => null, gestureEnabled: false }}
+      />
+      <Stack.Screen
+        name="Quiz"
+        component={QuizScreen}
+        options={{ headerLeft: () => null, gestureEnabled: false }}
+      />
       <Stack.Screen name="ImportPhrase" component={ImportPhraseScreen} />
     </Stack.Navigator>
   );

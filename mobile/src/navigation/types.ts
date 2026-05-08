@@ -36,7 +36,8 @@ export type OnboardingStackParamList = {
   KeepItSafe: undefined;
   CreatePin: undefined;                          // M2.4 production
   ConfirmPin: { expectedHash: string };          // M2.4 stub, M2.5 production
-  ShowPhrase: undefined;                         // M3 deliverable (stub в M1.1)
+  ShowPhrase: undefined;                         // M3.2 production
+  Quiz: undefined;                               // M3.2 stub, M3.3 production
   ImportPhrase: undefined;                       // M4.3 deliverable (stub в M1.1)
 };
 
