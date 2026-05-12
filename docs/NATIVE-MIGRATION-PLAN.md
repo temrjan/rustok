@@ -25,7 +25,7 @@
 - **Где живёт:** `C:\Claude\projects\rustok\` (ASCII-only после M2 path fix)
 - **Что делаем:** Мигрируем UI с Tauri+Leptos (WebView) на **React Native + uniffi-bindgen-react-native** (native UI, Rust core переиспользуется)
 - **Что НЕ делаем:** WebView в любой форме (Tauri+React план отменён 2026-04-28)
-- **Текущая фаза:** **Phase 4 IN PROGRESS — M0+M1 closed 2026-05-07.** Onboarding flow (5 atomic commits ahead, last `d1453dc`). Working branch `feat/phase4-onboarding`. M2 next (PIN setup + Argon2id + atomic wallet commit, 5 commits per design doc § 2 line 143). См. `docs/PHASE4-DESIGN-ONBOARDING.md` (current design + М2 spec). Predecessors: Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
+- **Текущая фаза:** **Phase 4 DONE 2026-05-12.** Onboarding flow shipped (21 atomic commits на `feat/phase4-onboarding`, PR #14 eligible for promote ready-for-review → Captain merge). Все 5 milestones закрыты: M0 secure unlock secret + M1 Welcome/KeepItSafe + M2 PIN setup atomic commit + M3 phrase backup (ShowPhrase + Quiz) + M4 Unlock/HomeBanner/ImportPhrase/prod-strip. 34 jest suites / 154 tests, typecheck PASS, lint clean. iOS smoke deferred → M5-iOS-Phase4 (Mac session). См. `docs/PHASE4-HANDOFF.md` (final state + 7-scenario manual smoke matrix + known seams). **Phase 5 next** — real wallet UI (balance + Send/Receive + chain list). Predecessors: Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
 - **Платформы:** Android + iOS only, desktop deferred
 - **Mainnet timeline:** свободный, фокус на качестве
 
@@ -251,7 +251,7 @@ ls mobile/ 2>/dev/null           # mobile dir уже создан?
 ls crates/rustok-mobile-bindings/ 2>/dev/null  # bindings crate существует?
 ```
 
-После этого — прочитать `docs/PHASE4-DESIGN-ONBOARDING.md` (Phase 4 design + M2 spec) + этот документ §4 (фазы). Текущая фаза: Phase 4 IN PROGRESS — M0+M1 closed 2026-05-07; M2 next.
+После этого — прочитать `docs/PHASE4-HANDOFF.md` (Phase 4 final state — DONE 2026-05-12) + этот документ §4 (фазы). Текущая фаза: Phase 4 DONE; **Phase 5 next** — real wallet UI.
 
 ## N. GitHub workflow + repo info
 
@@ -634,18 +634,18 @@ rustok/
 
 ---
 
-### Фаза 4 — Onboarding flow (3 недели, 2-3 коммита) — **IN PROGRESS — M0+M1 closed 2026-05-07**
+### Фаза 4 — Onboarding flow (3 недели, 21 atomic commit) — **DONE 2026-05-12**
 
-**Цель:** Welcome → KeepItSafe → ShowPhrase → Quiz → CreatePin → ConfirmPin → Wallet.
+**Цель:** Welcome → KeepItSafe → CreatePin → ConfirmPin → [wallet committed atomically] → ShowPhrase → Quiz → Tabs.
 
-**Текущий статус (2026-05-07):**
-- M0 ✅ Secure unlock secret (3 commits: `4fff9e4` smoke spike + `699bd78` wrapper + `bf4a091` mock+tests)
-- M1 ✅ Welcome + KeepItSafe screens (2 commits: `cea84b8` Welcome production + stack expansion + `d1453dc` KeepItSafe 3-checkbox gate)
-- M2 ⏳ PIN setup + atomic wallet commit (5 commits — next)
-- M3 ⏳ Phrase backup screens (3 commits)
-- M4 ⏳ Unlock + HomeBanner + Restore + prod-strip + manual smoke (5 commits)
+**Финальный статус (2026-05-12):**
+- M0 ✅ Secure unlock secret (3 commits: `4fff9e4` + `699bd78` + `bf4a091`)
+- M1 ✅ Welcome + KeepItSafe screens (2 commits: `cea84b8` + `d1453dc`)
+- M2 ✅ PIN setup + atomic wallet commit (5 commits: `ba2c87a` pinSetupStore + `8f513c7` pinAttemptsStore + `6064d1e` PinPad/PinDots + `e24e48b` CreatePin + `470685c` ConfirmPin)
+- M3 ✅ Phrase backup screens (3 commits: `3f31b05` onboardingStore + `fb04f98` ShowPhrase + `89669c1` Quiz)
+- M4 ✅ Unlock + HomeBanner + Restore + prod-strip + close (5 commits: `a43d3df` UnlockScreen + `ab1d856` HomeBanner/UnlockedNavigator + `58da8ad` ImportPhrase + `26112b6` prod-strip _qaForcePhase + М4.5 close)
 
-Working branch: `feat/phase4-onboarding` (12 commits ahead of main, all pushed). PR #14 Draft. Detailed spec + М2 prereqs: `docs/PHASE4-DESIGN-ONBOARDING.md` § 2.
+Working branch: `feat/phase4-onboarding` (21 commits ahead of main, all pushed). PR #14 eligible for promote ready-for-review → Captain merge. CI green (Format, Clippy, Test, Docs, Deny, Mobile). **Final state + manual smoke matrix + known architectural seams:** `docs/PHASE4-HANDOFF.md`. Design spec: `docs/PHASE4-DESIGN-ONBOARDING.md`.
 
 **Original 2-3 commit estimate revised в Phase 4 design doc:** scope grew к 13-18 atomic commits per § 2 (см. NATIVE-MIGRATION-PLAN-deviation rationale в design doc § Risks R1+R7).
 
