@@ -33,9 +33,18 @@
  * `_qaForcePhase` is a `__DEV__`-only QA escape hatch that lets QA
  * flip routing branches without going through real bridge state.
  * Resets `address`, `balance`, `error` to undefined on each call so
- * stale data does not leak across phases. Metro strips `__DEV__`
- * call sites in release bundles. The setter remains in the bundle
- * but is only ever invoked from those guarded sites.
+ * stale data does not leak across phases.
+ *
+ * M4.4: setter body gated by `__DEV__` — Metro + minifier strip the
+ * `set(...)` call in release, leaving an empty function. Closes the
+ * auth-bypass vector where a Frida/runtime-injection attacker on a
+ * release APK could invoke the setter directly via store reference
+ * and flip `phase` к `'unlocked'` без PIN / biometric. Call sites in
+ * screens are already wrapped in `{__DEV__ && ...}` JSX guards
+ * (WelcomeScreen, UnlockPinScreen, SettingsScreen); selector hooks
+ * run unconditionally (React rules forbid conditional hooks) and
+ * return the no-op function in production — overhead = one extra
+ * subscription per consumer, negligible.
  *
  * Note: `_qaForcePhase('unlocked')` leaves `address`/`balance` empty
  * until the next `refresh()` (or C3 `hydrate()`) populates them.
@@ -125,7 +134,12 @@ export const useWalletStore = create<WalletState>((set) => {
     error: undefined,
     hydrate,
     refresh: hydrate,
-    _qaForcePhase: (phase) =>
-      set({ phase, address: undefined, balance: undefined, error: undefined }),
+    _qaForcePhase: (phase) => {
+      // M4.4 prod-strip: body gated на __DEV__. Metro emits the constant
+      // `false` для release builds → the `set(...)` becomes dead code →
+      // minifier removes it, leaving an empty arrow.
+      if (!__DEV__) return;
+      set({ phase, address: undefined, balance: undefined, error: undefined });
+    },
   };
 });
