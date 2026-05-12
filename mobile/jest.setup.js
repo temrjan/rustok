@@ -21,6 +21,10 @@
 // Side-effect import — installs gesture-handler's own jest mocks.
 require('react-native-gesture-handler/jestSetup');
 
+// Reanimated 4's mock requires worklets at module load. The native init
+// crash is bypassed via the official `react-native-worklets/jest/resolver`
+// wired in `jest.config.js` (strips `.native` extension during resolution
+// so JS-only fallbacks load).
 jest.mock('react-native-reanimated', () =>
   require('react-native-reanimated/mock'),
 );

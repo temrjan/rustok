@@ -25,7 +25,7 @@
 - **Где живёт:** `C:\Claude\projects\rustok\` (ASCII-only после M2 path fix)
 - **Что делаем:** Мигрируем UI с Tauri+Leptos (WebView) на **React Native + uniffi-bindgen-react-native** (native UI, Rust core переиспользуется)
 - **Что НЕ делаем:** WebView в любой форме (Tauri+React план отменён 2026-04-28)
-- **Текущая фаза:** **Phase 2 DONE (2026-05-01 — PR #13 merged).** Phase 3 next (Design system + AppShell). 11 atomic коммитов, 227 tests, C1-C4 closed, Spike 0 validated. См. `docs/PHASE2-HANDOFF.md` и `docs/PHASE-2-CONSTRAINTS.md`.
+- **Текущая фаза:** **Phase 4 DONE 2026-05-12.** Onboarding flow shipped (21 atomic commits на `feat/phase4-onboarding`, PR #14 eligible for promote ready-for-review → Captain merge). Все 5 milestones закрыты: M0 secure unlock secret + M1 Welcome/KeepItSafe + M2 PIN setup atomic commit + M3 phrase backup (ShowPhrase + Quiz) + M4 Unlock/HomeBanner/ImportPhrase/prod-strip. 34 jest suites / 154 tests, typecheck PASS, lint clean. iOS smoke deferred → M5-iOS-Phase4 (Mac session). См. `docs/PHASE4-HANDOFF.md` (final state + 7-scenario manual smoke matrix + known seams). **Phase 5 next** — real wallet UI (balance + Send/Receive + chain list). Predecessors: Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
 - **Платформы:** Android + iOS only, desktop deferred
 - **Mainnet timeline:** свободный, фокус на качестве
 
@@ -36,7 +36,7 @@
 3. **`docs/POC-FOUNDATION.md`** — детальный план текущей фазы (если уже создан)
 4. **`C:/Users/omadg/.claude/projects/C--Claude/memory/project_rustok.md`** — проектная память
 5. **`app/src-tauri/src/commands.rs`** — baseline 22 команд которые мигрируют через uniffi
-6. **`docs/REVIEWER-CONSTITUTION.md`** — operating system для Reviewer-агента (v1.3). Загружать в начале каждой review-сессии.
+6. **`docs/TEAM-CONSTITUTION.md`** — operating system триадической команды (v2.0 — Engineer + Reviewer + Капитан). Загружать в начале каждой сессии. Преемник `REVIEWER-CONSTITUTION.md` v1.4 (deleted 2026-05-07).
 7. **`docs/PHASE2-HANDOFF.md`** — финальное состояние Phase 2 (11 commits, reviews, risks reconciliation)
 8. **`docs/PHASE-2-CONSTRAINTS.md`** — C1-C4 constraints с Resolution sections
 9. **`docs/_archive/FRONTEND-IMPLEMENTATION-WEBVIEW.md`** — отменённый план (только для понимания контекста; НЕ выполнять)
@@ -185,7 +185,7 @@ ls docs/
 | Network | Readonly badge сейчас, полный селектор — отдельная задача после миграции |
 | Default theme | Light (с переключением dark) |
 | Tab bar | Wallet / Activity / TxGuard / Settings |
-| Onboarding | KeepItSafe → ShowPhrase → Quiz (6 опций) → CreatePin → ConfirmPin |
+| Onboarding | Welcome → KeepItSafe → CreatePin → ConfirmPin → ShowPhrase → Quiz (3-6 опций per OQ4) → Done (Head a' reorder 2026-05-06; см. `PHASE4-DESIGN-ONBOARDING.md` § 0 + § 5.5 + § 5.7) |
 | Hero block | Soft gradient bg + radial glow at balance |
 | Цвета | Periwinkle `#8387C3` основной, `#3A3E6C` pressed/active, `#8A8CAC` muted/borders |
 | Логотип Welcome | `logo-new.png` |
@@ -251,7 +251,7 @@ ls mobile/ 2>/dev/null           # mobile dir уже создан?
 ls crates/rustok-mobile-bindings/ 2>/dev/null  # bindings crate существует?
 ```
 
-После этого — прочитать `docs/PHASE2-HANDOFF.md` (Phase 2 финальное состояние) и этот документ §4 (фазы). Текущая фаза: Phase 3 (Design system + AppShell).
+После этого — прочитать `docs/PHASE4-HANDOFF.md` (Phase 4 final state — DONE 2026-05-12) + этот документ §4 (фазы). Текущая фаза: Phase 4 DONE; **Phase 5 next** — real wallet UI.
 
 ## N. GitHub workflow + repo info
 
@@ -593,7 +593,7 @@ rustok/
 
 ---
 
-### Фаза 3 — Design system + AppShell (2-3 недели, 2-3 коммита)
+### Фаза 3 — Design system + AppShell (2-3 недели, 2-3 коммита) — **DONE 2026-05-05**
 
 **Цель:** Базовая инфраструктура UI: navigation, темы, дизайн-токены, переиспользуемые компоненты.
 
@@ -634,9 +634,20 @@ rustok/
 
 ---
 
-### Фаза 4 — Onboarding flow (3 недели, 2-3 коммита)
+### Фаза 4 — Onboarding flow (3 недели, 21 atomic commit) — **DONE 2026-05-12**
 
-**Цель:** Welcome → KeepItSafe → ShowPhrase → Quiz → CreatePin → ConfirmPin → Wallet.
+**Цель:** Welcome → KeepItSafe → CreatePin → ConfirmPin → [wallet committed atomically] → ShowPhrase → Quiz → Tabs.
+
+**Финальный статус (2026-05-12):**
+- M0 ✅ Secure unlock secret (3 commits: `4fff9e4` + `699bd78` + `bf4a091`)
+- M1 ✅ Welcome + KeepItSafe screens (2 commits: `cea84b8` + `d1453dc`)
+- M2 ✅ PIN setup + atomic wallet commit (5 commits: `ba2c87a` pinSetupStore + `8f513c7` pinAttemptsStore + `6064d1e` PinPad/PinDots + `e24e48b` CreatePin + `470685c` ConfirmPin)
+- M3 ✅ Phrase backup screens (3 commits: `3f31b05` onboardingStore + `fb04f98` ShowPhrase + `89669c1` Quiz)
+- M4 ✅ Unlock + HomeBanner + Restore + prod-strip + close (5 commits: `a43d3df` UnlockScreen + `ab1d856` HomeBanner/UnlockedNavigator + `58da8ad` ImportPhrase + `26112b6` prod-strip _qaForcePhase + М4.5 close)
+
+Working branch: `feat/phase4-onboarding` (21 commits ahead of main, all pushed). PR #14 eligible for promote ready-for-review → Captain merge. CI green (Format, Clippy, Test, Docs, Deny, Mobile). **Final state + manual smoke matrix + known architectural seams:** `docs/PHASE4-HANDOFF.md`. Design spec: `docs/PHASE4-DESIGN-ONBOARDING.md`.
+
+**Original 2-3 commit estimate revised в Phase 4 design doc:** scope grew к 13-18 atomic commits per § 2 (см. NATIVE-MIGRATION-PLAN-deviation rationale в design doc § Risks R1+R7).
 
 **Deliverables:**
 - `WelcomeScreen` — `logo-new.png`, кнопки Create / Restore

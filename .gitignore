@@ -45,3 +45,9 @@ deploy/rpc-proxy/node_modules/
 
 # Session artifacts (debug screenshots from device — not source-of-truth)
 /*.jpg
+
+# Dev artifacts (ephemeral testing / coverage / local harness — not source-of-truth)
+smoke.log
+coverage/
+.claude/
+/nul

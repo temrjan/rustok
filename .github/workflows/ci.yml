@@ -93,12 +93,38 @@ jobs:
           # Lockfile lives at the repo root (npm workspaces).
           cache: 'npm'
           cache-dependency-path: package-lock.json
+      # D4 (CI-MOBILE-BROKEN-INCIDENT § 7): Rust toolchain + cross-compile
+      # targets + cargo-ndk + NDK are required for `npm run ubrn:android`
+      # to regenerate `packages/react-native-rustok-bridge/src/index.tsx`
+      # (gitignored, generated artifact). Without this, `tsc --noEmit`
+      # below fails with TS2307 «Cannot find module
+      # 'react-native-rustok-bridge'».
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+      # JDK setup intentionally omitted — `ubrn build android --and-generate`
+      # writes templated Kotlin/Java sources to packages/react-native-rustok-
+      # bridge/android/src/main/java/ but does NOT invoke Gradle or javac.
+      # Compilation of those sources is the consumer app's (mobile/android)
+      # responsibility, which is out of scope for this CI job (typecheck +
+      # lint + jest only — no Gradle build here).
+      - uses: android-actions/setup-android@v3
+        with:
+          ndk-version: 27.1.12297006
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
       # `npm ci` must run at the repo root so workspaces resolve and
       # all hoisted deps land in <root>/node_modules. The `mobile`
       # working-directory above only applies to the script steps below.
       - name: Install workspace deps
         working-directory: .
         run: npm ci
+      - name: Build + generate uniffi React Native bindings
+        working-directory: .
+        run: npm run ubrn:android -w packages/react-native-rustok-bridge
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test

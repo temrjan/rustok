@@ -1,8 +1,8 @@
 # rustok-mobile
 
-React Native 0.85.2 client for the Rustok wallet (Phase 3 close: Design system + AppShell + bridge integration). Uses `react-native-rustok-bridge` (uniffi-bindgen-react-native) to talk to the Rust core (`crates/core` + `crates/txguard`).
+React Native 0.85.2 client for the Rustok wallet. Phase 4 DONE: full onboarding flow (Welcome → KeepItSafe → CreatePin → ConfirmPin → ShowPhrase → Quiz → Tabs, plus Import flow + Unlock + HomeBanner recovery). Uses `react-native-rustok-bridge` (uniffi-bindgen-react-native) to talk to the Rust core (`crates/core` + `crates/txguard`).
 
-> **Phase status:** Phase 3 DONE 2026-05-05. Onboarding flow + real wallet UI ship in Phase 4-5. См. `../docs/PHASE3-HANDOFF.md` (final state) and `../docs/NATIVE-MIGRATION-PLAN.md` (overall roadmap).
+> **Phase status:** Phase 4 DONE 2026-05-12 (21 atomic commits on `feat/phase4-onboarding`). Real wallet UI ships in Phase 5. См. `../docs/PHASE4-HANDOFF.md` (final state + 7-scenario manual smoke matrix) and `../docs/NATIVE-MIGRATION-PLAN.md` (overall roadmap).
 
 ## Source layout
 
@@ -124,7 +124,42 @@ The app has 4 phases (`loading | no_wallet | locked | unlocked`) driven by `wall
   - **Locked** → forces `phase: 'locked'` (LockedNavigator → UnlockPin)
   - **Unlocked** → forces `phase: 'unlocked'` (Tabs → Wallet)
 - Each forced phase clears `address` / `balance` / `error` to `undefined` so stale data does not leak across branches.
-- The override stays in `production` bundle but is only invoked from `__DEV__`-guarded JSX (Metro strips the call sites in release builds).
+- **Phase 4 M4.4 prod-strip:** the `_qaForcePhase` SETTER BODY itself is gated by `__DEV__` — Metro + Hermes minifier eliminate the `set(...)` call in release builds, leaving `_qaForcePhase: e => {}` (verified via production bundle audit). Closes the runtime-API auth-bypass vector (Frida invocation of `useWalletStore.getState()._qaForcePhase('unlocked')` is а no-op in release). JSX call sites in screens also gated by `{__DEV__ && ...}` — defense-in-depth.
+
+## Onboarding flow (Phase 4)
+
+The full onboarding state machine ships в Phase 4 (DONE 2026-05-12). User journeys:
+
+- **Create wallet:** Welcome → KeepItSafe (3 attestation checkboxes) → CreatePin (Argon2id PHC hash) → ConfirmPin (atomic commit: Keychain secret → MMKV → Rust `createWallet` → `walletStore.refresh`) → ShowPhrase (12-word grid + clipboard + lock-back) → Quiz (3-of-12 verification + shake on wrong) → Tabs.
+- **Import wallet:** Welcome → ImportPhrase (12-word entry + JS validation against `bip39Wordlist.ts` + Rust checksum via `importWalletFromMnemonic`) → CreatePin → ConfirmPin (`walletAlreadyCreated` flag — skips Rust `createWallet` to avoid wiping imported keystore) → Tabs.
+- **Cold-restart unlock:** Splash → UnlockScreen (`verifyPin` + lockout ladder + biometric retrieve secret → Rust `unlockWallet`) → Tabs.
+- **Recovery — `KeyPermanentlyInvalidated`** (biometric set changed): UnlockScreen Recovery banner → «Use recovery phrase» CTA → Welcome → Import flow.
+- **Recovery — mid-onboarding crash** (force-quit between PIN setup и Quiz pass): cold-restart → UnlockScreen → Tabs/Wallet → `<HomeBanner>` recovery CTA → modal `BackupPhrase` stack (re-uses ShowPhrase + Quiz) → completes backup → banner dismissed.
+
+**Key APIs:**
+
+| Surface | File |
+|---|---|
+| `unlockSecret.{getOrCreate,retrieve,wipe,has}UnlockSecret` | `src/lib/unlockSecret.ts` |
+| `pinHash.{hashPin,verifyPin}` (Argon2id) | `src/lib/pinHash.ts` |
+| `pickQuizQuestions(mnemonic): QuizQuestion[]` | `src/lib/pickQuizQuestions.ts` |
+| `BIP39_ENGLISH: readonly string[]` (2048 words) | `src/lib/bip39Wordlist.ts` |
+| `useOnboarding()` — ephemeral mnemonic state hook | `src/hooks/useOnboarding.ts` |
+| `useShake()` — shared shake-on-error primitive | `src/hooks/useShake.ts` |
+| `usePinSetupStore` — PHC pinHash + phraseBackupPending (MMKV) | `src/stores/pinSetupStore.ts` |
+| `usePinAttemptsStore` — lockout ladder counter (MMKV) | `src/stores/pinAttemptsStore.ts` |
+| `useOnboardingStore` — discriminated `BackupState` union | `src/stores/onboardingStore.ts` |
+
+**Security constraints** (per `docs/PHASE4-DESIGN-ONBOARDING.md` § 5):
+
+- PIN = UI auth gate ONLY (Argon2id-hashed, ~20-bit entropy). NEVER passed to Rust crypto APIs.
+- 256-bit Keychain secret = wallet keystore encryption password (passed as 64-hex к Rust).
+- Biometric prompt ONLY on user-initiated unlock (Finding 8 — never on hydrate).
+- Lockout ladder (§ 5.4): persisted via MMKV — cannot be force-quit-bypassed.
+- `KeyPermanentlyInvalidated` (Android — biometric set changed): wallet NOT auto-wiped; user opts into Import recovery.
+- `_qaForcePhase` setter body stripped в release bundle (M4.4 prod-strip; verified `e => {}`).
+
+**Final state:** `docs/PHASE4-HANDOFF.md` (21-commit trail + review chain + 7-scenario manual smoke matrix + known architectural seams).
 
 ## Bridge surface (Phase 3 consumers)
 
@@ -139,9 +174,11 @@ The remaining 18 commands (`createWalletWithMnemonic`, `unlockWallet`, `sendEth`
 
 ## References
 
+- **Phase 4 final state (current):** `../docs/PHASE4-HANDOFF.md`
+- **Phase 4 design plan:** `../docs/PHASE4-DESIGN-ONBOARDING.md`
 - **Phase 3 final state:** `../docs/PHASE3-HANDOFF.md`
 - **Phase 3 design plan:** `../docs/PHASE3-DESIGN-APPSHELL.md`
 - **Worklets incident report:** `../docs/REANIMATED-WORKLETS-INCIDENT.md`
 - **Strategy:** `../docs/NATIVE-MIGRATION-PLAN.md`
-- **Reviewer rules:** `../docs/REVIEWER-CONSTITUTION.md`
+- **Team rules:** `../docs/TEAM-CONSTITUTION.md` (v2.0 triadic team)
 - **CI:** https://github.com/temrjan/rustok/actions

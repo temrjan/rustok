@@ -9,7 +9,7 @@
  *   'loading'   → SplashScreen        (cold-start before bridge hydrate)
  *   'no_wallet' → OnboardingNavigator (Welcome → Phase 4)
  *   'locked'    → LockedNavigator     (UnlockPin → Phase 4)
- *   'unlocked'  → TabsNavigator       (4 tabs)
+ *   'unlocked'  → UnlockedNavigator   (Tabs + BackupPhrase modal — M4.2)
  *
  * `assertNever` is inlined; if a second discriminated union appears
  * in the codebase, lift it to `src/utils/assertNever.ts`.
@@ -23,7 +23,7 @@
 import React from 'react';
 import LockedNavigator from './LockedNavigator';
 import OnboardingNavigator from './OnboardingNavigator';
-import TabsNavigator from './TabsNavigator';
+import UnlockedNavigator from './UnlockedNavigator';
 import SplashScreen from '../screens/SplashScreen';
 import { useWalletStore } from '../stores/walletStore';
 
@@ -44,7 +44,7 @@ function RootNavigator() {
     case 'locked':
       return <LockedNavigator />;
     case 'unlocked':
-      return <TabsNavigator />;
+      return <UnlockedNavigator />;
     default:
       return assertNever(phase);
   }

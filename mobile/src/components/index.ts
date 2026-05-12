@@ -6,6 +6,7 @@
  */
 
 export { Button } from './Button';
+export { HomeBanner } from './HomeBanner';
 export { Input } from './Input';
 export { Modal } from './Modal';
 export { NetworkBadge } from './NetworkBadge';
