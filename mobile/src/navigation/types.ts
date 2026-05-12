@@ -47,3 +47,24 @@ export type OnboardingStackParamList = {
 export type LockedStackParamList = {
   UnlockPin: undefined;
 };
+
+// Backup-phrase modal stack — Phase 4 M4.2. Re-uses ShowPhrase + Quiz
+// screen components from `screens/onboarding/` (single source of truth);
+// the stack identity differs only в WHEN it mounts: OnboardingNavigator
+// fires during initial wallet creation (phase='no_wallet'); this stack
+// fires from HomeBanner CTA в unlocked state to recover а deferred
+// phrase backup per design § 5.5 + § 4.9.
+export type BackupPhraseStackParamList = {
+  ShowPhrase: undefined;
+  Quiz: undefined;
+};
+
+// Unlocked root — Phase 4 M4.2. Wraps TabsNavigator + а modal group
+// containing BackupPhraseStack so `navigation.navigate('BackupPhrase')`
+// from HomeBanner pushes а modal sheet above the tabs. Without this
+// wrapper, ShowPhrase + Quiz would only be reachable during initial
+// onboarding, breaking the Finding 1 recovery flow.
+export type UnlockedParamList = {
+  Tabs: NavigatorScreenParams<TabsParamList>;
+  BackupPhrase: NavigatorScreenParams<BackupPhraseStackParamList>;
+};

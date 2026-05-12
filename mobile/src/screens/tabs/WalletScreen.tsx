@@ -1,24 +1,34 @@
 /**
- * WalletScreen — Phase 3 M3 placeholder.
+ * WalletScreen — Phase 4 M4.2 (was Phase 3 M3 placeholder).
  *
- * Real wallet UI ships in Phase 5+ (HomeVariant balance card, Send/Receive,
- * chain list). M3 = navigation skeleton only.
+ * Hosts the `<HomeBanner>` recovery CTA above the placeholder content.
+ * Converted from а centered `<View>` к а `<ScrollView>` so the banner
+ * does not compress the placeholder when it renders, and to leave room
+ * for the real wallet surfaces (balance card, Send/Receive) shipping в
+ * Phase 5+.
  */
 
 import React from 'react';
-import { Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HomeBanner } from '../../components';
 
 function WalletScreen() {
   const insets = useSafeAreaInsets();
   return (
-    <View
-      className="flex-1 bg-canvas px-6 items-center justify-center"
-      style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
+    <ScrollView
+      className="flex-1 bg-canvas"
+      contentContainerStyle={{
+        paddingTop: insets.top + 16,
+        paddingBottom: insets.bottom + 32,
+      }}
     >
-      <Text className="text-ink-primary text-2xl font-bold mb-2">Wallet</Text>
-      <Text className="text-ink-muted text-sm">Phase 5 placeholder</Text>
-    </View>
+      <HomeBanner />
+      <View className="px-6 items-center justify-center mt-16">
+        <Text className="text-ink-primary text-2xl font-bold mb-2">Wallet</Text>
+        <Text className="text-ink-muted text-sm">Phase 5 placeholder</Text>
+      </View>
+    </ScrollView>
   );
 }
 
