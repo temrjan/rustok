@@ -34,11 +34,16 @@ export type SettingsStackParamList = {
 export type OnboardingStackParamList = {
   Welcome: undefined;
   KeepItSafe: undefined;
-  CreatePin: undefined;                          // M2.4 production
-  ConfirmPin: { expectedHash: string };          // M2.4 stub, M2.5 production
+  // M4.3 added `walletAlreadyCreated` — set by ImportPhraseScreen after
+  // successful wallet import to gate the subsequent PIN-setup atomic commit
+  // (skip Rust createWallet step which would wipe the imported keystore via
+  // `remove_existing_keystores`). Default behavior (Create flow) leaves
+  // the flag undefined → falsy → unchanged commit sequence.
+  CreatePin: { walletAlreadyCreated?: boolean } | undefined;  // M2.4 production; M4.3 extended params
+  ConfirmPin: { expectedHash: string; walletAlreadyCreated?: boolean };  // M2.5 production; M4.3 extended params
   ShowPhrase: undefined;                         // M3.2 production
   Quiz: undefined;                               // M3.2 stub, M3.3 production
-  ImportPhrase: undefined;                       // M4.3 deliverable (stub в M1.1)
+  ImportPhrase: undefined;                       // M4.3 production
 };
 
 // Locked stack — UnlockPin placeholder for M3 (rendered when the user

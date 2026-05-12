@@ -23,7 +23,8 @@
 import React, { useEffect, useState } from 'react';
 import { BackHandler, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Spinner } from '../../components';
 import { PinDots, PASSCODE_LENGTH } from '../../components/PinDots';
@@ -32,10 +33,16 @@ import { hashPin } from '../../lib/pinHash';
 import type { OnboardingStackParamList } from '../../navigation/types';
 
 type Nav = NativeStackNavigationProp<OnboardingStackParamList, 'CreatePin'>;
+type CreatePinRoute = RouteProp<OnboardingStackParamList, 'CreatePin'>;
 
 function CreatePinScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
+  const route = useRoute<CreatePinRoute>();
+  // M4.3: forward import-flow flag к ConfirmPin's atomic commit. Create
+  // flow leaves param undefined → falsy → unchanged Step 3 (createWallet)
+  // remains active. Import flow sets true → ConfirmPin skips createWallet.
+  const walletAlreadyCreated = route.params?.walletAlreadyCreated ?? false;
   const [digits, setDigits] = useState('');
   const [isHashing, setIsHashing] = useState(false);
 
@@ -55,7 +62,10 @@ function CreatePinScreen() {
       .then((phc) => {
         if (cancelled) return;
         setIsHashing(false);
-        navigation.navigate('ConfirmPin', { expectedHash: phc });
+        navigation.navigate('ConfirmPin', {
+          expectedHash: phc,
+          walletAlreadyCreated,
+        });
       })
       .catch(() => {
         if (cancelled) return;
@@ -65,7 +75,7 @@ function CreatePinScreen() {
     return () => {
       cancelled = true;
     };
-  }, [digits, navigation]);
+  }, [digits, navigation, walletAlreadyCreated]);
 
   function handlePressDigit(digit: string) {
     if (isHashing) return;

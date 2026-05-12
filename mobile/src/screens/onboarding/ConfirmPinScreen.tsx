@@ -133,19 +133,29 @@ function ConfirmPinScreen() {
 
   async function commitWallet(): Promise<void> {
     setIsCommitting(true);
+    // M4.3: import flow gates Step 3 (createWallet) — wallet already on
+    // disk via importWalletFromMnemonic; calling createWallet would wipe
+    // the imported keystore via `remove_existing_keystores`.
+    const walletAlreadyCreated = route.params.walletAlreadyCreated ?? false;
     let step: 1 | 2 | 3 | 4 = 1;
     try {
-      // Step 1: Keychain — generate + commit 256-bit secret.
+      // Step 1: Keychain — secret already in Keychain on import flow;
+      // getOrCreate is idempotent, returns existing.
       const secret = await getOrCreateUnlockSecret();
       step = 2;
 
-      // Step 2: MMKV — combined writes (PHC + backup-pending flag).
+      // Step 2: MMKV writes. Create flow → phraseBackupPending=true (user
+      // needs к back up the about-to-be-shown phrase). Import flow →
+      // false (user already entered the phrase).
       usePinSetupStore.getState().setPinHash(expectedHash);
-      usePinSetupStore.getState().setPhraseBackupPending(true);
+      usePinSetupStore.getState().setPhraseBackupPending(!walletAlreadyCreated);
       step = 3;
 
-      // Step 3: Rust createWallet — keystore + onboarding mnemonic file.
-      await getWalletHandle().createWallet(secret);
+      // Step 3: Rust createWallet — SKIPPED in import flow. Wallet already
+      // exists on disk, encrypted с the same Keychain secret.
+      if (!walletAlreadyCreated) {
+        await getWalletHandle().createWallet(secret);
+      }
       step = 4;
 
       // Step 4: walletStore phase transition. `refresh` absorbs failures
@@ -155,32 +165,59 @@ function ConfirmPinScreen() {
         throw new Error('walletStore.refresh did not transition к unlocked');
       }
 
-      // Step 5: navigate.
-      navigation.navigate('ShowPhrase');
+      // Step 5: navigate. Create flow → ShowPhrase. Import flow → no
+      // explicit navigate; phase='unlocked' causes RootNavigator к swap
+      // OnboardingNavigator → UnlockedNavigator → Tabs (component
+      // unmounts here).
+      if (!walletAlreadyCreated) {
+        navigation.navigate('ShowPhrase');
+      }
     } catch (err) {
-      await rollback(step, err);
+      await rollback(step, err, walletAlreadyCreated);
     }
   }
 
-  async function rollback(failedStep: 1 | 2 | 3 | 4, _err: unknown): Promise<void> {
+  async function rollback(
+    failedStep: 1 | 2 | 3 | 4,
+    _err: unknown,
+    walletAlreadyCreated: boolean,
+  ): Promise<void> {
+    // For import flow, the wallet keystore is already on disk and
+    // encrypted with the Keychain secret. Wiping the secret would
+    // permanently orphan the imported wallet (user can re-import but
+    // loses the current installed state). Skip wipes on import-flow
+    // failure paths; the user retries PIN setup, secret stays.
+    const navigateBackToCreatePin = (): void => {
+      // Branch on flag — passing `undefined` explicitly would alter the
+      // mock's recorded arg count vs original (preserves test stability).
+      if (walletAlreadyCreated) {
+        navigation.navigate('CreatePin', { walletAlreadyCreated: true });
+      } else {
+        navigation.navigate('CreatePin');
+      }
+    };
+
     if (failedStep === 1) {
       toast.error('Could not save secure key. Please try again.');
       setIsCommitting(false);
       setDigits('');
       setConfirmAttempts(0);
-      navigation.navigate('CreatePin');
+      navigateBackToCreatePin();
       return;
     }
     if (failedStep === 2) {
-      await wipeUnlockSecret().catch(() => {});
+      if (!walletAlreadyCreated) {
+        await wipeUnlockSecret().catch(() => {});
+      }
       toast.error('Could not save PIN. Please try again.');
       setIsCommitting(false);
       setDigits('');
       setConfirmAttempts(0);
-      navigation.navigate('CreatePin');
+      navigateBackToCreatePin();
       return;
     }
     if (failedStep === 3) {
+      // Step 3 only reachable в create flow (import flow skips Step 3).
       await wipeUnlockSecret().catch(() => {});
       usePinSetupStore.getState().clearAll();
       toast.error('Could not create wallet. Please try again.');
