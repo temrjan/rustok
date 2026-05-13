@@ -38,7 +38,7 @@ pub struct WalletHandle {
     explorer: Arc<ExplorerClient>,
 }
 
-#[uniffi::export]
+#[uniffi::export(async_runtime = "tokio")]
 impl WalletHandle {
     /// Construct a new handle rooted at `data_dir`.
     ///
