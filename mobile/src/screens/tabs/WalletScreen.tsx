@@ -1,20 +1,35 @@
 /**
- * WalletScreen — Phase 4 M4.2 (was Phase 3 M3 placeholder).
+ * WalletScreen — Phase 5 M2a (was Phase 4 M4.2 placeholder).
  *
- * Hosts the `<HomeBanner>` recovery CTA above the placeholder content.
- * Converted from а centered `<View>` к а `<ScrollView>` so the banner
- * does not compress the placeholder when it renders, and to leave room
- * for the real wallet surfaces (balance card, Send/Receive) shipping в
- * Phase 5+.
+ * Wallet home surface for the unlocked phase. Stacks the recovery
+ * HomeBanner, the NetworkBadge, and the BalanceCard. Pull-to-refresh
+ * re-runs `walletStore.refresh()`, which re-resolves phase plus
+ * address/balance (the same path used on cold-start hydrate).
+ *
+ * ActionRow (Send / Receive / Swap) lands в M2b. Recent-transactions
+ * list — Phase 6.
  */
 
-import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HomeBanner } from '../../components';
+import { BalanceCard, HomeBanner, NetworkBadge } from '../../components';
+import { useWalletStore } from '../../stores/walletStore';
 
 function WalletScreen() {
   const insets = useSafeAreaInsets();
+  const refresh = useWalletStore((s) => s.refresh);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await refresh();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refresh]);
+
   return (
     <ScrollView
       className="flex-1 bg-canvas"
@@ -22,12 +37,15 @@ function WalletScreen() {
         paddingTop: insets.top + 16,
         paddingBottom: insets.bottom + 32,
       }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+      }
     >
       <HomeBanner />
-      <View className="px-6 items-center justify-center mt-16">
-        <Text className="text-ink-primary text-2xl font-bold mb-2">Wallet</Text>
-        <Text className="text-ink-muted text-sm">Phase 5 placeholder</Text>
+      <View className="mx-6 mt-2 self-start">
+        <NetworkBadge />
       </View>
+      <BalanceCard />
     </ScrollView>
   );
 }
