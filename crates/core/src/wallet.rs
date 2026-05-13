@@ -254,6 +254,14 @@ impl WalletService {
         &self,
         password: Zeroizing<String>,
     ) -> Result<WalletId, WalletServiceError> {
+        // Issue #15 diagnostic: confirm a tokio runtime is bound before
+        // any `.await`. If `Err(_)` shows up in logcat the failure mode
+        // is H4 (async runtime panic), not H1 (getrandom) or H2 (OOM).
+        log::info!(
+            "create_wallet: runtime = {:?}",
+            tokio::runtime::Handle::try_current()
+        );
+
         validate_password(&password)?;
         ensure_data_dir(&self.data_dir)?;
 

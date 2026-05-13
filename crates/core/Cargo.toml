@@ -55,6 +55,9 @@ thiserror = { workspace = true }
 
 # Logging
 tracing = { workspace = true }
+# Diagnostic build for Issue #15 (createWallet crash on Xiaomi MIUI).
+# Temporary dep for one-shot runtime check log — remove after root cause is identified.
+log = "0.4"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

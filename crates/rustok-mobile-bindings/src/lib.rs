@@ -28,6 +28,7 @@
 
 uniffi::setup_scaffolding!();
 
+mod diagnostics;
 pub mod error;
 pub mod handle;
 pub mod types;

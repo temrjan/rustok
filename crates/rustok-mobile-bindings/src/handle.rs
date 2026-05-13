@@ -52,6 +52,10 @@ impl WalletHandle {
     /// (e.g. data_dir validation).
     #[uniffi::constructor]
     pub fn new(data_dir: String) -> Result<Arc<Self>, BindingsError> {
+        // Issue #15 diagnostic build: install logcat sink + panic hook
+        // + getrandom check on first construction. Idempotent.
+        crate::diagnostics::init_diagnostics();
+
         let wallet = Arc::new(WalletService::new(data_dir));
         let provider = Arc::new(MultiProvider::default_chains());
         let swap_provider = Arc::new(ZeroXProvider::new(build_http_client()));
