@@ -5,6 +5,7 @@
  * Import sites use: `import { Button, Input } from '../components';`
  */
 
+export { ActionRow } from './ActionRow';
 export { BalanceCard } from './BalanceCard';
 export { Button } from './Button';
 export { HomeBanner } from './HomeBanner';
