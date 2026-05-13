@@ -1,19 +1,20 @@
 /**
- * WalletScreen — Phase 5 M2a (was Phase 4 M4.2 placeholder).
+ * WalletScreen — Phase 5 M2b (was Phase 4 M4.2 placeholder).
  *
  * Wallet home surface for the unlocked phase. Stacks the recovery
- * HomeBanner, the NetworkBadge, and the BalanceCard. Pull-to-refresh
- * re-runs `walletStore.refresh()`, which re-resolves phase plus
- * address/balance (the same path used on cold-start hydrate).
+ * HomeBanner, the NetworkBadge, the BalanceCard, and the ActionRow
+ * (Send / Receive / Swap placeholders). Pull-to-refresh re-runs
+ * `walletStore.refresh()`, which re-resolves phase plus address/balance
+ * (the same path used on cold-start hydrate).
  *
- * ActionRow (Send / Receive / Swap) lands в M2b. Recent-transactions
- * list — Phase 6.
+ * Real Send / Receive / Swap screens — M3+. Recent-transactions list —
+ * Phase 6.
  */
 
 import React, { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { BalanceCard, HomeBanner, NetworkBadge } from '../../components';
+import { ActionRow, BalanceCard, HomeBanner, NetworkBadge } from '../../components';
 import { useWalletStore } from '../../stores/walletStore';
 
 function WalletScreen() {
@@ -46,6 +47,7 @@ function WalletScreen() {
         <NetworkBadge />
       </View>
       <BalanceCard />
+      <ActionRow />
     </ScrollView>
   );
 }
