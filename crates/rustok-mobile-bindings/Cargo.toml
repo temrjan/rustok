@@ -16,7 +16,7 @@ crate-type = ["staticlib", "rlib"]
 rustok-core = { path = "../core" }
 rustok-types = { path = "../types" }
 txguard = { path = "../txguard" }
-uniffi = "=0.31.0"
+uniffi = { version = "=0.31.0", features = ["tokio"] }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 alloy-primitives = { workspace = true }
