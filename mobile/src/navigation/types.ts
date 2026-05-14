@@ -69,7 +69,14 @@ export type BackupPhraseStackParamList = {
 // from HomeBanner pushes а modal sheet above the tabs. Without this
 // wrapper, ShowPhrase + Quiz would only be reachable during initial
 // onboarding, breaking the Finding 1 recovery flow.
+//
+// Phase 5 M3a adds `Receive` as a push-presented screen sibling to
+// Tabs. Pushing here (not inside the Tabs navigator) hides the bottom
+// tab bar while Receive is in front — matches the design intent for
+// full-screen wallet sub-flows. Future M3 milestones add `Send`,
+// `Scan`, etc. here too.
 export type UnlockedParamList = {
   Tabs: NavigatorScreenParams<TabsParamList>;
+  Receive: undefined;
   BackupPhrase: NavigatorScreenParams<BackupPhraseStackParamList>;
 };

@@ -14,11 +14,17 @@
 import React, { useCallback, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ActionRow, BalanceCard, HomeBanner, NetworkBadge } from '../../components';
 import { useWalletStore } from '../../stores/walletStore';
+import type { UnlockedParamList } from '../../navigation/types';
+
+type Nav = NativeStackNavigationProp<UnlockedParamList>;
 
 function WalletScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<Nav>();
   const refresh = useWalletStore((s) => s.refresh);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -47,7 +53,7 @@ function WalletScreen() {
         <NetworkBadge />
       </View>
       <BalanceCard />
-      <ActionRow />
+      <ActionRow onReceive={() => navigation.navigate('Receive')} />
     </ScrollView>
   );
 }
