@@ -37,6 +37,13 @@ export class WalletHandle {
   getWalletBalance = jest.fn().mockResolvedValue(FAKE_BALANCE);
   getChainId = jest.fn().mockResolvedValue(undefined);
   lockWallet = jest.fn().mockResolvedValue(undefined);
+  // Phase 5 M3a — Receive screen renders this as inline SVG. Benign
+  // stub keeps a minimal valid SVG document so react-native-svg's
+  // `SvgXml` parser does not throw if a test actually mounts the screen
+  // without overriding this resolution.
+  getWalletQrSvg = jest.fn().mockResolvedValue(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
+  );
 }
 
 export const generateMnemonic = jest
