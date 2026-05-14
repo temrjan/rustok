@@ -103,7 +103,10 @@ function ReceiveScreen() {
         contentContainerStyle={{ paddingBottom: 32 }}
         className="flex-1"
       >
-        <View className="items-center mt-4">
+        <View className="flex-row justify-center mt-4">
+          {/* NetworkBadge has `self-start` baked in; `flex-row justify-center`
+              on this row overrides the cross-axis pull so the pill renders
+              centred under the header instead of pinned to the left edge. */}
           <NetworkBadge />
         </View>
 
