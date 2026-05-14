@@ -25,7 +25,7 @@
 - **Где живёт:** `C:\Claude\projects\rustok\` (ASCII-only после M2 path fix)
 - **Что делаем:** Мигрируем UI с Tauri+Leptos (WebView) на **React Native + uniffi-bindgen-react-native** (native UI, Rust core переиспользуется)
 - **Что НЕ делаем:** WebView в любой форме (Tauri+React план отменён 2026-04-28)
-- **Текущая фаза:** **Phase 4 DONE 2026-05-12.** Onboarding flow shipped (21 atomic commits на `feat/phase4-onboarding`, PR #14 eligible for promote ready-for-review → Captain merge). Все 5 milestones закрыты: M0 secure unlock secret + M1 Welcome/KeepItSafe + M2 PIN setup atomic commit + M3 phrase backup (ShowPhrase + Quiz) + M4 Unlock/HomeBanner/ImportPhrase/prod-strip. 34 jest suites / 154 tests, typecheck PASS, lint clean. iOS smoke deferred → M5-iOS-Phase4 (Mac session). См. `docs/PHASE4-HANDOFF.md` (final state + 7-scenario manual smoke matrix + known seams). **Phase 5 next** — real wallet UI (balance + Send/Receive + chain list). Predecessors: Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
+- **Текущая фаза:** **Phase 5 IN PROGRESS** — real wallet UI. Merged: PR #20 (M3a Receive), PR #21 (RPC timeout fix), PR #22 (M3b Send), PR #24 (Issue #23 — alloy `connect_http` panic, Bug A+B closed). First on-chain ETH transaction broadcast on Sepolia 2026-05-14 from Xiaomi device. 41 jest suites / ~215 tests + 227 Rust workspace tests, all green. **Next:** design-token foundation PR. Predecessors: Phase 4 DONE 2026-05-12 (PR #14, `docs/PHASE4-HANDOFF.md`); Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
 - **Платформы:** Android + iOS only, desktop deferred
 - **Mainnet timeline:** свободный, фокус на качестве
 
@@ -674,6 +674,10 @@ Working branch: `feat/phase4-onboarding` (21 commits ahead of main, all pushed).
 ---
 
 ### Фаза 5 — Restore + Wallet (Home/Send/Receive) (3 недели, 3-4 коммита)
+
+> **Status:** Phase 5 in progress. Merged: PR #20 (M3a Receive), PR #21 (RPC timeout),
+> PR #22 (M3b Send), PR #24 (Issue #23 — `connect_http` panic fix, Bug A+B).
+> 14/14 device smoke on Xiaomi. Next: design-token foundation PR.
 
 **Цель:** Восстановление + основная Wallet функциональность.
 
