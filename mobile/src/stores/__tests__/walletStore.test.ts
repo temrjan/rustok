@@ -162,5 +162,72 @@ describe('walletStore', () => {
       await useWalletStore.getState().refresh();
       expect(useWalletStore.getState().phase).toBe('no_wallet');
     });
+
+    it('passes AbortSignal to RPC calls so they can be cancelled', async () => {
+      mockHandle.hasWallet.mockResolvedValue(true);
+      mockHandle.isWalletUnlocked.mockResolvedValue(true);
+      mockHandle.getCurrentAddress.mockResolvedValue('0xdead');
+      mockHandle.getWalletBalance.mockResolvedValue(FAKE_BALANCE);
+      const { useWalletStore } =
+        require('../walletStore') as typeof import('../walletStore');
+
+      await useWalletStore.getState().hydrate();
+
+      // Both RPC-bound bridge calls must receive the timeout signal.
+      // Without it the `AbortSignal.timeout(12s)` budget cannot fire
+      // through the uniffi → tokio cancellation path.
+      const expectedShape = { signal: expect.any(AbortSignal) };
+      expect(mockHandle.getCurrentAddress).toHaveBeenCalledWith(expectedShape);
+      expect(mockHandle.getWalletBalance).toHaveBeenCalledWith(expectedShape);
+    });
+
+    it('AbortError rejection → phase: unlocked + friendly timeout message', async () => {
+      // The timer mechanism is DOM standard; this test exercises the
+      // error-handling branch by injecting an AbortError-shaped rejection
+      // directly. The real `AbortSignal.timeout(12s)` plumbing surfaces
+      // exactly this shape on Hermes / uniffi.
+      const abortError = new Error('The operation was aborted.');
+      abortError.name = 'AbortError';
+
+      mockHandle.hasWallet.mockResolvedValue(true);
+      mockHandle.isWalletUnlocked.mockResolvedValue(true);
+      mockHandle.getCurrentAddress.mockRejectedValue(abortError);
+      mockHandle.getWalletBalance.mockRejectedValue(abortError);
+
+      const { useWalletStore } =
+        require('../walletStore') as typeof import('../walletStore');
+      await useWalletStore.getState().hydrate();
+
+      const s = useWalletStore.getState();
+      // Phase flips to 'unlocked' *before* the RPC fetch starts (so the
+      // user exits the Splash even on a stalled provider); only the
+      // address/balance leg fails.
+      expect(s.phase).toBe('unlocked');
+      expect(s.address).toBeUndefined();
+      expect(s.balance).toBeUndefined();
+      expect(s.error).toBe('Network too slow — pull to retry');
+    });
+
+    it('Node-style ABORT_ERR code → also surfaces friendly timeout message', async () => {
+      // Cross-runtime safety net: Node (Jest env) sometimes attaches
+      // `code: 'ABORT_ERR'` without setting `name === 'AbortError'`.
+      // `isAbortError` checks both; this case proves the `code` branch.
+      const nodeStyleAbort = Object.assign(new Error('Aborted'), {
+        code: 'ABORT_ERR',
+      });
+
+      mockHandle.hasWallet.mockResolvedValue(true);
+      mockHandle.isWalletUnlocked.mockResolvedValue(true);
+      mockHandle.getCurrentAddress.mockRejectedValue(nodeStyleAbort);
+      mockHandle.getWalletBalance.mockRejectedValue(nodeStyleAbort);
+
+      const { useWalletStore } =
+        require('../walletStore') as typeof import('../walletStore');
+      await useWalletStore.getState().hydrate();
+
+      expect(useWalletStore.getState().error).toBe(
+        'Network too slow — pull to retry',
+      );
+    });
   });
 });

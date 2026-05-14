@@ -58,6 +58,12 @@ import { getWalletHandle } from '../lib/walletHandle';
 
 export type WalletPhase = 'loading' | 'no_wallet' | 'locked' | 'unlocked';
 
+// 12 s is a deliberate middle ground: 10 s rejects on slow 3G / Edge,
+// 15 s is past the point a user has already left the screen. One
+// constant — bump or trim in a single place if Sepolia / mainnet RPC
+// pressure shifts the budget.
+const RPC_TIMEOUT_MS = 12_000;
+
 interface WalletState {
   phase: WalletPhase;
   address: string | undefined;
@@ -70,6 +76,16 @@ interface WalletState {
 
 function userFacingError(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+// `AbortSignal.timeout` rejects with a DOMException whose `name` is
+// `'AbortError'` on Hermes / browsers. Node (and therefore Jest) also
+// adds `code === 'ABORT_ERR'`; cover both so the friendly message fires
+// in either runtime.
+function isAbortError(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  return e.name === 'AbortError'
+    || ('code' in e && e.code === 'ABORT_ERR');
 }
 
 export const useWalletStore = create<WalletState>((set) => {
@@ -108,17 +124,33 @@ export const useWalletStore = create<WalletState>((set) => {
         balance: undefined,
         error: undefined,
       });
+      // Inner RPC fetch is timeout-guarded: a stalled provider must not
+      // leave the pull-to-refresh spinner stuck forever (M2a smoke seam).
+      // `AbortController` + manual `setTimeout` rather than the newer
+      // `AbortSignal.timeout(ms)` because the latter's static method is
+      // not in the TS lib set this project pulls in. Cancellation
+      // propagates through the bridge's native signal plumbing; uniffi
+      // forwards it to the tokio task on the Rust side. Known
+      // limitation: a concurrent pull-to-refresh during boot hydrate is
+      // not de-duplicated yet — the later set() wins. We accept that
+      // for this PR; M3b will revisit if smoke surfaces a regression.
+      const controller = new AbortController();
+      const timeoutHandle = setTimeout(() => {
+        controller.abort();
+      }, RPC_TIMEOUT_MS);
       try {
         const [address, balance] = await Promise.all([
-          handle.getCurrentAddress(),
-          handle.getWalletBalance(),
+          handle.getCurrentAddress({ signal: controller.signal }),
+          handle.getWalletBalance({ signal: controller.signal }),
         ]);
         set({ address, balance });
       } catch (e: unknown) {
-        // Wallet is unlocked, just balance/address fetch failed.
-        // Stay on Tabs with `error` populated; Phase 5 surfaces this
-        // via Toast.
-        set({ error: userFacingError(e) });
+        const message = isAbortError(e)
+          ? 'Network too slow — pull to retry'
+          : userFacingError(e);
+        set({ error: message });
+      } finally {
+        clearTimeout(timeoutHandle);
       }
     } catch (e: unknown) {
       // Phase determination failed (handle init or hasWallet/isUnlocked
