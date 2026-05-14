@@ -75,8 +75,15 @@ export type BackupPhraseStackParamList = {
 // tab bar while Receive is in front — matches the design intent for
 // full-screen wallet sub-flows. Future M3 milestones add `Send`,
 // `Scan`, etc. here too.
+//
+// Phase 5 M3b adds the `Send` / `ConfirmSend` pair. `Send` is the
+// input form; `ConfirmSend` consumes `{ to, amountWei }` route params
+// to drive the preview + broadcast lifecycle. Both push above Tabs
+// (no tab bar) for the same full-screen-flow reason as Receive.
 export type UnlockedParamList = {
   Tabs: NavigatorScreenParams<TabsParamList>;
   Receive: undefined;
+  Send: undefined;
+  ConfirmSend: { to: string; amountWei: string };
   BackupPhrase: NavigatorScreenParams<BackupPhraseStackParamList>;
 };

@@ -44,6 +44,33 @@ export class WalletHandle {
   getWalletQrSvg = jest.fn().mockResolvedValue(
     '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
   );
+
+  // Phase 5 M3b — Send flow preview + broadcast. Defaults shaped after
+  // `crates/rustok-mobile-bindings/src/types.rs` (`SendPreview`,
+  // `SendResult`). Tests override per-case via `mockResolvedValue` /
+  // `mockRejectedValue`; defaults are only safe no-ops for screens
+  // mounting without explicit setup (e.g. App.test render).
+  previewSend = jest.fn().mockResolvedValue({
+    verdict: {
+      action: 'Allow',
+      riskScore: 0,
+      findings: [],
+      description: 'OK',
+    },
+    route: {
+      chainId: 11155111n,
+      chainName: 'Sepolia',
+      estimatedGas: 21000n,
+      maxFeePerGas: '0',
+      maxPriorityFeePerGas: '0',
+      estimatedCostWei: '0',
+    },
+    explanation: 'OK',
+  });
+  sendEth = jest.fn().mockResolvedValue({
+    txHash: '0x0000000000000000000000000000000000000000000000000000000000000000',
+    chainId: 11155111n,
+  });
 }
 
 export const generateMnemonic = jest

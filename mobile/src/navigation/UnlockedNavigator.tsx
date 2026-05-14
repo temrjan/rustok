@@ -30,6 +30,9 @@ function UnlockedNavigator() {
       <Stack.Group>
         <Stack.Screen name="Tabs" component={TabsNavigator} />
         <Stack.Screen name="Receive" component={ReceiveScreen} />
+        {/* `Send` + `ConfirmSend` route names are declared in
+            `UnlockedParamList`; the screen components register in M3b
+            C2 / C3 so each commit stays atomically functional. */}
       </Stack.Group>
       <Stack.Group screenOptions={{ presentation: 'modal' }}>
         <Stack.Screen name="BackupPhrase" component={BackupPhraseNavigator} />
