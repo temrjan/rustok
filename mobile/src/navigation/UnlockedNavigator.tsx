@@ -19,6 +19,7 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TabsNavigator from './TabsNavigator';
 import BackupPhraseNavigator from './BackupPhraseNavigator';
+import ReceiveScreen from '../screens/wallet/ReceiveScreen';
 import type { UnlockedParamList } from './types';
 
 const Stack = createNativeStackNavigator<UnlockedParamList>();
@@ -28,6 +29,7 @@ function UnlockedNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Group>
         <Stack.Screen name="Tabs" component={TabsNavigator} />
+        <Stack.Screen name="Receive" component={ReceiveScreen} />
       </Stack.Group>
       <Stack.Group screenOptions={{ presentation: 'modal' }}>
         <Stack.Screen name="BackupPhrase" component={BackupPhraseNavigator} />

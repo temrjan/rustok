@@ -40,4 +40,11 @@ export const Symbol = 'Symbol';
 export const Image = 'SvgImage';
 export const Pattern = 'Pattern';
 
+// `SvgXml` renders a raw SVG document string. Phase 5 M3a uses it for
+// the QR code returned from the Rust bridge (`getWalletQrSvg`).
+export const SvgXml = 'SvgXml';
+export const SvgUri = 'SvgUri';
+export const SvgCss = 'SvgCss';
+export const SvgCssUri = 'SvgCssUri';
+
 export default Svg;

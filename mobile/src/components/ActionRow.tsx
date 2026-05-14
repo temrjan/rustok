@@ -1,12 +1,14 @@
 /**
- * ActionRow — Phase 5 M2b.
+ * ActionRow — Phase 5 M2b, callback hook added in M3a.
  *
  * Horizontal row of three primary wallet actions on the Wallet home
  * surface: Send, Receive, Swap. Each action is a round periwinkle
  * button with a lucide icon and a label below.
  *
- * `onPress` callbacks fire a "coming soon" toast in this milestone —
- * the real Send / Receive / Swap screens land в M3+.
+ * Each action takes an optional `onPress` override; when omitted the
+ * default fires a "coming soon" toast (the M2b placeholder behaviour).
+ * Screens that have a real destination — `WalletScreen` wires
+ * `onReceive` from M3a onward — pass a navigation callback through.
  *
  * `ActionButton` is defined at module scope to keep React component
  * types stable across re-renders of `<ActionRow>`
@@ -50,7 +52,13 @@ function ActionButton({ icon: Icon, label, onPress, disabled = false }: ActionBu
   );
 }
 
-export function ActionRow() {
+interface ActionRowProps {
+  onSend?: () => void;
+  onReceive?: () => void;
+  onSwap?: () => void;
+}
+
+export function ActionRow({ onSend, onReceive, onSwap }: ActionRowProps = {}) {
   return (
     <View
       accessibilityLabel="Wallet actions"
@@ -59,17 +67,17 @@ export function ActionRow() {
       <ActionButton
         icon={ArrowUpRight}
         label="Send"
-        onPress={() => toast.info('Send coming soon')}
+        onPress={onSend ?? (() => toast.info('Send coming soon'))}
       />
       <ActionButton
         icon={ArrowDownLeft}
         label="Receive"
-        onPress={() => toast.info('Receive coming soon')}
+        onPress={onReceive ?? (() => toast.info('Receive coming soon'))}
       />
       <ActionButton
         icon={ArrowLeftRight}
         label="Swap"
-        onPress={() => toast.info('Swap coming soon')}
+        onPress={onSwap ?? (() => toast.info('Swap coming soon'))}
       />
     </View>
   );
