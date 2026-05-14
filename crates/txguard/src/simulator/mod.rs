@@ -88,6 +88,14 @@ pub async fn simulate(
     let url = rpc_url
         .parse()
         .map_err(|e| SimulateError::Rpc(format!("invalid URL: {e}")))?;
+    // TODO(issue-23): replace with `connect_reqwest(shared_client, url)`
+    // once `simulate()` accepts a shared `reqwest::Client` (signature is
+    // currently `(.., rpc_url: &str)`, so a fresh client gets built here).
+    // `connect_http` invokes `reqwest::Client::new()` which panics on
+    // uniffi's JSI worker thread without a tokio reactor — fine for the
+    // current CLI / test reachers, but `analyzeTransaction` mobile bridge
+    // path will hit it once `TransactionPreview::simulation` becomes
+    // populated (per `crates/rustok-mobile-bindings/src/types.rs:177`).
     let provider = ProviderBuilder::new().connect_http(url);
 
     // 2. Fork chain state at latest block

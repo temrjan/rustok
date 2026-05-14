@@ -232,9 +232,14 @@ pub async fn sign_and_send_transaction_with_signer(
         .parse()
         .map_err(|e| SendError::Provider(format!("invalid RPC URL: {e}")))?;
 
+    // Reuse the shared reqwest::Client from `MultiProvider` via
+    // `connect_reqwest`; `connect_http` here would invoke
+    // `reqwest::Client::new()` and panic on uniffi's JSI worker
+    // thread when no tokio reactor is in scope (Issue #23, sister of
+    // #15).
     let tx_provider = ProviderBuilder::new()
         .wallet(EthereumWallet::from(signer))
-        .connect_http(rpc_url);
+        .connect_reqwest(provider.http_client().clone(), rpc_url);
 
     let pending = tx_provider
         .send_transaction(tx)
