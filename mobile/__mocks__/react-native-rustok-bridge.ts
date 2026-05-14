@@ -26,6 +26,16 @@ const FAKE_BALANCE = {
   errors: [],
 };
 
+// Mirrors the real `enum ActionDto` shape from the uniffi-generated
+// bindings (`packages/.../rustok_mobile_bindings.ts:1337`). 0-indexed,
+// matches the order of the wire converter (`Block`, `Warn`, `Allow`).
+// Test files import this to populate mock SendPreview verdicts.
+export enum ActionDto {
+  Block,
+  Warn,
+  Allow,
+}
+
 export class WalletHandle {
   // Mirrors the real signature `(dataDir: string)` — underscore prefix
   // marks the param as intentionally unused in the mock.
@@ -52,7 +62,7 @@ export class WalletHandle {
   // mounting without explicit setup (e.g. App.test render).
   previewSend = jest.fn().mockResolvedValue({
     verdict: {
-      action: 'Allow',
+      action: ActionDto.Allow,
       riskScore: 0,
       findings: [],
       description: 'OK',
