@@ -20,6 +20,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TabsNavigator from './TabsNavigator';
 import BackupPhraseNavigator from './BackupPhraseNavigator';
 import ReceiveScreen from '../screens/wallet/ReceiveScreen';
+import SendScreen from '../screens/wallet/SendScreen';
 import type { UnlockedParamList } from './types';
 
 const Stack = createNativeStackNavigator<UnlockedParamList>();
@@ -30,9 +31,10 @@ function UnlockedNavigator() {
       <Stack.Group>
         <Stack.Screen name="Tabs" component={TabsNavigator} />
         <Stack.Screen name="Receive" component={ReceiveScreen} />
-        {/* `Send` + `ConfirmSend` route names are declared in
-            `UnlockedParamList`; the screen components register in M3b
-            C2 / C3 so each commit stays atomically functional. */}
+        <Stack.Screen name="Send" component={SendScreen} />
+        {/* `ConfirmSend` registers in M3b C3 together with the broadcast
+            wiring + the WalletScreen onSend callback that opens this
+            sub-stack. */}
       </Stack.Group>
       <Stack.Group screenOptions={{ presentation: 'modal' }}>
         <Stack.Screen name="BackupPhrase" component={BackupPhraseNavigator} />
