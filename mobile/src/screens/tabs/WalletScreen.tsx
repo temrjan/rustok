@@ -53,7 +53,10 @@ function WalletScreen() {
         <NetworkBadge />
       </View>
       <BalanceCard />
-      <ActionRow onReceive={() => navigation.navigate('Receive')} />
+      <ActionRow
+        onSend={() => navigation.navigate('Send')}
+        onReceive={() => navigation.navigate('Receive')}
+      />
     </ScrollView>
   );
 }

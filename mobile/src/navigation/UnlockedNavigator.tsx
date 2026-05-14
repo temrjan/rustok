@@ -20,6 +20,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import TabsNavigator from './TabsNavigator';
 import BackupPhraseNavigator from './BackupPhraseNavigator';
 import ReceiveScreen from '../screens/wallet/ReceiveScreen';
+import SendScreen from '../screens/wallet/SendScreen';
+import ConfirmSendScreen from '../screens/wallet/ConfirmSendScreen';
 import type { UnlockedParamList } from './types';
 
 const Stack = createNativeStackNavigator<UnlockedParamList>();
@@ -30,6 +32,8 @@ function UnlockedNavigator() {
       <Stack.Group>
         <Stack.Screen name="Tabs" component={TabsNavigator} />
         <Stack.Screen name="Receive" component={ReceiveScreen} />
+        <Stack.Screen name="Send" component={SendScreen} />
+        <Stack.Screen name="ConfirmSend" component={ConfirmSendScreen} />
       </Stack.Group>
       <Stack.Group screenOptions={{ presentation: 'modal' }}>
         <Stack.Screen name="BackupPhrase" component={BackupPhraseNavigator} />
