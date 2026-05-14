@@ -208,6 +208,24 @@ impl MultiProvider {
         &self.chains
     }
 
+    /// Access the shared HTTP client used for RPC calls.
+    ///
+    /// Exposed so callers building a custom [`ProviderBuilder`] (e.g. for
+    /// wallet-attached signing in [`crate::send::execute_send`] /
+    /// [`crate::sign::sign_and_send_transaction`]) reuse the same reqwest
+    /// connection pool instead of constructing a new one via
+    /// [`ProviderBuilder::connect_http`]. The latter eagerly calls
+    /// `reqwest::Client::new()` which requires a tokio reactor — that
+    /// triggered Issue #23 on the JSI worker thread where uniffi
+    /// dispatches our async methods (sister of Issue #15).
+    ///
+    /// `reqwest::Client` is internally `Arc`-wrapped, so callers can
+    /// `.clone()` the returned reference cheaply.
+    #[must_use]
+    pub const fn http_client(&self) -> &reqwest::Client {
+        &self.http
+    }
+
     /// Primary chain id used as the routing context for the UI network badge.
     ///
     /// Returns the first configured chain. The constructors

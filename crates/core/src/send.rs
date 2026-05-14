@@ -140,10 +140,14 @@ pub async fn execute_send(
         .parse()
         .map_err(|e| SendError::Provider(format!("invalid RPC URL: {e}")))?;
 
-    // 2. Build provider with wallet (auto-signs).
+    // 2. Build provider with wallet (auto-signs). Reuse the shared
+    // reqwest::Client from `MultiProvider` via `connect_reqwest`;
+    // `connect_http` here would invoke `reqwest::Client::new()` and
+    // panic on uniffi's JSI worker thread when no tokio reactor is
+    // in scope (Issue #23, sister of #15).
     let tx_provider = alloy_provider::ProviderBuilder::new()
         .wallet(alloy_network::EthereumWallet::from(signer))
-        .connect_http(rpc_url);
+        .connect_reqwest(provider.http_client().clone(), rpc_url);
 
     // 3. Fetch nonce.
     let nonce = provider
