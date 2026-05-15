@@ -96,7 +96,24 @@ export const typography = {
   },
 } as const;
 
+// Shadows — theme-invariant, NOT mirrored in global.css or tailwind.config.js.
+// Cross-platform: iOS uses shadowColor/Offset/Opacity/Radius; Android uses
+// elevation (system-rendered drop shadow). React Native silently ignores
+// iOS-only fields on Android and vice-versa — one object handles both.
+// Consume via inline `style={shadow.card}` (TS-only — no className).
+// Other levels (e.g. `soft`, `btn`) added when actual consumers arrive.
+export const shadow = {
+  card: {
+    shadowColor: '#0A1123',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 24,
+    elevation: 6,
+  },
+} as const;
+
 export type ThemeMode = 'light' | 'dark';
 export type Palette = (typeof palette)[ThemeMode];
 export type RadiusKey = keyof typeof radius;
 export type FontWeightKey = keyof typeof typography.weight;
+export type ShadowKey = keyof typeof shadow;

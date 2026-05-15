@@ -17,6 +17,7 @@
    - 2.5 [Semantic](#25-semantic-theme-invariant-tailwind-defaults)
    - 2.6 [Border Radii](#26-border-radii-theme-invariant-not-in-globalcss)
    - 2.7 [Typography](#27-typography-theme-invariant-not-in-globalcss-not-in-tailwindconfigjs)
+   - 2.8 [Shadows](#28-shadows-theme-invariant-ts-only)
 3. [Theme System](#3-theme-system)
 4. [3-File Synchronization Invariant](#4-3-file-synchronization-invariant)
 5. [Known Limitations](#5-known-limitations)
@@ -138,6 +139,40 @@ TS import: `import { radius } from '../theme/tokens'; const styles = StyleSheet.
 > Values are **strings** per React Native fontWeight API.
 > Tailwind defaults already match — no `tailwind.config.js` `fontWeight` extend.
 > `family` and `size` scale intentionally omitted — see §5.2 and §5.5.
+
+### 2.8 Shadows (theme-invariant, TS-only)
+
+| Token | iOS fields | Android | Role |
+|---|---|---|---|
+| `shadow.card` | `shadowColor: '#0A1123'`, `shadowOffset: { width: 0, height: 8 }`, `shadowOpacity: 0.1`, `shadowRadius: 24` | `elevation: 6` | Soft drop shadow for primary cards (BalanceCard hero, future modals) |
+
+**Consumption — TS-only via inline `style`:**
+
+```tsx
+import { shadow } from '../theme/tokens';
+
+<View
+  className="bg-surface-card rounded-rw-xl p-4"
+  style={shadow.card}
+>
+  ...
+</View>
+```
+
+**Why TS-only (not Tailwind `shadow-*` extend):** NativeWind v4 maps Tailwind
+`box-shadow` CSS values to RN shadow* / elevation, but the mapping loses
+cross-platform precision (especially tinted shadows, exact iOS shadowOpacity).
+Storing as a typed object and consuming via inline `style={...}` keeps
+iOS and Android renderers consistent with values declared once.
+
+**React Native cross-platform behaviour:** RN silently ignores iOS-only fields
+(`shadowColor` / `shadowOffset` / `shadowOpacity` / `shadowRadius`) on Android,
+and ignores `elevation` on iOS. One object with all fields covers both
+platforms — no `Platform.select` required.
+
+**Backlog (other levels — add when consumers arrive):**
+- `shadow.soft` — subtle elevation for secondary cards / list items
+- `shadow.btn` — depth for primary CTAs on light surfaces
 
 ---
 
