@@ -1,0 +1,268 @@
+/**
+ * activityStore — unit tests for the Activity tab data layer.
+ *
+ * Mocks: react-native-mmkv (pendingTxCache lookups), `lib/walletHandle`
+ * (bridge), `networkStore.chainId` access. Covers: chain-filter on
+ * bridge entries, pending merge with txHash dedup, undefined chainId
+ * guard, supersede identity guard in catch path, AbortError →
+ * "Network too slow", top-level bridge throw → error with message.
+ *
+ * `export {}` keeps the file module-scoped so top-level helpers do
+ * not collide with other store test files at TS-project level.
+ */
+
+export {};
+
+const mockStorage: Map<string, string> = new Map();
+
+jest.mock('react-native-mmkv', () => ({
+  createMMKV: () => ({
+    getString: (key: string): string | undefined => mockStorage.get(key),
+    set: (key: string, value: boolean | string | number): void => {
+      mockStorage.set(key, String(value));
+    },
+    remove: (key: string): boolean => mockStorage.delete(key),
+    clearAll: (): void => {
+      mockStorage.clear();
+    },
+  }),
+}));
+
+const mockHandle = {
+  getTransactionHistory: jest.fn(),
+};
+
+jest.mock('../../lib/walletHandle', () => ({
+  getWalletHandle: () => mockHandle,
+}));
+
+const mockNetworkChainId = jest.fn();
+jest.mock('../networkStore', () => ({
+  useNetworkStore: {
+    getState: () => ({ chainId: mockNetworkChainId() }),
+  },
+}));
+
+describe('activityStore', () => {
+  beforeEach(() => {
+    mockStorage.clear();
+    mockHandle.getTransactionHistory.mockReset();
+    mockNetworkChainId.mockReset();
+    jest.resetModules();
+    // Pin Date.now so pendingTxCache.clearStale() (called by fetch()) does
+    // not delete fixture entries with low broadcastAt values. Pinned to
+    // 1_500_000_000 ms = 1_500_000 unix sec → cutoff at 1_498_200 sec;
+    // fixtures use broadcastAt in the 998–999 range which sits comfortably
+    // above zero but below cutoff would need bigger values — we set far
+    // enough back in test that all fixtures stay fresh.
+    jest.spyOn(Date, 'now').mockReturnValue(1_500_000); // 1500 unix sec; cutoff = -300 → keep all
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function loadStore() {
+    return (
+      require('../activityStore') as typeof import('../activityStore')
+    ).useActivityStore;
+  }
+
+  function bridgeEntry(overrides: {
+    txHash?: string;
+    chainId?: bigint;
+  } = {}): {
+    txHash: string;
+    chainId: bigint;
+    chainName: string;
+    from: string;
+    to: string;
+    valueFormatted: string;
+    timestamp: bigint;
+    timeAgo: string;
+  } {
+    return {
+      txHash: '0xa',
+      chainId: 11155111n,
+      chainName: 'Sepolia',
+      from: '0xfrom',
+      to: '0xto',
+      valueFormatted: '1.0 ETH',
+      timestamp: 100n,
+      timeAgo: '1m ago',
+      ...overrides,
+    };
+  }
+
+  it('initial phase is "idle" with empty entries', () => {
+    const store = loadStore();
+    expect(store.getState().phase).toBe('idle');
+    expect(store.getState().entries).toEqual([]);
+  });
+
+  it('fetch() with undefined chainId resolves to loaded + empty entries', async () => {
+    mockNetworkChainId.mockReturnValue(undefined);
+    const store = loadStore();
+    await store.getState().fetch();
+    expect(store.getState().phase).toBe('loaded');
+    expect(store.getState().entries).toEqual([]);
+    expect(mockHandle.getTransactionHistory).not.toHaveBeenCalled();
+  });
+
+  it('fetch() filters bridge entries by current chainId', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    mockHandle.getTransactionHistory.mockResolvedValue({
+      transactions: [
+        bridgeEntry({ txHash: '0xa', chainId: 11155111n }),
+        bridgeEntry({ txHash: '0xb', chainId: 1n }),
+      ],
+      errors: [],
+    });
+    const store = loadStore();
+    await store.getState().fetch();
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xa']);
+  });
+
+  it('fetch() merges pending entries on top, dedups by txHash with API result', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    const persistedPending = [
+      {
+        txHash: '0xpending',
+        chainId: '11155111',
+        from: '0xf',
+        to: '0xt',
+        valueWei: '1000000000000000000',
+        broadcastAt: 999,
+      },
+      {
+        txHash: '0xa',
+        chainId: '11155111',
+        from: '0xf',
+        to: '0xt',
+        valueWei: '2000000000000000000',
+        broadcastAt: 998,
+      },
+    ];
+    mockStorage.set('pendingTx', JSON.stringify(persistedPending));
+    mockHandle.getTransactionHistory.mockResolvedValue({
+      transactions: [bridgeEntry({ txHash: '0xa', chainId: 11155111n })],
+      errors: [],
+    });
+    const store = loadStore();
+    await store.getState().fetch();
+    const hashes = store.getState().entries.map((e) => e.txHash);
+    // 0xpending (cache survives — no API match) before 0xa (API only — cache dedup).
+    expect(hashes).toEqual(['0xpending', '0xa']);
+    expect(store.getState().entries[0]?.timeAgo).toBe('Pending');
+  });
+
+  it('fetch() filters pending entries by current chain', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    const persistedPending = [
+      {
+        txHash: '0xother',
+        chainId: '1',
+        from: '0xf',
+        to: '0xt',
+        valueWei: '0',
+        broadcastAt: 999,
+      },
+    ];
+    mockStorage.set('pendingTx', JSON.stringify(persistedPending));
+    mockHandle.getTransactionHistory.mockResolvedValue({
+      transactions: [],
+      errors: [],
+    });
+    const store = loadStore();
+    await store.getState().fetch();
+    expect(store.getState().entries).toEqual([]);
+  });
+
+  it('fetch() bridge throw → error phase with message', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    mockHandle.getTransactionHistory.mockRejectedValue(new Error('rpc down'));
+    const store = loadStore();
+    await store.getState().fetch();
+    expect(store.getState().phase).toBe('error');
+    expect(store.getState().error).toBe('rpc down');
+  });
+
+  it('fetch() AbortError → "Network too slow"', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    const abortErr = new Error('Aborted');
+    abortErr.name = 'AbortError';
+    mockHandle.getTransactionHistory.mockRejectedValue(abortErr);
+    const store = loadStore();
+    await store.getState().fetch();
+    expect(store.getState().phase).toBe('error');
+    expect(store.getState().error).toBe('Network too slow');
+  });
+
+  it('fetch() concurrent calls: only the latest result lands (identity guard)', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    mockHandle.getTransactionHistory
+      .mockImplementationOnce(
+        (opts: { signal: AbortSignal }) =>
+          new Promise((_, reject) => {
+            opts.signal.addEventListener('abort', () => {
+              const err = new Error('Aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }),
+      )
+      .mockResolvedValueOnce({
+        transactions: [bridgeEntry({ txHash: '0xnew', chainId: 11155111n })],
+        errors: [],
+      });
+
+    const store = loadStore();
+    const first = store.getState().fetch();
+    // Second fetch aborts the first, then resolves.
+    await store.getState().fetch();
+    await first;
+
+    // First was aborted; identity guard prevented its catch from
+    // overwriting the success state set by the second fetch.
+    expect(store.getState().phase).toBe('loaded');
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xnew']);
+  });
+
+  it('fetch() corrupt pending cache → silent, still returns API entries', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    mockStorage.set('pendingTx', '{not valid');
+    mockHandle.getTransactionHistory.mockResolvedValue({
+      transactions: [bridgeEntry({ txHash: '0xa', chainId: 11155111n })],
+      errors: [],
+    });
+    const store = loadStore();
+    await store.getState().fetch();
+    expect(store.getState().phase).toBe('loaded');
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xa']);
+  });
+
+  it('fetch() pending entry valueFormatted comes from formatWeiToEth', async () => {
+    mockNetworkChainId.mockReturnValue(11155111n);
+    const persistedPending = [
+      {
+        txHash: '0xpending',
+        chainId: '11155111',
+        from: '0xf',
+        to: '0xt',
+        valueWei: '1000000000000000', // 0.001 ETH in wei
+        broadcastAt: 999,
+      },
+    ];
+    mockStorage.set('pendingTx', JSON.stringify(persistedPending));
+    mockHandle.getTransactionHistory.mockResolvedValue({
+      transactions: [],
+      errors: [],
+    });
+    const store = loadStore();
+    await store.getState().fetch();
+    const row = store.getState().entries[0];
+    expect(row?.valueFormatted).toContain('ETH');
+    expect(row?.chainName).toBe('Sepolia');
+    expect(row?.timeAgo).toBe('Pending');
+  });
+});
