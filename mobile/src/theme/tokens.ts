@@ -19,6 +19,16 @@ const semantic = {
 const accent = {
   periwinkle: '#8387C3',
   deep: '#3A3E6C',
+  soft: '#9EA3D1',
+} as const;
+
+const brand = {
+  deep: '#070D1B',
+} as const;
+
+const neutral = {
+  mid: '#959BB5',
+  soft: '#8A8CAC',
 } as const;
 
 export const palette = {
@@ -28,8 +38,16 @@ export const palette = {
       primary: '#0A1123',
       muted: '#3A3E6C',
     },
+    surface: {
+      alt: '#F6F7FB',
+      border: '#E5E8F2',
+      card: '#FFFFFF',
+      elevated: '#F0F1F8',
+    },
     accent,
     semantic,
+    brand,
+    neutral,
   },
   dark: {
     canvas: '#0A1123',
@@ -37,10 +55,48 @@ export const palette = {
       primary: '#FFFFFF',
       muted: '#8A8CAC',
     },
+    surface: {
+      alt: '#141A33',
+      border: '#242B4C',
+      card: '#141A33',
+      elevated: '#1C2244',
+    },
     accent,
     semantic,
+    brand,
+    neutral,
+  },
+} as const;
+
+// Border radii — theme-invariant, NOT mirrored in global.css.
+// Use via Tailwind `rounded-rw-*` (see tailwind.config.js) for className-based
+// styling. For native APIs (StyleSheet borderRadius), import `radius` directly.
+// `rw-` prefix avoids collision with Tailwind defaults (`rounded-md` etc.)
+// which existing components rely on.
+export const radius = {
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
+  pill: 9999,
+} as const;
+
+// Typography — theme-invariant, NOT mirrored in global.css.
+// Weight values are strings per React Native API (`fontWeight: '400'..'900'`).
+// Tailwind defaults (`font-normal/medium/semibold/bold`) already match these
+// values, so no `tailwind.config.js` fontWeight extend is needed.
+// `family` and `size` scale intentionally omitted — see C5 docs/DESIGN-TOKENS.md
+// Known Limitations.
+export const typography = {
+  weight: {
+    regular: '400',
+    medium: '500',
+    semibold: '600',
+    bold: '700',
   },
 } as const;
 
 export type ThemeMode = 'light' | 'dark';
 export type Palette = (typeof palette)[ThemeMode];
+export type RadiusKey = keyof typeof radius;
+export type FontWeightKey = keyof typeof typography.weight;
