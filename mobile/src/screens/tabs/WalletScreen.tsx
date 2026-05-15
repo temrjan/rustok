@@ -1,11 +1,11 @@
 /**
- * WalletScreen — Phase 5 M2b (was Phase 4 M4.2 placeholder).
+ * WalletScreen — Phase 5 M2b (was Phase 4 M4.2 placeholder), hero refactor in PR #3 C2.
  *
  * Wallet home surface for the unlocked phase. Stacks the recovery
- * HomeBanner, the NetworkBadge, the BalanceCard, and the ActionRow
- * (Send / Receive / Swap placeholders). Pull-to-refresh re-runs
- * `walletStore.refresh()`, which re-resolves phase plus address/balance
- * (the same path used on cold-start hydrate).
+ * HomeBanner, the NetworkBadge, and the BalanceCard (which embeds the
+ * Send / Receive / Swap ActionRow post-hero-refactor). Pull-to-refresh
+ * re-runs `walletStore.refresh()`, which re-resolves phase plus
+ * address/balance (the same path used on cold-start hydrate).
  *
  * Real Send / Receive / Swap screens — M3+. Recent-transactions list —
  * Phase 6.
@@ -16,7 +16,7 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { ActionRow, BalanceCard, HomeBanner, NetworkBadge } from '../../components';
+import { BalanceCard, HomeBanner, NetworkBadge } from '../../components';
 import { useWalletStore } from '../../stores/walletStore';
 import type { UnlockedParamList } from '../../navigation/types';
 
@@ -52,8 +52,7 @@ function WalletScreen() {
       <View className="mx-6 mt-2 self-start">
         <NetworkBadge />
       </View>
-      <BalanceCard />
-      <ActionRow
+      <BalanceCard
         onSend={() => navigation.navigate('Send')}
         onReceive={() => navigation.navigate('Receive')}
       />
