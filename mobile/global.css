@@ -15,22 +15,24 @@
  *
  * Values are space-separated RGB channels (Tailwind opacity syntax).
  *
- * Existing palette (Phase 1 App.tsx StyleSheet):
- *   #FFFFFF (canvas-light), #0A1123 (canvas-dark / ink-primary-light)
+ * Palette (updated by chore(theme): soften — B graphite dark + off-white light):
+ *   #F2F3F7 (canvas-light), #11141E (canvas-dark — B graphite)
+ *   #0A1123 (ink-primary-light), #FFFFFF (ink-primary-dark)
  *   #3A3E6C (ink-muted-light / accent-deep)
- *   #8A8CAC (ink-muted-dark)
+ *   #8A8CAC (ink-muted-dark / neutral-soft)
  *   #8387C3 (accent-periwinkle)
  *
  * Semantic colors are Tailwind defaults (green-500, amber-500, red-500).
+ * Full token reference: docs/DESIGN-TOKENS.md.
  */
 
 :root {
-  --color-canvas: 255 255 255;
-  --color-brand-deep: 7 13 27;
+  --color-canvas: 242 243 247;
+  --color-brand-deep: 12 14 21;
   --color-surface-alt: 246 247 251;
   --color-surface-border: 229 232 242;
-  --color-surface-card: 255 255 255;
-  --color-surface-elevated: 240 241 248;
+  --color-surface-card: 250 250 251;
+  --color-surface-elevated: 252 253 254;
   --color-ink-primary: 10 17 35;
   --color-ink-muted: 58 62 108;
   --color-neutral-mid: 149 155 181;
@@ -44,12 +46,12 @@
 }
 
 .dark:root {
-  --color-canvas: 10 17 35;
-  --color-brand-deep: 7 13 27;
-  --color-surface-alt: 20 26 51;
-  --color-surface-border: 36 43 76;
-  --color-surface-card: 20 26 51;
-  --color-surface-elevated: 28 34 68;
+  --color-canvas: 17 20 30;
+  --color-brand-deep: 12 14 21;
+  --color-surface-alt: 26 28 37;
+  --color-surface-border: 45 47 58;
+  --color-surface-card: 26 28 37;
+  --color-surface-elevated: 35 37 47;
   --color-ink-primary: 255 255 255;
   --color-ink-muted: 138 140 172;
   --color-neutral-mid: 149 155 181;

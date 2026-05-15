@@ -51,7 +51,7 @@ Tokens live in **three synchronized files** in `mobile/`:
 
 | Token | Value | Role | TS import | className |
 |---|---|---|---|---|
-| `brand.deep` | `#070D1B` | Deepest brand layer, beyond canvas-dark | `palette.X.brand.deep` | `bg-brand-deep` |
+| `brand.deep` | `#0C0E15` | Deepest brand layer, beyond canvas-dark | `palette.X.brand.deep` | `bg-brand-deep` |
 | `accent.periwinkle` | `#8387C3` | Primary interactive, links, active icons | `palette.X.accent.periwinkle` | `bg-accent-periwinkle` |
 | `accent.deep` | `#3A3E6C` | Hover, active strokes, depth | `palette.X.accent.deep` | `bg-accent-deep` |
 | `accent.soft` | `#9EA3D1` | Lighter periwinkle, highlights | `palette.X.accent.soft` | `bg-accent-soft` |
@@ -74,20 +74,29 @@ className: `text-ink-primary` / `text-ink-muted`.
 
 | Token | Light | Dark | Role |
 |---|---|---|---|
-| `canvas` | `#FFFFFF` | `#0A1123` | App background, root shell |
+| `canvas` | `#F2F3F7` | `#11141E` | App background, root shell |
 
 className: `bg-canvas`.
+
+> Light is **off-white** (not pure `#FFFFFF`) so soft-shadow cards remain
+> visible against the canvas without border. Dark is **B graphite**
+> (less saturated blue than the original `#0A1123`). See §5.6 for rationale.
 
 ### 2.4 Surface (theme-aware)
 
 | Token | Light | Dark | Role |
 |---|---|---|---|
-| `surface.alt` | `#F6F7FB` | `#141A33` | Inputs, subtle fills, secondary surfaces |
-| `surface.border` | `#E5E8F2` | `#242B4C` | Hairlines, dividers on surfaces |
-| `surface.card` | `#FFFFFF` | `#141A33` | Cards (balance, list items) — see §5.3 |
-| `surface.elevated` | `#F0F1F8` | `#1C2244` | Elevated cards (modals, sheets) |
+| `surface.alt` | `#F6F7FB` | `#1A1C25` | Inputs, subtle fills, secondary surfaces |
+| `surface.border` | `#E5E8F2` | `#2D2F3A` | Hairlines, dividers on surfaces |
+| `surface.card` | `#FAFAFB` | `#1A1C25` | Cards (balance, list items) — see §5.3 |
+| `surface.elevated` | `#FCFDFE` | `#23252F` | Elevated cards (modals, sheets) |
 
 className: `bg-surface-card`, `border-surface-border`, etc.
+
+> Light hierarchy: `canvas` (`#F2F3F7`, darkest) → `surface.card` (`#FAFAFB`)
+> → `surface.elevated` (`#FCFDFE`, brightest). Visible separation without
+> border via cumulative slight brightness shifts. Dark is B graphite re-tone
+> applied uniformly across all surface layers. See §5.6.
 
 ### 2.5 Semantic (theme-invariant, Tailwind defaults)
 
@@ -204,11 +213,15 @@ device smoke on JFLFG6MZSSL7WCF6).
 
 `bg-surface-card` was used in `BalanceCard.tsx` (×3), `ConfirmSendScreen.tsx`,
 and `ReceiveScreen.tsx` (×2) **before** any `surface.card` token existed —
-silently fell back to no background. On dark theme this made cards invisible
-against canvas (`#0A1123` on `#0A1123`).
+silently fell back to no background. On the original dark theme this made cards
+invisible against canvas (canvas-on-canvas at `#0A1123`).
 
 C2 added `surface.card` to `palette.X.surface` + `global.css` + `tailwind.config.js`
 to make `bg-surface-card` resolve. **No component changes required.**
+
+After the `chore(theme): soften palette` re-tone, the card is visibly distinct
+from canvas in both themes via colour (not only shadow):
+light card `#FAFAFB` on canvas `#F2F3F7`; dark card `#1A1C25` on canvas `#11141E`.
 
 ### 5.4 Radii dual-system
 
@@ -249,11 +262,14 @@ Tracked separately after this foundation PR:
 
 ### Imminent (next PRs)
 
-1. **PR `chore(theme): soften palette`** *(planned, not yet opened)* — apply
-   two Шеф-approved re-tones:
-   - Dark canvas + dark surfaces → "B graphite" palette (6 values)
-   - Light canvas + light surface.card → off-white `#F2F3F7` (remove pure white)
-   See preview files: `C:\Claude\projects\Дизайн\dark-tone-preview.html` and
+1. **PR `chore(theme): soften palette`** ✅ *(applied — see commit history on
+   `chore/theme-soften`)* — two Captain-approved re-tones now live:
+   - Dark canvas + dark surfaces → "B graphite" palette (6 values: canvas,
+     brand.deep, surface.alt, surface.card, surface.elevated, surface.border)
+   - Light canvas + light surface.card + light surface.elevated → off-white
+     (3 values: `#F2F3F7`, `#FAFAFB`, `#FCFDFE`; removes pure white from
+     light theme)
+   Preview files: `C:\Claude\projects\Дизайн\dark-tone-preview.html` and
    `hero-block-preview.html`.
 
 2. **PR `feat(mobile): hero block redesign`** *(planned, not yet opened)* — visual
