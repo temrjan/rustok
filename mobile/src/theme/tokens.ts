@@ -23,7 +23,7 @@ const accent = {
 } as const;
 
 const brand = {
-  deep: '#070D1B',
+  deep: '#0C0E15',
 } as const;
 
 const neutral = {
@@ -33,7 +33,7 @@ const neutral = {
 
 export const palette = {
   light: {
-    canvas: '#FFFFFF',
+    canvas: '#F2F3F7',
     ink: {
       primary: '#0A1123',
       muted: '#3A3E6C',
@@ -41,8 +41,8 @@ export const palette = {
     surface: {
       alt: '#F6F7FB',
       border: '#E5E8F2',
-      card: '#FFFFFF',
-      elevated: '#F0F1F8',
+      card: '#FAFAFB',
+      elevated: '#FCFDFE',
     },
     accent,
     semantic,
@@ -50,16 +50,16 @@ export const palette = {
     neutral,
   },
   dark: {
-    canvas: '#0A1123',
+    canvas: '#11141E',
     ink: {
       primary: '#FFFFFF',
       muted: '#8A8CAC',
     },
     surface: {
-      alt: '#141A33',
-      border: '#242B4C',
-      card: '#141A33',
-      elevated: '#1C2244',
+      alt: '#1A1C25',
+      border: '#2D2F3A',
+      card: '#1A1C25',
+      elevated: '#23252F',
     },
     accent,
     semantic,
