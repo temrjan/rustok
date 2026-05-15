@@ -68,5 +68,19 @@ export const palette = {
   },
 } as const;
 
+// Border radii — theme-invariant, NOT mirrored in global.css.
+// Use via Tailwind `rounded-rw-*` (see tailwind.config.js) for className-based
+// styling. For native APIs (StyleSheet borderRadius), import `radius` directly.
+// `rw-` prefix avoids collision with Tailwind defaults (`rounded-md` etc.)
+// which existing components rely on.
+export const radius = {
+  sm: 10,
+  md: 14,
+  lg: 18,
+  xl: 24,
+  pill: 9999,
+} as const;
+
 export type ThemeMode = 'light' | 'dark';
 export type Palette = (typeof palette)[ThemeMode];
+export type RadiusKey = keyof typeof radius;

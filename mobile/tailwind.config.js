@@ -35,6 +35,13 @@ module.exports = {
           danger: 'rgb(var(--color-semantic-danger) / <alpha-value>)',
         },
       },
+      borderRadius: {
+        'rw-sm': '10px',
+        'rw-md': '14px',
+        'rw-lg': '18px',
+        'rw-xl': '24px',
+        'rw-pill': '9999px',
+      },
     },
   },
   plugins: [],
