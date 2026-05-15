@@ -10,6 +10,12 @@ module.exports = {
         brand: {
           deep: 'rgb(var(--color-brand-deep) / <alpha-value>)',
         },
+        surface: {
+          alt: 'rgb(var(--color-surface-alt) / <alpha-value>)',
+          border: 'rgb(var(--color-surface-border) / <alpha-value>)',
+          card: 'rgb(var(--color-surface-card) / <alpha-value>)',
+          elevated: 'rgb(var(--color-surface-elevated) / <alpha-value>)',
+        },
         ink: {
           primary: 'rgb(var(--color-ink-primary) / <alpha-value>)',
           muted: 'rgb(var(--color-ink-muted) / <alpha-value>)',

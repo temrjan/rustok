@@ -38,6 +38,12 @@ export const palette = {
       primary: '#0A1123',
       muted: '#3A3E6C',
     },
+    surface: {
+      alt: '#F6F7FB',
+      border: '#E5E8F2',
+      card: '#FFFFFF',
+      elevated: '#F0F1F8',
+    },
     accent,
     semantic,
     brand,
@@ -48,6 +54,12 @@ export const palette = {
     ink: {
       primary: '#FFFFFF',
       muted: '#8A8CAC',
+    },
+    surface: {
+      alt: '#141A33',
+      border: '#242B4C',
+      card: '#141A33',
+      elevated: '#1C2244',
     },
     accent,
     semantic,

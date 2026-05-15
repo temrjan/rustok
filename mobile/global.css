@@ -27,6 +27,10 @@
 :root {
   --color-canvas: 255 255 255;
   --color-brand-deep: 7 13 27;
+  --color-surface-alt: 246 247 251;
+  --color-surface-border: 229 232 242;
+  --color-surface-card: 255 255 255;
+  --color-surface-elevated: 240 241 248;
   --color-ink-primary: 10 17 35;
   --color-ink-muted: 58 62 108;
   --color-neutral-mid: 149 155 181;
@@ -42,6 +46,10 @@
 .dark:root {
   --color-canvas: 10 17 35;
   --color-brand-deep: 7 13 27;
+  --color-surface-alt: 20 26 51;
+  --color-surface-border: 36 43 76;
+  --color-surface-card: 20 26 51;
+  --color-surface-elevated: 28 34 68;
   --color-ink-primary: 255 255 255;
   --color-ink-muted: 138 140 172;
   --color-neutral-mid: 149 155 181;
