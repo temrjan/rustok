@@ -81,6 +81,22 @@ export const radius = {
   pill: 9999,
 } as const;
 
+// Typography — theme-invariant, NOT mirrored in global.css.
+// Weight values are strings per React Native API (`fontWeight: '400'..'900'`).
+// Tailwind defaults (`font-normal/medium/semibold/bold`) already match these
+// values, so no `tailwind.config.js` fontWeight extend is needed.
+// `family` and `size` scale intentionally omitted — see C5 docs/DESIGN-TOKENS.md
+// Known Limitations.
+export const typography = {
+  weight: {
+    regular: '400',
+    medium: '500',
+    semibold: '600',
+    bold: '700',
+  },
+} as const;
+
 export type ThemeMode = 'light' | 'dark';
 export type Palette = (typeof palette)[ThemeMode];
 export type RadiusKey = keyof typeof radius;
+export type FontWeightKey = keyof typeof typography.weight;
