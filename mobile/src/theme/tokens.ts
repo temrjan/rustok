@@ -19,6 +19,16 @@ const semantic = {
 const accent = {
   periwinkle: '#8387C3',
   deep: '#3A3E6C',
+  soft: '#9EA3D1',
+} as const;
+
+const brand = {
+  deep: '#070D1B',
+} as const;
+
+const neutral = {
+  mid: '#959BB5',
+  soft: '#8A8CAC',
 } as const;
 
 export const palette = {
@@ -30,6 +40,8 @@ export const palette = {
     },
     accent,
     semantic,
+    brand,
+    neutral,
   },
   dark: {
     canvas: '#0A1123',
@@ -39,6 +51,8 @@ export const palette = {
     },
     accent,
     semantic,
+    brand,
+    neutral,
   },
 } as const;
 

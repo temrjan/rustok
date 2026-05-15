@@ -26,10 +26,14 @@
 
 :root {
   --color-canvas: 255 255 255;
+  --color-brand-deep: 7 13 27;
   --color-ink-primary: 10 17 35;
   --color-ink-muted: 58 62 108;
+  --color-neutral-mid: 149 155 181;
+  --color-neutral-soft: 138 140 172;
   --color-accent-periwinkle: 131 135 195;
   --color-accent-deep: 58 62 108;
+  --color-accent-soft: 158 163 209;
   --color-semantic-success: 34 197 94;
   --color-semantic-warn: 245 158 11;
   --color-semantic-danger: 239 68 68;
@@ -37,10 +41,14 @@
 
 .dark:root {
   --color-canvas: 10 17 35;
+  --color-brand-deep: 7 13 27;
   --color-ink-primary: 255 255 255;
   --color-ink-muted: 138 140 172;
+  --color-neutral-mid: 149 155 181;
+  --color-neutral-soft: 138 140 172;
   --color-accent-periwinkle: 131 135 195;
   --color-accent-deep: 58 62 108;
+  --color-accent-soft: 158 163 209;
   --color-semantic-success: 34 197 94;
   --color-semantic-warn: 245 158 11;
   --color-semantic-danger: 239 68 68;
