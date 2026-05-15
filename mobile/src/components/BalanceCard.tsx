@@ -1,34 +1,49 @@
 /**
- * BalanceCard — Phase 5 M2a.
+ * BalanceCard — Phase 5 M2a, hero refactor in PR #3 C2.
  *
  * Wallet home surface — shows the truncated address (tap to copy),
  * the formatted unified balance from the Rust bridge
  * (`getWalletBalance()`), and a per-chain breakdown when more than one
- * chain is available.
+ * chain is available. In the loaded state, the card also embeds the
+ * Send / Receive / Swap action row (PR #3 — was rendered standalone
+ * by WalletScreen pre-refactor).
  *
  * Three states, driven entirely by `useWallet()`:
  *   - `loading` → balance undefined && error undefined → Spinner
  *   - `error`   → balance undefined && error defined   → message + Retry
- *   - `loaded`  → balance defined                       → address + total + breakdown
+ *   - `loaded`  → balance defined                       → address + total + breakdown + ActionRow
  *
- * `tabBarIcon`-style — no navigation, no side effects beyond the copy
- * toast. Send / Receive / Swap actions live in `ActionRow` (M2b).
+ * All three states share a consistent card wrapper: `rounded-rw-xl`
+ * with `shadow.card` and no border. The card is visually separated
+ * from canvas via soft shadow rather than a hairline border.
+ *
+ * `onSend` / `onReceive` / `onSwap` are forwarded to the embedded
+ * ActionRow only in the loaded state (no actionable balance during
+ * loading or error). Defaults: ActionRow shows toast "coming soon".
  */
 
 import React from 'react';
 import { Pressable, Text, View } from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
+import { ActionRow } from './ActionRow';
 import { Button } from './Button';
 import { Spinner } from './Spinner';
 import { toast } from './Toast';
 import { useWallet } from '../hooks/useWallet';
+import { shadow } from '../theme/tokens';
+
+interface BalanceCardProps {
+  onSend?: () => void;
+  onReceive?: () => void;
+  onSwap?: () => void;
+}
 
 export function truncateAddress(address: string): string {
   if (address.length <= 12) return address;
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-export function BalanceCard() {
+export function BalanceCard({ onSend, onReceive, onSwap }: BalanceCardProps = {}) {
   const { address, balance, error, refresh } = useWallet();
 
   // Error: balance fetch failed, give the user a way to retry.
@@ -36,7 +51,8 @@ export function BalanceCard() {
     return (
       <View
         accessibilityLabel="Balance error"
-        className="mx-6 mt-4 rounded-2xl bg-surface-card p-4"
+        className="mx-6 mt-4 rounded-rw-xl bg-surface-card p-4"
+        style={shadow.card}
       >
         <Text className="text-ink-primary text-sm font-semibold mb-1">
           Couldn’t load balance
@@ -54,7 +70,8 @@ export function BalanceCard() {
     return (
       <View
         accessibilityLabel="Balance loading"
-        className="mx-6 mt-4 rounded-2xl bg-surface-card p-6 items-center"
+        className="mx-6 mt-4 rounded-rw-xl bg-surface-card p-6 items-center"
+        style={shadow.card}
       >
         <Spinner size="md" />
       </View>
@@ -73,7 +90,8 @@ export function BalanceCard() {
   return (
     <View
       accessibilityLabel="Balance card"
-      className="mx-6 mt-4 rounded-2xl bg-surface-card p-4"
+      className="mx-6 mt-4 rounded-rw-xl bg-surface-card p-4"
+      style={shadow.card}
     >
       {address !== undefined && (
         <Pressable
@@ -113,6 +131,10 @@ export function BalanceCard() {
           ))}
         </View>
       )}
+
+      <View className="mt-4">
+        <ActionRow onSend={onSend} onReceive={onReceive} onSwap={onSwap} />
+      </View>
     </View>
   );
 }

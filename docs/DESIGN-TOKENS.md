@@ -17,6 +17,7 @@
    - 2.5 [Semantic](#25-semantic-theme-invariant-tailwind-defaults)
    - 2.6 [Border Radii](#26-border-radii-theme-invariant-not-in-globalcss)
    - 2.7 [Typography](#27-typography-theme-invariant-not-in-globalcss-not-in-tailwindconfigjs)
+   - 2.8 [Shadows](#28-shadows-theme-invariant-ts-only)
 3. [Theme System](#3-theme-system)
 4. [3-File Synchronization Invariant](#4-3-file-synchronization-invariant)
 5. [Known Limitations](#5-known-limitations)
@@ -138,6 +139,40 @@ TS import: `import { radius } from '../theme/tokens'; const styles = StyleSheet.
 > Values are **strings** per React Native fontWeight API.
 > Tailwind defaults already match — no `tailwind.config.js` `fontWeight` extend.
 > `family` and `size` scale intentionally omitted — see §5.2 and §5.5.
+
+### 2.8 Shadows (theme-invariant, TS-only)
+
+| Token | iOS fields | Android | Role |
+|---|---|---|---|
+| `shadow.card` | `shadowColor: '#0A1123'`, `shadowOffset: { width: 0, height: 8 }`, `shadowOpacity: 0.1`, `shadowRadius: 24` | `elevation: 6` | Soft drop shadow for primary cards (BalanceCard hero, future modals) |
+
+**Consumption — TS-only via inline `style`:**
+
+```tsx
+import { shadow } from '../theme/tokens';
+
+<View
+  className="bg-surface-card rounded-rw-xl p-4"
+  style={shadow.card}
+>
+  ...
+</View>
+```
+
+**Why TS-only (not Tailwind `shadow-*` extend):** NativeWind v4 maps Tailwind
+`box-shadow` CSS values to RN shadow* / elevation, but the mapping loses
+cross-platform precision (especially tinted shadows, exact iOS shadowOpacity).
+Storing as a typed object and consuming via inline `style={...}` keeps
+iOS and Android renderers consistent with values declared once.
+
+**React Native cross-platform behaviour:** RN silently ignores iOS-only fields
+(`shadowColor` / `shadowOffset` / `shadowOpacity` / `shadowRadius`) on Android,
+and ignores `elevation` on iOS. One object with all fields covers both
+platforms — no `Platform.select` required.
+
+**Backlog (other levels — add when consumers arrive):**
+- `shadow.soft` — subtle elevation for secondary cards / list items
+- `shadow.btn` — depth for primary CTAs on light surfaces
 
 ---
 
@@ -272,15 +307,25 @@ Tracked separately after this foundation PR:
    Preview files: `C:\Claude\projects\Дизайн\dark-tone-preview.html` and
    `hero-block-preview.html`.
 
-2. **PR `feat(mobile): hero block redesign`** *(planned, not yet opened)* — visual
-   refactor per target design
+2. **PR `feat(mobile): hero block redesign`** ✅ *(applied — see commits on
+   `feat/hero-redesign`)* — visual refactor per target design
    (`C:\Claude\projects\Дизайн\uploads\Дизайн\Снимок экрана 2026-04-27 112247.png`):
-   - Shadow tokens namespace (RN iOS `shadow*` + Android `elevation` specs)
-   - `BalanceCard.tsx` — single card containing balance + USD + change pill + 3
-     action buttons
-   - `ActionRow.tsx` — buttons inside card, `rounded-xl` (12px) squares with
-     off-white surface background, dark icon
-   - `WalletScreen` layout adjustments
+   - C1: `shadow.card` token namespace (RN iOS `shadow*` + Android `elevation` —
+     see §2.8). Note: `shadow.soft` and `shadow.btn` deferred to backlog (no
+     consumers yet); `shadow.card` is the only level shipped in this PR.
+   - C2: `BalanceCard.tsx` — single card containing balance + embedded
+     ActionRow (loaded state only); all 3 states (error/loading/loaded) share
+     consistent `rounded-rw-xl` wrapper with `shadow.card` and no border.
+     New API: `BalanceCardProps { onSend?, onReceive?, onSwap? }`.
+   - C2: `ActionRow.tsx` — `rounded-xl` (12px) squares with `bg-surface-alt`
+     fill and theme-resolved icon color via `useThemeStore + useColorScheme`
+     (matches NativeWind's rendering decision, not just OS scheme).
+   - C2: `WalletScreen.tsx` — drop standalone `<ActionRow>` render; forward
+     `onSend` / `onReceive` callbacks through `<BalanceCard>`.
+
+   USD value + % change pill deferred — no price feed in current bridge API
+   (Phase 6+ work). Hero is visually complete without them; placeholder
+   when price feed lands.
 
 ### Later (no scheduled PR yet)
 
