@@ -307,15 +307,25 @@ Tracked separately after this foundation PR:
    Preview files: `C:\Claude\projects\Дизайн\dark-tone-preview.html` and
    `hero-block-preview.html`.
 
-2. **PR `feat(mobile): hero block redesign`** *(planned, not yet opened)* — visual
-   refactor per target design
+2. **PR `feat(mobile): hero block redesign`** ✅ *(applied — see commits on
+   `feat/hero-redesign`)* — visual refactor per target design
    (`C:\Claude\projects\Дизайн\uploads\Дизайн\Снимок экрана 2026-04-27 112247.png`):
-   - Shadow tokens namespace (RN iOS `shadow*` + Android `elevation` specs)
-   - `BalanceCard.tsx` — single card containing balance + USD + change pill + 3
-     action buttons
-   - `ActionRow.tsx` — buttons inside card, `rounded-xl` (12px) squares with
-     off-white surface background, dark icon
-   - `WalletScreen` layout adjustments
+   - C1: `shadow.card` token namespace (RN iOS `shadow*` + Android `elevation` —
+     see §2.8). Note: `shadow.soft` and `shadow.btn` deferred to backlog (no
+     consumers yet); `shadow.card` is the only level shipped in this PR.
+   - C2: `BalanceCard.tsx` — single card containing balance + embedded
+     ActionRow (loaded state only); all 3 states (error/loading/loaded) share
+     consistent `rounded-rw-xl` wrapper with `shadow.card` and no border.
+     New API: `BalanceCardProps { onSend?, onReceive?, onSwap? }`.
+   - C2: `ActionRow.tsx` — `rounded-xl` (12px) squares with `bg-surface-alt`
+     fill and theme-resolved icon color via `useThemeStore + useColorScheme`
+     (matches NativeWind's rendering decision, not just OS scheme).
+   - C2: `WalletScreen.tsx` — drop standalone `<ActionRow>` render; forward
+     `onSend` / `onReceive` callbacks through `<BalanceCard>`.
+
+   USD value + % change pill deferred — no price feed in current bridge API
+   (Phase 6+ work). Hero is visually complete without them; placeholder
+   when price feed lands.
 
 ### Later (no scheduled PR yet)
 
