@@ -220,17 +220,6 @@ async fn create_wallet_short_password_rejected() {
 }
 
 #[tokio::test]
-async fn get_chain_id_returns_some_for_default_provider() {
-    let dir = data_dir();
-    let h = handle(&dir);
-    let chain_id = h.get_chain_id().await;
-    assert!(
-        chain_id.is_some(),
-        "default provider must have a primary chain"
-    );
-}
-
-#[tokio::test]
 async fn unlock_without_create_returns_not_found() {
     let dir = data_dir();
     let h = handle(&dir);
@@ -270,10 +259,13 @@ async fn preview_send_against_real_rpc() {
     let dir = data_dir();
     let h = handle(&dir);
     h.create_wallet(PASSWORD.into()).await.expect("create");
+    // Phase 7: explicit chain selection. Arbitrum One per the
+    // header comment about testnet funds.
     let preview = h
         .preview_send(
             "0x0000000000000000000000000000000000000001".into(),
             "100".into(),
+            42161,
         )
         .await
         .expect("preview_send");

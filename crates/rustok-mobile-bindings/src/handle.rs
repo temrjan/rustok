@@ -224,15 +224,26 @@ impl WalletHandle {
         Ok(balance.into())
     }
 
-    /// Primary chain id (for UI network badge). `None` if no chains
-    /// configured.
-    pub async fn get_chain_id(&self) -> Option<u64> {
-        self.provider.primary_chain_id()
-    }
-
     // ─── Native send (preview + execute) ────────────────────────
+    //
+    // Phase 7: `get_chain_id` removed. The previously exposed
+    // placeholder (`provider.primary_chain_id()` returning the first
+    // configured chain) is no longer the source of truth for the UI
+    // network badge. JS owns the active chain selection via
+    // `useNetworkStore.chainId` and passes `chain_id` explicitly into
+    // each send. See `.claude/specs/2026-05-18-phase-7-network-selector.md`
+    // § /check Findings Applied F5 for the AC re-interpretation.
 
-    /// Preview a native ETH send (txguard analysis + cheapest route).
+    /// Preview a native ETH send on an explicitly selected chain
+    /// (Phase 7 strict-honor selector: txguard analysis +
+    /// chain-specific routing).
+    ///
+    /// `chain_id` is the user's explicitly chosen EVM chain id
+    /// (e.g. `1` for Ethereum, `42161` for Arbitrum One). When the
+    /// selected chain has insufficient balance, the preview fails
+    /// with [`BindingsError::Send`] carrying the
+    /// `InsufficientFundsOnChain` kind rather than falling back to
+    /// another chain.
     ///
     /// # Errors
     ///
@@ -243,18 +254,25 @@ impl WalletHandle {
         &self,
         to: String,
         amount_wei: String,
+        chain_id: u64,
     ) -> Result<SendPreview, BindingsError> {
         let to_addr = parse_address(&to)?;
         let amount = parse_u256(&amount_wei)?;
         let preview = self
             .wallet
-            .preview_send(self.provider.as_ref(), to_addr, amount)
+            .preview_send_on_chain(self.provider.as_ref(), to_addr, amount, chain_id)
             .await
             .map_err(BindingsError::from)?;
         Ok(preview.into())
     }
 
-    /// Execute a native ETH send. Returns broadcast tx hash + chain id.
+    /// Execute a native ETH send on an explicitly selected chain
+    /// (Phase 7 strict-honor selector). Returns broadcast tx hash +
+    /// chain id.
+    ///
+    /// `chain_id` MUST match a chain configured on the provider; the
+    /// send is strict-routed to that chain even if other chains have
+    /// sufficient balance.
     ///
     /// # Errors
     ///
@@ -264,12 +282,13 @@ impl WalletHandle {
         &self,
         to: String,
         amount_wei: String,
+        chain_id: u64,
     ) -> Result<SendResult, BindingsError> {
         let to_addr = parse_address(&to)?;
         let amount = parse_u256(&amount_wei)?;
         let result = self
             .wallet
-            .execute_send(self.provider.as_ref(), to_addr, amount)
+            .execute_send_on_chain(self.provider.as_ref(), to_addr, amount, chain_id)
             .await
             .map_err(BindingsError::from)?;
         Ok(result.into())
