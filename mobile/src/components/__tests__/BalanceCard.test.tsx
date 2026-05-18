@@ -13,6 +13,7 @@ import React from 'react';
 import renderer from 'react-test-renderer';
 import { BalanceCard, truncateAddress } from '../BalanceCard';
 import { useWallet } from '../../hooks/useWallet';
+import { useThemeStore } from '../../stores/themeStore';
 
 jest.mock('../../hooks/useWallet', () => ({
   useWallet: jest.fn(),
@@ -98,6 +99,45 @@ describe('BalanceCard', () => {
       phase: 'unlocked',
       address: '0x1234567890abcdef1234567890abcdef12345678',
       balance: { ...sampleBalance, chains: [sampleBalance.chains[0]!] },
+      error: undefined,
+      refresh,
+    });
+    expect(() => renderer.create(<BalanceCard />)).not.toThrow();
+  });
+});
+
+// Integration coverage for the Issue #31 themed shadow path. Uses the real
+// `useThemeStore` (not a jest.mock) — `setState` is called before render so
+// no Zustand teardown race per JEST-SETUP-INCIDENT § Lessons. The store
+// default ('system') is restored in afterEach so the prior four tests are
+// unaffected by ordering.
+describe('BalanceCard themed shadow integration', () => {
+  beforeEach(() => {
+    mockedUseWallet.mockReset();
+  });
+
+  afterEach(() => {
+    useThemeStore.setState({ mode: 'system' });
+  });
+
+  it('renders loaded state under explicit light theme', () => {
+    useThemeStore.setState({ mode: 'light' });
+    mockedUseWallet.mockReturnValue({
+      phase: 'unlocked',
+      address: '0x1234567890abcdef1234567890abcdef12345678',
+      balance: sampleBalance,
+      error: undefined,
+      refresh,
+    });
+    expect(() => renderer.create(<BalanceCard />)).not.toThrow();
+  });
+
+  it('renders loaded state under explicit dark theme', () => {
+    useThemeStore.setState({ mode: 'dark' });
+    mockedUseWallet.mockReturnValue({
+      phase: 'unlocked',
+      address: '0x1234567890abcdef1234567890abcdef12345678',
+      balance: sampleBalance,
       error: undefined,
       refresh,
     });
