@@ -96,19 +96,30 @@ export const typography = {
   },
 } as const;
 
-// Shadows — theme-invariant, NOT mirrored in global.css or tailwind.config.js.
+// Shadows — themed per Issue #31. `shadow.card` has {light, dark} variants;
+// the dark variant uses #000000 / 0.4 opacity to keep elevation visible on
+// the #1A1C25 dark card surface (the previous theme-invariant #0A1123 / 0.1
+// shadow had near-zero perceptual contrast in dark mode).
 // Cross-platform: iOS uses shadowColor/Offset/Opacity/Radius; Android uses
 // elevation (system-rendered drop shadow). React Native silently ignores
 // iOS-only fields on Android and vice-versa — one object handles both.
-// Consume via inline `style={shadow.card}` (TS-only — no className).
-// Other levels (e.g. `soft`, `btn`) added when actual consumers arrive.
+// Consume via `useThemedShadow('card')` hook (TS-only — no className).
 export const shadow = {
   card: {
-    shadowColor: '#0A1123',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 24,
-    elevation: 6,
+    light: {
+      shadowColor: '#0A1123',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.1,
+      shadowRadius: 24,
+      elevation: 6,
+    },
+    dark: {
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.4,
+      shadowRadius: 24,
+      elevation: 6,
+    },
   },
 } as const;
 

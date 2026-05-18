@@ -14,8 +14,10 @@
  *   - `loaded`  → balance defined                       → address + total + breakdown + ActionRow
  *
  * All three states share a consistent card wrapper: `rounded-rw-xl`
- * with `shadow.card` and no border. The card is visually separated
- * from canvas via soft shadow rather than a hairline border.
+ * with a themed shadow (via `useThemedShadow('card')` — Issue #31)
+ * and no border. The card is visually separated from canvas via
+ * soft shadow rather than a hairline border; the dark variant uses
+ * deeper black to remain visible on the #1A1C25 dark surface.
  *
  * `onSend` / `onReceive` / `onSwap` are forwarded to the embedded
  * ActionRow only in the loaded state (no actionable balance during
@@ -30,7 +32,7 @@ import { Button } from './Button';
 import { Spinner } from './Spinner';
 import { toast } from './Toast';
 import { useWallet } from '../hooks/useWallet';
-import { shadow } from '../theme/tokens';
+import { useThemedShadow } from '../hooks/useThemedShadow';
 
 interface BalanceCardProps {
   onSend?: () => void;
@@ -45,6 +47,7 @@ export function truncateAddress(address: string): string {
 
 export function BalanceCard({ onSend, onReceive, onSwap }: BalanceCardProps = {}) {
   const { address, balance, error, refresh } = useWallet();
+  const cardShadow = useThemedShadow('card');
 
   // Error: balance fetch failed, give the user a way to retry.
   if (balance === undefined && error !== undefined) {
@@ -52,7 +55,7 @@ export function BalanceCard({ onSend, onReceive, onSwap }: BalanceCardProps = {}
       <View
         accessibilityLabel="Balance error"
         className="mx-6 mt-4 rounded-rw-xl bg-surface-card p-4"
-        style={shadow.card}
+        style={cardShadow}
       >
         <Text className="text-ink-primary text-sm font-semibold mb-1">
           Couldn’t load balance
@@ -71,7 +74,7 @@ export function BalanceCard({ onSend, onReceive, onSwap }: BalanceCardProps = {}
       <View
         accessibilityLabel="Balance loading"
         className="mx-6 mt-4 rounded-rw-xl bg-surface-card p-6 items-center"
-        style={shadow.card}
+        style={cardShadow}
       >
         <Spinner size="md" />
       </View>
@@ -91,7 +94,7 @@ export function BalanceCard({ onSend, onReceive, onSwap }: BalanceCardProps = {}
     <View
       accessibilityLabel="Balance card"
       className="mx-6 mt-4 rounded-rw-xl bg-surface-card p-4"
-      style={shadow.card}
+      style={cardShadow}
     >
       {address !== undefined && (
         <Pressable

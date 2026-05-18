@@ -17,7 +17,7 @@
    - 2.5 [Semantic](#25-semantic-theme-invariant-tailwind-defaults)
    - 2.6 [Border Radii](#26-border-radii-theme-invariant-not-in-globalcss)
    - 2.7 [Typography](#27-typography-theme-invariant-not-in-globalcss-not-in-tailwindconfigjs)
-   - 2.8 [Shadows](#28-shadows-theme-invariant-ts-only)
+   - 2.8 [Shadows](#28-shadows-themed-ts-only-via-hook)
 3. [Theme System](#3-theme-system)
 4. [3-File Synchronization Invariant](#4-3-file-synchronization-invariant)
 5. [Known Limitations](#5-known-limitations)
@@ -140,24 +140,52 @@ TS import: `import { radius } from '../theme/tokens'; const styles = StyleSheet.
 > Tailwind defaults already match — no `tailwind.config.js` `fontWeight` extend.
 > `family` and `size` scale intentionally omitted — see §5.2 and §5.5.
 
-### 2.8 Shadows (theme-invariant, TS-only)
+### 2.8 Shadows (themed, TS-only via hook)
 
-| Token | iOS fields | Android | Role |
-|---|---|---|---|
-| `shadow.card` | `shadowColor: '#0A1123'`, `shadowOffset: { width: 0, height: 8 }`, `shadowOpacity: 0.1`, `shadowRadius: 24` | `elevation: 6` | Soft drop shadow for primary cards (BalanceCard hero, future modals) |
+| Token | Variant | iOS fields | Android | Role |
+|---|---|---|---|---|
+| `shadow.card` | `light` | `shadowColor: '#0A1123'`, `shadowOffset: { width: 0, height: 8 }`, `shadowOpacity: 0.1`, `shadowRadius: 24` | `elevation: 6` | Soft drop shadow on light canvas |
+| `shadow.card` | `dark` | `shadowColor: '#000000'`, `shadowOffset: { width: 0, height: 8 }`, `shadowOpacity: 0.4`, `shadowRadius: 24` | `elevation: 6` | Deeper drop shadow to retain elevation cue on `#1A1C25` dark surface |
 
-**Consumption — TS-only via inline `style`:**
+**Consumption — TS-only via `useThemedShadow` hook:**
 
 ```tsx
-import { shadow } from '../theme/tokens';
+import { useThemedShadow } from '../hooks/useThemedShadow';
 
-<View
-  className="bg-surface-card rounded-rw-xl p-4"
-  style={shadow.card}
->
-  ...
-</View>
+export function Card() {
+  const cardShadow = useThemedShadow('card');
+  return (
+    <View
+      className="bg-surface-card rounded-rw-xl p-4"
+      style={cardShadow}
+    >
+      ...
+    </View>
+  );
+}
 ```
+
+**Design rationale (Issue #31):** the previous theme-invariant `shadow.card`
+(`#0A1123 / 0.1`) had near-zero perceptual contrast on the `#1A1C25` dark
+card surface — the card sat flat with no elevation cue. Three options were
+considered:
+
+- **A. Deep black** (`#000000 / 0.4`, elevation kept at 6 for parity with
+  light) — chosen. Conventional dark-UI drop shadow; predictable contrast.
+- **B. Periwinkle glow** (accent `#8387C3 / 0.15`) — rejected: glow on a
+  brand accent semantically reads as interactive/hover in fintech UI; a
+  shadow should recede, not advance.
+- **C. White lift** (`#FFFFFF / 0.06`) — rejected: 0.06 opacity over
+  `#1A1C25` gives ~0.4 % effective blend, not perceptually distinct.
+
+Material 3's dark theme guidance recommends surface tint over drop shadows
+for elevation; preserving a themed shadow here is a deliberate design call
+for consistency with the light theme's elevation language.
+
+**Why hook (not inline `shadow[key][mode]`):** the hook encapsulates the
+`'system'` → `'light' | 'dark'` resolution (via `useColorScheme()` fallback
+when the user has not pinned an explicit theme), mirroring the same
+resolution `ActionRow.tsx` uses for icon colour.
 
 **Why TS-only (not Tailwind `shadow-*` extend):** NativeWind v4 maps Tailwind
 `box-shadow` CSS values to RN shadow* / elevation, but the mapping loses
