@@ -25,7 +25,7 @@
 - **Где живёт:** `C:\Claude\projects\rustok\` (ASCII-only после M2 path fix)
 - **Что делаем:** Мигрируем UI с Tauri+Leptos (WebView) на **React Native + uniffi-bindgen-react-native** (native UI, Rust core переиспользуется)
 - **Что НЕ делаем:** WebView в любой форме (Tauri+React план отменён 2026-04-28)
-- **Текущая фаза:** **Phase 5 IN PROGRESS** — real wallet UI. Merged: PR #20 (M3a Receive), PR #21 (RPC timeout fix), PR #22 (M3b Send), PR #24 (Issue #23 — alloy `connect_http` panic, Bug A+B closed). First on-chain ETH transaction broadcast on Sepolia 2026-05-14 from Xiaomi device. 41 jest suites / ~215 tests + 227 Rust workspace tests, all green. **Next:** design-token foundation PR. Predecessors: Phase 4 DONE 2026-05-12 (PR #14, `docs/PHASE4-HANDOFF.md`); Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
+- **Текущая фаза:** **Phase 5 IN PROGRESS** — real wallet UI + visual polish wave. Merged on `main`: PR #17 SVG tab icons, PR #18 BalanceCard/WalletScreen, PR #19 ActionRow (M2b), PR #20 (M3a Receive), PR #21 (RPC timeout fix), PR #22 (M3b Send), PR #24 (Issue #23 — alloy `connect_http` panic, Bug A+B closed), **PR #25 design-token foundation 2026-05-15**, **PR #26 theme soften (B graphite dark + off-white light) 2026-05-15**, **PR #27 hero block redesign (BalanceCard embeds ActionRow + shadow card) 2026-05-15**. First on-chain ETH transaction broadcast on Sepolia 2026-05-14 from Xiaomi device. 45 jest suites / 254 tests / 3 skipped + 227 Rust workspace tests, all green. **In flight:** `feat/activity-screen-m4` — Phase 5 M4 ActivityScreen real (C1 data layer `e10e4bc` + C1.5 test backfill `4d033e4` + C2 UI + pending broadcast wire `17ff674`). Smoke owed on JFLFG6MZSSL7WCF6 for PR #27 hero redesign — planned as part of the combined M4-merge smoke. Predecessors: Phase 4 DONE 2026-05-12 (PR #14, `docs/PHASE4-HANDOFF.md`); Phase 3 DONE 2026-05-05 (`docs/PHASE3-HANDOFF.md`); Phase 2 DONE 2026-05-01 (`docs/PHASE2-HANDOFF.md`).
 - **Платформы:** Android + iOS only, desktop deferred
 - **Mainnet timeline:** свободный, фокус на качестве
 
@@ -675,9 +675,16 @@ Working branch: `feat/phase4-onboarding` (21 commits ahead of main, all pushed).
 
 ### Фаза 5 — Restore + Wallet (Home/Send/Receive) (3 недели, 3-4 коммита)
 
-> **Status:** Phase 5 in progress. Merged: PR #20 (M3a Receive), PR #21 (RPC timeout),
-> PR #22 (M3b Send), PR #24 (Issue #23 — `connect_http` panic fix, Bug A+B).
-> 14/14 device smoke on Xiaomi. Next: design-token foundation PR.
+> **Status:** Phase 5 in progress.
+> Merged on `main` (chronological): PR #17 SVG tab icons (M1), PR #18 BalanceCard
+> + WalletScreen (M2a), PR #19 ActionRow (M2b), PR #20 (M3a Receive), PR #21
+> (RPC timeout fix), PR #22 (M3b Send), PR #24 (Issue #23 — `connect_http` panic
+> fix, Bug A+B), PR #25 design-token foundation, PR #26 theme soften (graphite
+> dark + off-white light), PR #27 hero block redesign (BalanceCard embeds
+> ActionRow + shadow card).
+> In flight: `feat/activity-screen-m4` — M4 ActivityScreen real (C1 + C1.5
+> + C2 committed locally). Combined M4-merge smoke on JFLFG6MZSSL7WCF6 will
+> also close the PR #27 visual checklist (deferred from 2026-05-15).
 
 **Цель:** Восстановление + основная Wallet функциональность.
 
