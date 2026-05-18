@@ -174,10 +174,7 @@ function ConfirmSendScreen() {
   }, [to, amountWei]);
 
   useEffect(() => {
-    runPreview().then(
-      () => undefined,
-      () => undefined,
-    );
+    runPreview().catch(() => undefined);
   }, [runPreview]);
 
   const handleConfirm = useCallback(async () => {
@@ -293,10 +290,7 @@ function ConfirmSendScreen() {
             </Text>
             <Button
               onPress={() => {
-                runPreview().then(
-                  () => undefined,
-                  () => undefined,
-                );
+                runPreview().catch(() => undefined);
               }}
               variant="secondary"
               size="sm"
@@ -354,10 +348,7 @@ function ConfirmSendScreen() {
       >
         <Button
           onPress={() => {
-            handleConfirm().then(
-              () => undefined,
-              () => undefined,
-            );
+            handleConfirm().catch(() => undefined);
           }}
           variant={confirmVariant}
           size="lg"

@@ -63,7 +63,11 @@ function isSerialisedEntry(v: unknown): v is SerialisedEntry {
     && typeof o.from === 'string'
     && typeof o.to === 'string'
     && typeof o.valueWei === 'string'
-    && typeof o.broadcastAt === 'number';
+    // `broadcastAt` must be a finite integer (unix seconds) — `BigInt(float)`
+    // throws RangeError downstream in `activityStore.pendingToEntry`, which
+    // would surface as a fetch-level "Unknown error" and freeze the
+    // Activity tab until TTL expiry. Reject corrupted writes here instead.
+    && Number.isInteger(o.broadcastAt);
 }
 
 function readAll(): PendingTxEntry[] {

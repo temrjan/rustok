@@ -141,6 +141,50 @@ describe('pendingTxCache', () => {
     expect(result[0]?.txHash).toBe('0xgood');
   });
 
+  it('getAll() drops entries with non-integer broadcastAt (float, NaN, Infinity)', () => {
+    // Guards against the downstream RangeError from BigInt(float) inside
+    // activityStore.pendingToEntry — one corrupted entry would otherwise
+    // freeze the Activity tab with "Unknown error" until TTL.
+    const broken = JSON.stringify([
+      {
+        txHash: '0xfloat',
+        chainId: '11155111',
+        from: 'a',
+        to: 'b',
+        valueWei: '0',
+        broadcastAt: 1000.5,
+      },
+      {
+        txHash: '0xnan',
+        chainId: '11155111',
+        from: 'a',
+        to: 'b',
+        valueWei: '0',
+        broadcastAt: Number.NaN,
+      },
+      {
+        txHash: '0xinf',
+        chainId: '11155111',
+        from: 'a',
+        to: 'b',
+        valueWei: '0',
+        broadcastAt: Number.POSITIVE_INFINITY,
+      },
+      {
+        txHash: '0xgood',
+        chainId: '11155111',
+        from: 'a',
+        to: 'b',
+        valueWei: '0',
+        broadcastAt: 1000,
+      },
+    ]);
+    mockStorage.set('pendingTx', broken);
+    const cache = loadCache();
+    const result = cache.getAll();
+    expect(result.map((e) => e.txHash)).toEqual(['0xgood']);
+  });
+
   it('getAll() drops entries with non-numeric chainId string', () => {
     const broken = JSON.stringify([
       {
