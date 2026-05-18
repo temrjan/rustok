@@ -456,6 +456,57 @@ impl WalletService {
         Ok(result)
     }
 
+    /// Preview a native ETH transfer on an explicitly selected chain
+    /// from the currently-unlocked wallet (Phase 7 strict-honor selector).
+    /// Unlike [`Self::preview_send`] (which picks the cheapest configured
+    /// chain), this routes to exactly `chain_id`. Returns
+    /// [`WalletServiceError::Send`] wrapping
+    /// [`SendError::InsufficientFundsOnChain`] when the selected chain's
+    /// balance is below the request even if other chains could cover it.
+    ///
+    /// Errors with [`WalletServiceError::WalletNotUnlocked`] when locked.
+    pub async fn preview_send_on_chain(
+        &self,
+        provider: &MultiProvider,
+        to: Address,
+        amount_wei: U256,
+        chain_id: u64,
+    ) -> Result<SendPreview, WalletServiceError> {
+        let from = self.locked_address().await?;
+        Ok(send::preview_send_on_chain(provider, from, to, amount_wei, chain_id).await?)
+    }
+
+    /// Atomic preview-then-broadcast for a native ETH transfer on an
+    /// explicitly selected chain from the currently-unlocked wallet
+    /// (Phase 7 strict-honor selector). Mirrors [`Self::execute_send`]
+    /// but pins routing to `chain_id` rather than picking the cheapest
+    /// chain across the configured set. The signer is cloned at entry
+    /// so subsequent state changes (e.g. background-timer auto-lock)
+    /// do not abort the in-flight execute.
+    ///
+    /// Errors with [`WalletServiceError::WalletNotUnlocked`] when locked,
+    /// or [`WalletServiceError::Send`] for txguard-block / routing /
+    /// insufficient-funds-on-chain / broadcast failure.
+    pub async fn execute_send_on_chain(
+        &self,
+        provider: &MultiProvider,
+        to: Address,
+        amount_wei: U256,
+        chain_id: u64,
+    ) -> Result<SendResult, WalletServiceError> {
+        let signer = self
+            .state
+            .lock()
+            .await
+            .as_ref()
+            .map(|s| s.keyring.signer().clone())
+            .ok_or(WalletServiceError::WalletNotUnlocked)?;
+        let from = signer.address();
+        let preview = send::preview_send_on_chain(provider, from, to, amount_wei, chain_id).await?;
+        let result = send::execute_send(provider, signer, to, amount_wei, &preview.route).await?;
+        Ok(result)
+    }
+
     /// Brief lock + copy of the typed [`Address`] of the currently-unlocked
     /// wallet. Avoids the [`WalletId`] (String) round-trip for callers that
     /// already need an `Address`. Returns
@@ -967,6 +1018,32 @@ mod tests {
             .parse()
             .unwrap();
         let result = svc.execute_send(&provider, to, U256::from(1u64)).await;
+        assert!(matches!(result, Err(WalletServiceError::WalletNotUnlocked)));
+    }
+
+    #[tokio::test]
+    async fn preview_send_on_chain_when_locked_returns_wallet_not_unlocked() {
+        let (svc, _tmp) = service();
+        let provider = MultiProvider::default_chains();
+        let to: Address = "0x0000000000000000000000000000000000000001"
+            .parse()
+            .unwrap();
+        let result = svc
+            .preview_send_on_chain(&provider, to, U256::from(1u64), 1)
+            .await;
+        assert!(matches!(result, Err(WalletServiceError::WalletNotUnlocked)));
+    }
+
+    #[tokio::test]
+    async fn execute_send_on_chain_when_locked_returns_wallet_not_unlocked() {
+        let (svc, _tmp) = service();
+        let provider = MultiProvider::default_chains();
+        let to: Address = "0x0000000000000000000000000000000000000001"
+            .parse()
+            .unwrap();
+        let result = svc
+            .execute_send_on_chain(&provider, to, U256::from(1u64), 1)
+            .await;
         assert!(matches!(result, Err(WalletServiceError::WalletNotUnlocked)));
     }
 }
