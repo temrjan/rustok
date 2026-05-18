@@ -1,8 +1,8 @@
 # rustok-mobile
 
-React Native 0.85.2 client for the Rustok wallet. Phase 4 DONE: full onboarding flow (Welcome → KeepItSafe → CreatePin → ConfirmPin → ShowPhrase → Quiz → Tabs, plus Import flow + Unlock + HomeBanner recovery). Uses `react-native-rustok-bridge` (uniffi-bindgen-react-native) to talk to the Rust core (`crates/core` + `crates/txguard`).
+React Native 0.85.2 client for the Rustok wallet. Phase 4 DONE (full onboarding flow); Phase 5 in progress (real wallet UI — Receive / Send / Activity / visual polish wave). Uses `react-native-rustok-bridge` (uniffi-bindgen-react-native) to talk to the Rust core (`crates/core` + `crates/txguard`).
 
-> **Phase status:** Phase 4 DONE 2026-05-12 (21 atomic commits on `feat/phase4-onboarding`). Real wallet UI ships in Phase 5. См. `../docs/PHASE4-HANDOFF.md` (final state + 7-scenario manual smoke matrix) and `../docs/NATIVE-MIGRATION-PLAN.md` (overall roadmap).
+> **Phase status:** Phase 5 IN PROGRESS. Shipped on `main`: PR #17 SVG tab icons, PR #18 BalanceCard/WalletScreen integration, PR #19 ActionRow, PR #20 ReceiveScreen, PR #21 RPC timeout fix, PR #22 Send flow, PR #24 Issue #23 fix (alloy `connect_http` panic), PR #25 design-token foundation, PR #26 theme soften (graphite dark + off-white light), PR #27 hero block redesign. **M4 ActivityScreen real** in flight on `feat/activity-screen-m4` (C1 data layer + C1.5 test backfill + C2 UI + pending broadcast wire). Predecessors: Phase 4 DONE 2026-05-12 (PR #14, see `../docs/PHASE4-HANDOFF.md`); Phase 3 DONE 2026-05-05. См. `../docs/NATIVE-MIGRATION-PLAN.md` (overall roadmap) and `../docs/DESIGN-TOKENS.md` (token reference).
 
 ## Source layout
 
@@ -22,19 +22,25 @@ mobile/
     ├── theme/
     │   └── tokens.ts          palette.{light,dark} hex strings (single source of truth
     │                          for non-NativeWind code, e.g. NavigationContainer theme)
-    ├── components/            8 design-system primitives + dev-only NetworkBadge mount
+    ├── components/            Design-system primitives + Phase 5 wallet UI parts
+    │   ├── ActionRow.tsx      Send / Receive / Swap row (post-PR #27 embedded in BalanceCard)
+    │   ├── BalanceCard.tsx    Hero card (balance + ActionRow + NetworkBadge)
     │   ├── Button.tsx         cva variants × sizes
+    │   ├── HomeBanner.tsx     Phase 4 recovery banner (mid-onboarding crash)
     │   ├── Input.tsx          label + error + secureTextEntry
     │   ├── Modal.tsx          @gorhom/bottom-sheet wrapper, declarative isOpen API
     │   ├── NetworkBadge.tsx   Pill rendering chain name from networkStore
     │   ├── PageHeader.tsx     title + onBack + rightAction
+    │   ├── PinDots.tsx        4-digit PIN entry display
+    │   ├── PinPad.tsx         12-key keypad with shake-on-error
     │   ├── Spinner.tsx        ActivityIndicator wrapper, sm/md/lg
     │   ├── Switch.tsx         Controlled
     │   ├── ThemeProvider.tsx  Pushes themeStore.mode into NativeWind colorScheme
     │   ├── ThemeSwitcher.tsx  Radio group: light/dark/system
     │   ├── Toast.tsx          react-native-toast-message singleton wrapper
+    │   ├── TransactionRow.tsx Activity tab row (sent/received/pending/unknown variants)
     │   ├── index.ts           Public barrel
-    │   └── __tests__/         8 render-smoke tests (not.toThrow pattern)
+    │   └── __tests__/         Render-smoke tests (not.toThrow pattern — see JEST-SETUP-INCIDENT)
     ├── stores/                Zustand 5 + MMKV persist where indicated
     │   ├── walletStore.ts     phase: 'loading'|'no_wallet'|'locked'|'unlocked'
     │   │                      + address + balance + error + hydrate/refresh +
@@ -42,15 +48,21 @@ mobile/
     │   ├── networkStore.ts    chainId: bigint | undefined (MMKV decimal-string round-trip)
     │   ├── uiStore.ts         balanceHidden: boolean (MMKV persist)
     │   ├── themeStore.ts      mode: 'light'|'dark'|'system' (sync MMKV hydrate)
-    │   └── __tests__/         27 unit tests (4 stores)
+    │   ├── activityStore.ts   Phase 5 M4: phase/entries/error/inFlight + fetch with
+    │   │                      AbortController + identity guard (success + catch paths)
+    │   └── __tests__/         Unit tests (Phase 5 M4 adds 13 activityStore tests)
     ├── hooks/                 1-line selector wrappers via useShallow (zustand 5)
     │   ├── useWallet.ts       phase + address + balance + error + refresh
     │   ├── useNetwork.ts      chainId + setChainId + hydrate
     │   ├── useTheme.ts        mode + setMode
     │   └── useUI.ts           balanceHidden + toggle/setBalanceHidden
     ├── lib/
-    │   └── walletHandle.ts    Lazy singleton: getWalletHandle() — one
-    │                          WalletHandle per app session (DevHarness uses this too)
+    │   ├── walletHandle.ts    Lazy singleton: getWalletHandle() — one
+    │   │                      WalletHandle per app session (DevHarness uses this too)
+    │   ├── chainExplorer.ts   txUrl() + chainName() — 5-chain whitelist
+    │   ├── ethAmount.ts       formatWeiToEth() — Phase 5 Send/Activity formatting
+    │   └── pendingTxCache.ts  Phase 5 M4: MMKV-backed pending TX cache (TTL 30 min,
+    │                          bigint chainId boundary conversion)
     ├── navigation/
     │   ├── AppShell.tsx       NavigationContainer + brand theme (light/dark)
     │   ├── RootNavigator.tsx  Switch on walletStore.phase + assertNever exhaustive
@@ -66,8 +78,13 @@ mobile/
         ├── _DevHarness.tsx           DEV FFI smoke screen
         ├── onboarding/WelcomeScreen.tsx   Phase 4 placeholder + DEV phase toggles
         ├── locked/UnlockPinScreen.tsx     Phase 4 placeholder + DEV phase toggles
-        └── tabs/{Wallet,Activity,TxGuard,Settings}Screen.tsx
-                                       Phase 5 placeholder + Settings has DEV section
+        └── tabs/
+            ├── WalletScreen.tsx       Phase 5 M2: BalanceCard hero + ActionRow
+            ├── ActivityScreen.tsx     Phase 5 M4: real TX history — useFocusEffect
+            │                          fetch, FlatList + RefreshControl, pending dedup,
+            │                          chain-aware empty state, error + Retry
+            ├── TxGuardScreen.tsx      Phase 5+ placeholder
+            └── SettingsScreen.tsx     Settings + DEV phase override panel
 ```
 
 ## Run on Android (Windows host, real device)
@@ -161,16 +178,19 @@ The full onboarding state machine ships в Phase 4 (DONE 2026-05-12). User journ
 
 **Final state:** `docs/PHASE4-HANDOFF.md` (21-commit trail + review chain + 7-scenario manual smoke matrix + known architectural seams).
 
-## Bridge surface (Phase 3 consumers)
+## Bridge surface (Phase 3–5 consumers)
 
-`packages/react-native-rustok-bridge` exports `WalletHandle` (24 commands total). Phase 3 wires only 6 of them via `lib/walletHandle.getWalletHandle()`:
+`packages/react-native-rustok-bridge` exports `WalletHandle` (24 commands total). Currently wired via `lib/walletHandle.getWalletHandle()`:
 
 - `hasWallet()` / `isWalletUnlocked()` — phase determination (`walletStore.hydrate`)
-- `getCurrentAddress()` / `getWalletBalance()` — populated state for `unlocked` (`walletStore.hydrate` second stage)
-- `getChainId()` — chain badge (`networkStore.hydrate`)
-- `lockWallet()` — Phase 4 will use it from UnlockPin retry / app-lock flow
+- `getCurrentAddress()` / `getWalletBalance()` — populated state for `unlocked` (Phase 3, `walletStore.hydrate` second stage)
+- `getChainId()` — chain badge (Phase 3, `networkStore.hydrate`)
+- `lockWallet()` — Phase 4 (UnlockPin retry / app-lock flow)
+- `createWallet*` / `importWalletFromMnemonic` / `unlockWallet` / `verifyPin` — Phase 4 onboarding
+- `previewSend` / `sendEth` — Phase 5 M3b (`ConfirmSendScreen`)
+- `getTransactionHistory` — Phase 5 M4 (`activityStore.fetch`, current chain filter + pending-cache dedup)
 
-The remaining 18 commands (`createWalletWithMnemonic`, `unlockWallet`, `sendEth`, `previewSend`, swap functions, biometric, proxy, transaction history) ship through Phase 4-5 screens.
+Remaining (swap, biometric, proxy) ships through later Phase 5+ milestones.
 
 ## References
 
