@@ -107,8 +107,13 @@ describe('activityStore', () => {
     expect(mockHandle.getTransactionHistory).not.toHaveBeenCalled();
   });
 
-  it('fetch() filters bridge entries by current chainId', async () => {
-    mockNetworkChainId.mockReturnValue(11155111n);
+  it('fetch() surfaces bridge entries from all chains (Phase 5 — no chain filter)', async () => {
+    // Phase 5 chain abstraction: Rust's `get_chain_id()` placeholder
+    // (mainnet `1n`) does not match the actual routing chain, so we do
+    // not filter bridge entries by `currentChainId`. Multi-chain mixed
+    // view with chain pills is Phase 6+ scope (spec §6). Until then,
+    // surface whatever the bridge returns.
+    mockNetworkChainId.mockReturnValue(1n);
     mockHandle.getTransactionHistory.mockResolvedValue({
       transactions: [
         bridgeEntry({ txHash: '0xa', chainId: 11155111n }),
@@ -118,7 +123,10 @@ describe('activityStore', () => {
     });
     const store = loadStore();
     await store.getState().fetch();
-    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xa']);
+    expect(store.getState().entries.map((e) => e.txHash).sort()).toEqual([
+      '0xa',
+      '0xb',
+    ]);
   });
 
   it('fetch() merges pending entries on top, dedups by txHash with API result', async () => {
@@ -154,15 +162,20 @@ describe('activityStore', () => {
     expect(store.getState().entries[0]?.timeAgo).toBe('Pending');
   });
 
-  it('fetch() filters pending entries by current chain', async () => {
-    mockNetworkChainId.mockReturnValue(11155111n);
+  it('fetch() surfaces pending entries regardless of current chain (Phase 5)', async () => {
+    // Mirror of the bridge-side decision above: pending entries are
+    // not chain-filtered in Phase 5. A Sepolia pending tx remains
+    // visible even after a cold restart re-syncs the networkStore to
+    // the placeholder `1n` — without this, the just-broadcast tx
+    // disappears from the Activity tab on every restart.
+    mockNetworkChainId.mockReturnValue(1n);
     const persistedPending = [
       {
-        txHash: '0xother',
-        chainId: '1',
+        txHash: '0xpendingsepolia',
+        chainId: '11155111',
         from: '0xf',
         to: '0xt',
-        valueWei: '0',
+        valueWei: '1000000000000000',
         broadcastAt: 999,
       },
     ];
@@ -173,7 +186,9 @@ describe('activityStore', () => {
     });
     const store = loadStore();
     await store.getState().fetch();
-    expect(store.getState().entries).toEqual([]);
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual([
+      '0xpendingsepolia',
+    ]);
   });
 
   it('fetch() bridge throw → error phase with message', async () => {

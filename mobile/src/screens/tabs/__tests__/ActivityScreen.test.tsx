@@ -31,7 +31,6 @@ let mockActivityState: {
   error: string | undefined;
 } = { phase: 'idle', entries: [], error: undefined };
 let mockWalletAddress: string | undefined;
-let mockChainId: bigint | undefined;
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void | (() => void)) => {
@@ -59,11 +58,6 @@ jest.mock('../../../stores/walletStore', () => ({
     selector({ address: mockWalletAddress }),
 }));
 
-jest.mock('../../../stores/networkStore', () => ({
-  useNetworkStore: (selector: (s: unknown) => unknown) =>
-    selector({ chainId: mockChainId }),
-}));
-
 jest.mock('../../../components/TransactionRow', () => ({
   TransactionRow: () => null,
 }));
@@ -84,7 +78,6 @@ describe('ActivityScreen', () => {
     mockAbort.mockClear();
     mockActivityState = { phase: 'idle', entries: [], error: undefined };
     mockWalletAddress = '0x6f7c8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f';
-    mockChainId = 11155111n;
     jest.resetModules();
   });
 
@@ -95,13 +88,6 @@ describe('ActivityScreen', () => {
 
   it('renders the loaded-empty state without throwing', () => {
     mockActivityState = { phase: 'loaded', entries: [], error: undefined };
-    const Screen = loadScreen();
-    expect(() => renderer.create(<Screen />)).not.toThrow();
-  });
-
-  it('renders the loaded-empty state with undefined chainId without throwing', () => {
-    mockActivityState = { phase: 'loaded', entries: [], error: undefined };
-    mockChainId = undefined;
     const Screen = loadScreen();
     expect(() => renderer.create(<Screen />)).not.toThrow();
   });

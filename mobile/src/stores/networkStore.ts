@@ -56,10 +56,19 @@ export const useNetworkStore = create<NetworkState>((set, get) => ({
     try {
       const handle = getWalletHandle();
       const chainId = await handle.getChainId();
-      // Only overwrite when the bridge has a concrete value. An
-      // `undefined` reply here means "no chain known yet" — keep the
-      // persisted cache so the badge keeps rendering instantly.
-      if (chainId !== undefined) {
+      // Phase 5 chain-abstraction note: Rust's `get_chain_id()` is a
+      // documented placeholder (`crates/core/src/provider/multi.rs`
+      // ~L237) — returns `chains.first()` (Ethereum mainnet `1n`)
+      // until Phase 7 lands an explicit selector. Meanwhile send
+      // routing picks the cheapest chain dynamically and
+      // `ConfirmSendScreen` calls `setChainId(result.chainId)` after
+      // each successful broadcast so the UI reflects the chain that
+      // was actually used. On cold start we must NOT overwrite that
+      // user-acknowledged value with the placeholder — doing so would
+      // hide pending / confirmed entries on Sepolia behind a Mainnet
+      // filter after every restart. Only adopt the bridge value when
+      // nothing is persisted yet (fresh install / first run).
+      if (chainId !== undefined && get().chainId === undefined) {
         get().setChainId(chainId);
       }
     } catch {
