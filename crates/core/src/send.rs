@@ -31,6 +31,26 @@ pub enum SendError {
     #[error("routing: {0}")]
     Routing(#[from] RouterError),
 
+    /// Strict-chain send: the selected chain does not have enough
+    /// balance to cover `value + estimated gas` even though other
+    /// chains might. Lifted out of [`SendError::Routing`] as a
+    /// dedicated variant so FFI bindings can surface the chain id
+    /// and balances to the UI without parsing the routing error string.
+    ///
+    /// Returned by [`preview_send_on_chain`] (Phase 7 explicit network
+    /// selector path).
+    #[error(
+        "insufficient funds on chain {chain_id}: need {requested_wei} wei, have {available_wei} wei"
+    )]
+    InsufficientFundsOnChain {
+        /// Chain that the user selected.
+        chain_id: u64,
+        /// Total amount needed (value + estimated gas).
+        requested_wei: U256,
+        /// Available balance on the selected chain.
+        available_wei: U256,
+    },
+
     /// Provider/RPC error during send.
     #[error("provider: {0}")]
     Provider(String),
@@ -115,6 +135,78 @@ pub async fn preview_send(
     })
 }
 
+/// Preview a send for an explicitly selected chain (Phase 7 strict-honor).
+///
+/// Unlike [`preview_send`] (which picks the cheapest chain across the
+/// configured set), this function builds a preview for exactly the
+/// chain `chain_id`. The user's explicit selection is honored: if the
+/// chosen chain has insufficient balance, [`SendError::InsufficientFundsOnChain`]
+/// is returned even when other chains could cover the send.
+///
+/// `RouterError::InsufficientBalanceOnChain` is lifted to the dedicated
+/// `SendError::InsufficientFundsOnChain` variant so FFI bindings can
+/// expose the chain id and balances to the UI without string parsing.
+/// All other router errors (unknown chain, RPC failure) pass through
+/// as [`SendError::Routing`].
+pub async fn preview_send_on_chain(
+    provider: &MultiProvider,
+    from: Address,
+    to: Address,
+    amount_wei: U256,
+    chain_id: u64,
+) -> Result<SendPreview, SendError> {
+    let calldata = Bytes::new(); // plain ETH transfer
+
+    // 1. Parse transaction for txguard.
+    let parsed = ParsedTransaction {
+        to,
+        value: amount_wei,
+        action: TransactionAction::NativeTransfer,
+        function_name: None,
+        function_selector: None,
+    };
+
+    // 2. Security analysis (mandatory).
+    let engine = txguard::RulesEngine::new();
+    let verdict = engine.analyze(&parsed);
+
+    // 3. Block if dangerous.
+    if verdict.action == Action::Block {
+        return Err(SendError::Blocked {
+            risk_score: verdict.risk_score,
+            reason: explainer::verdict_summary(&verdict),
+        });
+    }
+
+    // 4. Strict-chain route. Lift InsufficientBalanceOnChain to the
+    // dedicated SendError variant; other router errors pass through.
+    let route =
+        match router::route_for_chain(provider, from, to, calldata, amount_wei, chain_id).await {
+            Ok(r) => r,
+            Err(RouterError::InsufficientBalanceOnChain {
+                chain_id,
+                available,
+                needed,
+            }) => {
+                return Err(SendError::InsufficientFundsOnChain {
+                    chain_id,
+                    requested_wei: needed,
+                    available_wei: available,
+                });
+            }
+            Err(e) => return Err(SendError::Routing(e)),
+        };
+
+    // 5. Generate explanation.
+    let explanation = explainer::explain(&parsed, &verdict, Some(&route));
+
+    Ok(SendPreview {
+        verdict,
+        route,
+        explanation,
+    })
+}
+
 /// Execute a send: build EIP-1559 transaction, sign, and broadcast.
 ///
 /// Call [`preview_send`] first to get the `route` and verify txguard verdict.
@@ -182,4 +274,25 @@ pub async fn execute_send(
         amount_wei,
         estimated_gas_cost: route.estimated_cost,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insufficient_funds_on_chain_display() {
+        let err = SendError::InsufficientFundsOnChain {
+            chain_id: 1,
+            requested_wei: U256::from(500_u64),
+            available_wei: U256::from(100_u64),
+        };
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("chain 1"),
+            "expected chain id in message: {msg}"
+        );
+        assert!(msg.contains("500"), "expected requested wei: {msg}");
+        assert!(msg.contains("100"), "expected available wei: {msg}");
+    }
 }

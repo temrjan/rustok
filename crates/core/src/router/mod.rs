@@ -27,6 +27,27 @@ pub enum RouterError {
         needed: U256,
     },
 
+    /// Strict-chain mode: balance on the selected chain is below the
+    /// total needed (value + estimated gas). No fallback to other chains.
+    /// Returned by [`route_for_chain`].
+    #[error("insufficient balance on chain {chain_id}: need {needed} wei, have {available} wei")]
+    InsufficientBalanceOnChain {
+        /// Chain that was selected.
+        chain_id: u64,
+        /// Available balance on that chain (wei).
+        available: U256,
+        /// Total amount needed (value + estimated gas cost).
+        needed: U256,
+    },
+
+    /// Strict-chain mode: the selected chain id is not in the provider's
+    /// configured chain set. Returned by [`route_for_chain`].
+    #[error("chain {chain_id} not configured in provider")]
+    ChainNotFound {
+        /// Chain id that was requested.
+        chain_id: u64,
+    },
+
     /// Provider error during fee/balance fetching.
     #[error("provider error: {0}")]
     Provider(#[from] ProviderError),
@@ -161,6 +182,89 @@ pub async fn cheapest_route(
         .expect("find_routes ensures non-empty"))
 }
 
+/// Find the route for a transaction on an explicitly selected chain.
+///
+/// Strict honor: only considers the selected chain. Unlike
+/// [`cheapest_route`] / [`find_routes`] which sweep all configured chains
+/// and silently skip those with provider failures, this function
+/// surfaces fee fetch failures on the chosen chain as
+/// [`RouterError::Provider`].
+///
+/// Returns [`RouterError::ChainNotFound`] when `chain_id` is not in
+/// the provider's configured chain set, and
+/// [`RouterError::InsufficientBalanceOnChain`] when the balance on the
+/// chosen chain is below `value + estimated_gas * max_fee_per_gas`
+/// (regardless of balances on other chains).
+///
+/// Used by the Phase 7 explicit network selector via
+/// `send::preview_send_on_chain`.
+pub async fn route_for_chain(
+    provider: &MultiProvider,
+    from: Address,
+    to: Address,
+    calldata: Bytes,
+    value: U256,
+    chain_id: u64,
+) -> Result<Route, RouterError> {
+    // Verify the chain is configured.
+    let chain = provider
+        .chains()
+        .iter()
+        .find(|c| c.id == chain_id)
+        .ok_or(RouterError::ChainNotFound { chain_id })?;
+
+    // Fetch balance on this chain (zero is a valid state — we still
+    // proceed to check fees so the error reports the correct needed amount).
+    let balance = provider
+        .balance_map(from)
+        .await
+        .get(&chain_id)
+        .copied()
+        .unwrap_or(U256::ZERO);
+
+    // Strict mode: fee fetch failure propagates as Provider error
+    // (not silently skipped as in find_routes).
+    let fees = provider.gas_fees(chain_id).await?;
+
+    // Gas estimate: keep find_routes's pragmatic fallback (21k native /
+    // 65k contract) for transient RPC hiccups — failing the estimate
+    // path alone would block legitimate sends on a chosen chain.
+    let estimated_gas = match provider
+        .estimate_gas(chain_id, from, to, calldata.clone(), value)
+        .await
+    {
+        Ok(gas) => gas,
+        Err(_) => {
+            if calldata.is_empty() {
+                21_000
+            } else {
+                65_000
+            }
+        }
+    };
+
+    let estimated_cost = U256::from(estimated_gas).saturating_mul(U256::from(fees.max_fee_per_gas));
+    let needed = value.saturating_add(estimated_cost);
+
+    if balance < needed {
+        return Err(RouterError::InsufficientBalanceOnChain {
+            chain_id,
+            available: balance,
+            needed,
+        });
+    }
+
+    Ok(Route {
+        chain_id,
+        chain_name: chain.name.clone(),
+        estimated_gas,
+        max_fee_per_gas: fees.max_fee_per_gas,
+        max_priority_fee_per_gas: fees.max_priority_fee_per_gas,
+        estimated_cost,
+        available_balance: balance,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,5 +307,35 @@ mod tests {
         assert_eq!(routes[0].chain_id, 8453); // Base cheapest
         assert_eq!(routes[1].chain_id, 42161); // Arbitrum second
         assert_eq!(routes[2].chain_id, 1); // Ethereum most expensive
+    }
+
+    #[test]
+    fn insufficient_balance_on_chain_display() {
+        let err = RouterError::InsufficientBalanceOnChain {
+            chain_id: 1,
+            available: U256::from(100_u64),
+            needed: U256::from(500_u64),
+        };
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("chain 1"),
+            "expected chain id in message: {msg}"
+        );
+        assert!(
+            msg.contains("100"),
+            "expected available wei in message: {msg}"
+        );
+        assert!(msg.contains("500"), "expected needed wei in message: {msg}");
+    }
+
+    #[test]
+    fn chain_not_found_display() {
+        let err = RouterError::ChainNotFound { chain_id: 99999 };
+        let msg = format!("{err}");
+        assert!(msg.contains("99999"), "expected chain id in message: {msg}");
+        assert!(
+            msg.contains("not configured"),
+            "expected description: {msg}"
+        );
     }
 }

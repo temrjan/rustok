@@ -116,6 +116,23 @@ pub enum SendErrorKind {
     /// Transaction broadcast failed.
     #[error("transaction broadcast failed")]
     Transaction,
+    /// Strict-chain mode: the user-selected chain does not have
+    /// enough balance to cover the requested amount + estimated gas.
+    /// Carries chain id + balances (decimal-string wei) so the UI can
+    /// build a clear error and prompt the user to switch chains.
+    /// Wei amounts are passed as decimal strings since uniffi does not
+    /// support `U256` as a primitive type across the FFI boundary.
+    #[error(
+        "insufficient funds on chain {chain_id}: need {requested_wei} wei, have {available_wei} wei"
+    )]
+    InsufficientFundsOnChain {
+        /// Chain id the user explicitly selected.
+        chain_id: u64,
+        /// Total amount needed (value + estimated gas) in wei, decimal.
+        requested_wei: String,
+        /// Available balance on the selected chain in wei, decimal.
+        available_wei: String,
+    },
 }
 
 /// RPC / chain communication error variants.
@@ -261,6 +278,17 @@ impl From<SendError> for BindingsError {
             },
             SendError::Routing(_) => Self::Send {
                 kind: SendErrorKind::Routing,
+            },
+            SendError::InsufficientFundsOnChain {
+                chain_id,
+                requested_wei,
+                available_wei,
+            } => Self::Send {
+                kind: SendErrorKind::InsufficientFundsOnChain {
+                    chain_id,
+                    requested_wei: requested_wei.to_string(),
+                    available_wei: available_wei.to_string(),
+                },
             },
             SendError::Provider(_) => Self::Rpc {
                 kind: RpcErrorKind::Connection,
