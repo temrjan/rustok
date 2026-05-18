@@ -45,9 +45,8 @@ import {
   TransactionRow,
   type TransactionDirection,
 } from '../../components/TransactionRow';
-import { chainName, txUrl } from '../../lib/chainExplorer';
+import { txUrl } from '../../lib/chainExplorer';
 import { useActivityStore } from '../../stores/activityStore';
-import { useNetworkStore } from '../../stores/networkStore';
 import { useWalletStore } from '../../stores/walletStore';
 
 function inferDirection(
@@ -71,7 +70,6 @@ function ActivityScreen() {
     })),
   );
   const address = useWalletStore((s) => s.address);
-  const chainId = useNetworkStore((s) => s.chainId);
   const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
@@ -103,9 +101,6 @@ function ActivityScreen() {
     }
     Linking.openURL(url).catch(() => toast.error('Could not open explorer'));
   }, []);
-
-  const chainDisplay =
-    (chainId !== undefined ? chainName(chainId) : null) ?? 'this network';
 
   const showFirstSpinner =
     phase === 'idle' || (phase === 'loading' && entries.length === 0);
@@ -157,7 +152,7 @@ function ActivityScreen() {
           No transactions yet
         </Text>
         <Text className="text-ink-muted text-sm text-center">
-          Your sent and received transactions on {chainDisplay} will appear here
+          Your sent and received transactions will appear here
         </Text>
       </View>
     );
