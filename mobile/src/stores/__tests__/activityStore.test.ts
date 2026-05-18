@@ -50,12 +50,10 @@ describe('activityStore', () => {
     mockNetworkChainId.mockReset();
     jest.resetModules();
     // Pin Date.now so pendingTxCache.clearStale() (called by fetch()) does
-    // not delete fixture entries with low broadcastAt values. Pinned to
-    // 1_500_000_000 ms = 1_500_000 unix sec → cutoff at 1_498_200 sec;
-    // fixtures use broadcastAt in the 998–999 range which sits comfortably
-    // above zero but below cutoff would need bigger values — we set far
-    // enough back in test that all fixtures stay fresh.
-    jest.spyOn(Date, 'now').mockReturnValue(1_500_000); // 1500 unix sec; cutoff = -300 → keep all
+    // not delete fixture entries with low broadcastAt values.
+    // 1_500_000 ms = 1500 unix sec; cutoff = 1500 - 1800 = -300; every
+    // fixture with broadcastAt >= 0 survives.
+    jest.spyOn(Date, 'now').mockReturnValue(1_500_000);
   });
 
   afterEach(() => {
@@ -238,6 +236,86 @@ describe('activityStore', () => {
     const store = loadStore();
     await store.getState().fetch();
     expect(store.getState().phase).toBe('loaded');
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xa']);
+  });
+
+  it('fetch() concurrent calls: success-path identity guard drops stale success', async () => {
+    // Companion to the catch-path test above. Here the FIRST fetch
+    // resolves successfully AFTER the second has already landed. The
+    // success-path identity guard must reject the stale result rather
+    // than stomp the second fetch's entries.
+    mockNetworkChainId.mockReturnValue(11155111n);
+    type HistoryResult = {
+      transactions: ReturnType<typeof bridgeEntry>[];
+      errors: never[];
+    };
+    let resolveFirst!: (v: HistoryResult) => void;
+    mockHandle.getTransactionHistory
+      .mockImplementationOnce(
+        () =>
+          new Promise<HistoryResult>((res) => {
+            resolveFirst = res;
+          }),
+      )
+      .mockResolvedValueOnce({
+        transactions: [bridgeEntry({ txHash: '0xsecond', chainId: 11155111n })],
+        errors: [],
+      });
+
+    const store = loadStore();
+    const first = store.getState().fetch();
+    await store.getState().fetch();
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xsecond']);
+
+    resolveFirst({
+      transactions: [bridgeEntry({ txHash: '0xfirst', chainId: 11155111n })],
+      errors: [],
+    });
+    await first;
+
+    expect(store.getState().phase).toBe('loaded');
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xsecond']);
+  });
+
+  it('fetch() RPC_TIMEOUT_MS (12s) → error "Network too slow"', async () => {
+    jest.useFakeTimers({ doNotFake: ['Date'] });
+    try {
+      mockNetworkChainId.mockReturnValue(11155111n);
+      mockHandle.getTransactionHistory.mockImplementation(
+        (opts: { signal: AbortSignal }) =>
+          new Promise((_, reject) => {
+            opts.signal.addEventListener('abort', () => {
+              const err = new Error('Aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }),
+      );
+      const store = loadStore();
+      const pending = store.getState().fetch();
+      jest.advanceTimersByTime(12_000);
+      await pending;
+      expect(store.getState().phase).toBe('error');
+      expect(store.getState().error).toBe('Network too slow');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('fetch() drops TransactionHistory.errors[] from state', async () => {
+    // Per-chain partial failures from the bridge are intentionally NOT
+    // surfaced in v1 (see activityStore.ts file-level docstring).
+    // Pin the contract: a non-empty errors[] must not affect phase or
+    // the surfaced error string.
+    mockNetworkChainId.mockReturnValue(11155111n);
+    mockHandle.getTransactionHistory.mockResolvedValue({
+      transactions: [bridgeEntry({ txHash: '0xa', chainId: 11155111n })],
+      errors: [{ chainId: 1n, message: 'rpc failed for mainnet' }],
+    });
+    const store = loadStore();
+    await store.getState().fetch();
+    expect(store.getState().phase).toBe('loaded');
+    expect(store.getState().error).toBeUndefined();
     expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xa']);
   });
 

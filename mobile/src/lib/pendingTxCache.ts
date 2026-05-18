@@ -20,6 +20,14 @@
  * all resolve to an empty array — never throws to callers. A single
  * malformed entry in storage does not poison neighbouring valid
  * entries.
+ *
+ * Write contract: `mmkv.set` is not wrapped — by design. The native
+ * MMKV layer swallows disk-write failures silently, so in practice
+ * `add` / `removeByHash` / `clearStale` do not throw. If a write does
+ * fail, the entry simply vanishes on the next reload; the bridge
+ * response or the toast's explorer link remains the user's escape
+ * hatch. Wrap with try/catch only if a future RN-MMKV release starts
+ * surfacing errors.
  */
 
 import { createMMKV } from 'react-native-mmkv';
