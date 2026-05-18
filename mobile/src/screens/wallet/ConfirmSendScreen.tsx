@@ -59,6 +59,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useShallow } from 'zustand/react/shallow';
 import { ActionDto, type SendPreview } from 'react-native-rustok-bridge';
 import { Button } from '../../components/Button';
 import { PageHeader } from '../../components/PageHeader';
@@ -66,6 +67,7 @@ import { Spinner } from '../../components/Spinner';
 import { toast } from '../../components/Toast';
 import { txUrl } from '../../lib/chainExplorer';
 import { formatWeiToEth } from '../../lib/ethAmount';
+import * as pendingTxCache from '../../lib/pendingTxCache';
 import { getWalletHandle } from '../../lib/walletHandle';
 import { useWalletStore } from '../../stores/walletStore';
 import type { UnlockedParamList } from '../../navigation/types';
@@ -141,7 +143,9 @@ function ConfirmSendScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<ConfirmRoute>();
   const { to, amountWei } = route.params;
-  const refresh = useWalletStore((s) => s.refresh);
+  const { address, refresh } = useWalletStore(
+    useShallow((s) => ({ address: s.address, refresh: s.refresh })),
+  );
 
   const [preview, setPreview] = useState<PreviewState>({ status: 'loading' });
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -194,6 +198,27 @@ function ConfirmSendScreen() {
       const result = await getWalletHandle().sendEth(to, amountWei, {
         signal: controller.signal,
       });
+      // Record the broadcast in the local pending cache so the Activity
+      // tab can surface it as Pending immediately, before the Blockscout
+      // explorer API picks it up (typically 30 s – 2 min). Silent — the
+      // cache is a UX cushion, not a system of record; a failure here
+      // must not derail the toast / refresh / nav handoff.
+      try {
+        if (address !== undefined) {
+          pendingTxCache.add({
+            txHash: result.txHash,
+            chainId: result.chainId,
+            from: address.toLowerCase(),
+            to: to.toLowerCase(),
+            valueWei: amountWei,
+            broadcastAt: Math.floor(Date.now() / 1000),
+          });
+        }
+      } catch (cacheErr: unknown) {
+        if (__DEV__) {
+          console.warn('pendingTxCache.add failed', cacheErr);
+        }
+      }
       const url = txUrl(result.chainId, result.txHash);
       const hashShort = truncateTxHash(result.txHash);
       toast.success(`Sent ${hashShort}`);
@@ -226,7 +251,7 @@ function ConfirmSendScreen() {
       clearTimeout(timeoutHandle);
       setIsBroadcasting(false);
     }
-  }, [isBroadcasting, preview, to, amountWei, navigation, refresh]);
+  }, [isBroadcasting, preview, to, amountWei, navigation, refresh, address]);
 
   const confirmDisabled =
     isBroadcasting ||
