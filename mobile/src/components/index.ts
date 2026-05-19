@@ -12,6 +12,7 @@ export { HomeBanner } from './HomeBanner';
 export { Input } from './Input';
 export { Modal } from './Modal';
 export { NetworkBadge } from './NetworkBadge';
+export { NetworkPickerSheet } from './NetworkPickerSheet';
 export { PageHeader } from './PageHeader';
 export { Spinner } from './Spinner';
 export { Switch } from './Switch';

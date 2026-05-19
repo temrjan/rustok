@@ -232,13 +232,6 @@ function ComponentsScreen({ onBack }: ComponentsScreenProps) {
           >
             Set Unknown (99999)
           </Button>
-          <Button
-            variant="secondary"
-            onPress={() => useNetworkStore.getState().setChainId(undefined)}
-            accessibilityLabel="Clear chain"
-          >
-            Clear
-          </Button>
         </View>
       )}
 
