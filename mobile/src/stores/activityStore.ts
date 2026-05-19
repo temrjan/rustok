@@ -78,11 +78,15 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
 
     const currentChainId = useNetworkStore.getState().chainId;
     if (currentChainId === undefined) {
-      // Cold-start race: ActivityScreen focus fired before networkStore.hydrate
-      // resolved. Surface an empty list rather than hanging on Spinner; the
-      // next focus/refresh re-runs fetch() with a hydrated chainId.
-      // Defensive: abort any prior in-flight controller so the old RPC does
-      // not keep running while we route the user to the empty state.
+      // Defensive only — unreachable after Phase 7 step 3 made
+      // `useNetworkStore.chainId` a non-nullable `bigint` hydrated
+      // synchronously on module load (default `1n` on a fresh install).
+      // The old cold-start race against an async `networkStore.hydrate()`
+      // is gone. This branch is kept as a belt-and-braces empty-state
+      // for any downstream caller that ever widens the type back to
+      // `bigint | undefined`. To be removed in a follow-up cleanup once
+      // the wider Activity refactor lands (spec § Implementation order
+      // step 6).
       get().inFlight?.abort();
       set({
         phase: 'loaded',
@@ -116,18 +120,16 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       // 'loading' state.
       if (get().inFlight !== controller) return;
 
-      // Phase 5 chain-abstraction note: Rust core's `get_chain_id()`
-      // is a documented placeholder (`crates/core/src/provider/multi.rs`
-      // L237) — it returns `chains.first()` (Ethereum mainnet `1n`)
-      // until Phase 7 lands an explicit selector. Meanwhile `send_eth`
-      // routes through `execute_send` which picks the cheapest chain
-      // (typically Sepolia for testnet sends). Filtering Activity-tab
-      // entries by `currentChainId` (Rust's placeholder) hides every
-      // tx after a cold restart since `networkStore.hydrate` re-syncs
-      // to the placeholder. Until Phase 7 ships a real selector, show
-      // all transactions returned by `getTransactionHistory()` and all
+      // Phase 7 transitional note: chain-aware filtering is owned by
+      // `useNetworkStore.chainId` now (Rust's `get_chain_id()` was
+      // removed in PR #34 step 1) and hydration is synchronous, so
+      // `currentChainId` above is always defined. Per spec §
+      // Implementation order step 6, the actual per-chain filter on
+      // `history.transactions` lands together with `ActivityScreen`'s
+      // refetch-on-chain-change wiring. Until then, surface all
+      // transactions returned by `getTransactionHistory()` and all
       // pending entries (deduped by txHash). Multi-chain mixed view
-      // with per-row chain pill is in Phase 6+ scope per spec §6.
+      // with per-row chain pill is deferred (spec § Out of scope).
       const apiHashes = new Set(
         history.transactions.map((e) => e.txHash),
       );

@@ -1,12 +1,15 @@
 /**
- * NetworkBadge — render smoke + a real assertion on the null-render
- * branch (chainId === undefined returns null per the component
- * contract; this assertion catches an accidental change to that
- * behaviour).
+ * NetworkBadge — render smoke for the populated-state cases (the only
+ * cases that remain after Phase 7 step 3 made `chainId: bigint`
+ * non-nullable — there is no "boot before hydrate" undefined state
+ * anymore, hydration is synchronous on module load).
  *
- * The two populated-state cases use not-throw smoke (NativeWind
- * css-interop returns null in the Jest env, see `Button.test.tsx`
- * header for context).
+ * Both cases use not-throw smoke (NativeWind css-interop returns null
+ * in the Jest env, see `Button.test.tsx` header for context). The
+ * legacy null-render branch in `NetworkBadge.tsx:35` is now
+ * unreachable at the type level — kept defensively for the unlikely
+ * case of a downstream caller threading `undefined` through a wider
+ * type, but no longer worth a dedicated test.
  */
 
 import React from 'react';
@@ -16,12 +19,8 @@ import { useNetworkStore } from '../../stores/networkStore';
 
 describe('NetworkBadge', () => {
   beforeEach(() => {
-    useNetworkStore.getState().setChainId(undefined);
-  });
-
-  it('renders null when chainId is undefined', () => {
-    const tree = renderer.create(<NetworkBadge />).toJSON();
-    expect(tree).toBeNull();
+    // Re-baseline to mainnet between cases so tests are order-independent.
+    useNetworkStore.getState().setChainId(1n);
   });
 
   it('renders without throwing for known chainId', () => {

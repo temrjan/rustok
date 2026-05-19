@@ -1,78 +1,58 @@
 /**
- * networkStore — Phase 3 M4 C2 (hydrate body added in C3).
+ * networkStore — Phase 7 step 3 (JS-owned chain selection).
  *
- * Holds the current EVM chain id (from `WalletHandle.getChainId()`).
- * Persisted to MMKV so cold-start `<NetworkBadge />` has an instant
- * render — the cached value is overridden by the live bridge value
- * once `hydrate()` completes.
+ * Single source of truth for the user's chosen EVM chain. Replaces
+ * the Phase 3 placeholder model where Rust's `get_chain_id()` was the
+ * canonical chain — that bridge method is gone (PR #34 Phase 7 step 1)
+ * and the JS side now both stores the choice and passes it into
+ * `send_eth(chain_id)` on every broadcast (strict-honor routing).
  *
- * `chainId` is stored as a decimal string in MMKV (the `set()` API
- * does not accept bigint), and parsed back to bigint on hydration.
- * Loss-free round-trip: `bigint → toString → BigInt(...)`.
+ * Persistence model: MMKV plaintext (UI preference, not a secret).
+ * Same trust tier as `themeStore` / `settingsStore`. `chainId` is
+ * serialized as a decimal string (`bigint.toString()`) because MMKV's
+ * typed setters do not accept `bigint`; parsed back with `BigInt(...)`
+ * on hydration.
  *
- * `hydrate()` is silent on bridge failure (catch-and-drop): the
- * persisted value remains valid as a fallback for instant render.
- * Bridge errors that affect routing are surfaced via `walletStore`,
- * not here. We also guard `setChainId(undefined)`: a `getChainId()`
- * returning `undefined` (no current chain known) must NOT wipe the
- * persisted cache — it would break the instant-render goal.
+ * Hydration is synchronous on module load (top-level
+ * `readPersistedChainId`) — the first render of `NetworkBadge` and
+ * the first `getState().chainId` read inside `activityStore.fetch()`
+ * already see the persisted value. No cold-start race window (Phase 5
+ * had one because the old async `hydrate()` resolved after the first
+ * Activity-tab focus).
+ *
+ * First-launch fallback is Ethereum mainnet (`1n`) — matches the
+ * canonical first entry of `crates/core/src/provider/chains.rs::
+ * default_chains()` (enforced by the
+ * `default_chains_starts_with_ethereum` invariant test).
  */
 
 import { createMMKV } from 'react-native-mmkv';
 import { create } from 'zustand';
-import { getWalletHandle } from '../lib/walletHandle';
 
 const STORAGE_KEY = 'networkChainId';
+const DEFAULT_CHAIN_ID = 1n;
 
 const mmkv = createMMKV();
 
-function readPersistedChainId(): bigint | undefined {
+function readPersistedChainId(): bigint {
   const raw = mmkv.getString(STORAGE_KEY);
-  if (raw === undefined || raw === '') return undefined;
+  if (raw === undefined || raw === '') return DEFAULT_CHAIN_ID;
   try {
     return BigInt(raw);
   } catch {
-    return undefined;
+    return DEFAULT_CHAIN_ID;
   }
 }
 
 interface NetworkState {
-  chainId: bigint | undefined;
-  setChainId: (chainId: bigint | undefined) => void;
-  hydrate: () => Promise<void>;
+  chainId: bigint;
+  setChainId: (chainId: bigint) => void;
 }
 
-export const useNetworkStore = create<NetworkState>((set, get) => ({
+export const useNetworkStore = create<NetworkState>((set) => ({
   chainId: readPersistedChainId(),
   setChainId: (chainId) => {
-    if (chainId === undefined) {
-      mmkv.remove(STORAGE_KEY);
-    } else {
-      mmkv.set(STORAGE_KEY, chainId.toString());
-    }
+    mmkv.set(STORAGE_KEY, chainId.toString());
     set({ chainId });
-  },
-  hydrate: async () => {
-    try {
-      const handle = getWalletHandle();
-      const chainId = await handle.getChainId();
-      // Phase 5 chain-abstraction note: Rust's `get_chain_id()` is a
-      // documented placeholder (`crates/core/src/provider/multi.rs`
-      // ~L237) — returns `chains.first()` (Ethereum mainnet `1n`)
-      // until Phase 7 lands an explicit selector. Meanwhile send
-      // routing picks the cheapest chain dynamically and
-      // `ConfirmSendScreen` calls `setChainId(result.chainId)` after
-      // each successful broadcast so the UI reflects the chain that
-      // was actually used. On cold start we must NOT overwrite that
-      // user-acknowledged value with the placeholder — doing so would
-      // hide pending / confirmed entries on Sepolia behind a Mainnet
-      // filter after every restart. Only adopt the bridge value when
-      // nothing is persisted yet (fresh install / first run).
-      if (chainId !== undefined && get().chainId === undefined) {
-        get().setChainId(chainId);
-      }
-    } catch {
-      // Silent: persisted chainId remains the source for NetworkBadge.
-    }
   },
 }));

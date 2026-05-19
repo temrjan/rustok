@@ -1,8 +1,11 @@
 /**
  * networkStore — unit tests with shared in-memory MMKV mock
- * (mirrors the themeStore test pattern).
+ * (mirrors the themeStore / settingsStore test pattern).
  *
- * Verifies the bigint chainId round-trip via MMKV string serialization.
+ * Verifies the bigint chainId round-trip via MMKV string serialization
+ * and the Phase 7 step 3 invariants: synchronous module-load hydrate,
+ * non-nullable `chainId: bigint`, default fallback to Ethereum mainnet
+ * (`1n`) on a fresh install or a corrupted persisted value.
  *
  * `export {}` keeps this file module-scoped so the top-level
  * `mockStorage` does not collide with the equivalent in other store
@@ -27,25 +30,16 @@ jest.mock('react-native-mmkv', () => ({
   }),
 }));
 
-const mockHandle = {
-  getChainId: jest.fn(),
-};
-
-jest.mock('../../lib/walletHandle', () => ({
-  getWalletHandle: () => mockHandle,
-}));
-
 describe('networkStore', () => {
   beforeEach(() => {
     mockStorage.clear();
-    mockHandle.getChainId.mockReset();
     jest.resetModules();
   });
 
-  it('defaults to chainId: undefined when nothing persisted', () => {
+  it('defaults to Ethereum mainnet (1n) on a fresh install', () => {
     const { useNetworkStore } =
       require('../networkStore') as typeof import('../networkStore');
-    expect(useNetworkStore.getState().chainId).toBeUndefined();
+    expect(useNetworkStore.getState().chainId).toBe(1n);
   });
 
   it('setChainId writes a decimal string to MMKV', () => {
@@ -68,54 +62,25 @@ describe('networkStore', () => {
     expect(b.getState().chainId).toBe(8453n);
   });
 
-  it('setChainId(undefined) removes the persisted key', () => {
+  it('hydrates from MMKV on module load (synchronous, no async wait)', () => {
+    mockStorage.set('networkChainId', '10');
     const { useNetworkStore } =
       require('../networkStore') as typeof import('../networkStore');
-    useNetworkStore.getState().setChainId(137n);
-    expect(mockStorage.has('networkChainId')).toBe(true);
-
-    useNetworkStore.getState().setChainId(undefined);
-    expect(mockStorage.has('networkChainId')).toBe(false);
-    expect(useNetworkStore.getState().chainId).toBeUndefined();
+    // First read after import already sees the persisted value.
+    expect(useNetworkStore.getState().chainId).toBe(10n);
   });
 
-  it('falls back to undefined on invalid persisted value', () => {
+  it('falls back to 1n on a corrupted persisted value', () => {
     mockStorage.set('networkChainId', 'not-a-number');
     const { useNetworkStore } =
       require('../networkStore') as typeof import('../networkStore');
-    expect(useNetworkStore.getState().chainId).toBeUndefined();
-  });
-
-  it('hydrate writes bridge chainId to store + MMKV', async () => {
-    mockHandle.getChainId.mockResolvedValue(137n);
-    const { useNetworkStore } =
-      require('../networkStore') as typeof import('../networkStore');
-    await useNetworkStore.getState().hydrate();
-    expect(useNetworkStore.getState().chainId).toBe(137n);
-    expect(mockStorage.get('networkChainId')).toBe('137');
-  });
-
-  it('hydrate guard: bridge undefined leaves persisted cache intact', async () => {
-    // Pre-seed cache (simulates prior session).
-    mockStorage.set('networkChainId', '8453');
-    mockHandle.getChainId.mockResolvedValue(undefined);
-    const { useNetworkStore } =
-      require('../networkStore') as typeof import('../networkStore');
-    // Initial state from MMKV cache.
-    expect(useNetworkStore.getState().chainId).toBe(8453n);
-    await useNetworkStore.getState().hydrate();
-    // Bridge said undefined → cache must NOT be wiped.
-    expect(useNetworkStore.getState().chainId).toBe(8453n);
-    expect(mockStorage.get('networkChainId')).toBe('8453');
-  });
-
-  it('hydrate silent on bridge throw — persisted cache stays', async () => {
-    mockStorage.set('networkChainId', '1');
-    mockHandle.getChainId.mockRejectedValue(new Error('rpc down'));
-    const { useNetworkStore } =
-      require('../networkStore') as typeof import('../networkStore');
-    await expect(useNetworkStore.getState().hydrate()).resolves.toBeUndefined();
     expect(useNetworkStore.getState().chainId).toBe(1n);
-    expect(mockStorage.get('networkChainId')).toBe('1');
+  });
+
+  it('falls back to 1n on an empty persisted string', () => {
+    mockStorage.set('networkChainId', '');
+    const { useNetworkStore } =
+      require('../networkStore') as typeof import('../networkStore');
+    expect(useNetworkStore.getState().chainId).toBe(1n);
   });
 });

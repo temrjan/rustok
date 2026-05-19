@@ -35,7 +35,6 @@ import { ThemeProvider } from './src/components/ThemeProvider';
 import { ToastProvider } from './src/components';
 import AppShell from './src/navigation/AppShell';
 import { useWalletStore } from './src/stores/walletStore';
-import { useNetworkStore } from './src/stores/networkStore';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -54,10 +53,9 @@ function App() {
       .getState()
       .hydrate()
       .catch(() => undefined);
-    useNetworkStore
-      .getState()
-      .hydrate()
-      .catch(() => undefined);
+    // Phase 7 step 3: networkStore no longer exposes an async hydrate()
+    // — `chainId` is loaded synchronously on module load from MMKV
+    // (default `1n` on a fresh install). No explicit init call needed.
   }, []);
 
   return (
