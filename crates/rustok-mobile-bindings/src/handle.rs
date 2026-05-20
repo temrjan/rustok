@@ -224,15 +224,29 @@ impl WalletHandle {
         Ok(balance.into())
     }
 
-    /// Primary chain id (for UI network badge). `None` if no chains
-    /// configured.
+    /// Preferred chain id set by the user (for UI network badge).
+    /// `None` if the wallet is locked or no chain has been selected yet.
     pub async fn get_chain_id(&self) -> Option<u64> {
+        self.wallet.get_chain_id().await
+    }
+
+    /// Set the preferred chain id for the unlocked wallet.
+    /// Persists only in-memory; the caller should persist to MMKV
+    /// for cross-session survival.
+    pub async fn set_chain_id(&self, chain_id: u64) {
+        self.wallet.set_chain_id(chain_id).await;
+    }
+
+    /// Primary chain id (fallback for send when no preferred chain set).
+    /// `None` if no chains configured.
+    pub async fn get_primary_chain_id(&self) -> Option<u64> {
         self.provider.primary_chain_id()
     }
 
     // ─── Native send (preview + execute) ────────────────────────
 
-    /// Preview a native ETH send (txguard analysis + cheapest route).
+    /// Preview a native ETH send (txguard analysis + route for the
+    /// preferred chain). Does NOT broadcast.
     ///
     /// # Errors
     ///

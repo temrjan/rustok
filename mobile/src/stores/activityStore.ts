@@ -116,25 +116,19 @@ export const useActivityStore = create<ActivityState>((set, get) => ({
       // 'loading' state.
       if (get().inFlight !== controller) return;
 
-      // Phase 5 chain-abstraction note: Rust core's `get_chain_id()`
-      // is a documented placeholder (`crates/core/src/provider/multi.rs`
-      // L237) — it returns `chains.first()` (Ethereum mainnet `1n`)
-      // until Phase 7 lands an explicit selector. Meanwhile `send_eth`
-      // routes through `execute_send` which picks the cheapest chain
-      // (typically Sepolia for testnet sends). Filtering Activity-tab
-      // entries by `currentChainId` (Rust's placeholder) hides every
-      // tx after a cold restart since `networkStore.hydrate` re-syncs
-      // to the placeholder. Until Phase 7 ships a real selector, show
-      // all transactions returned by `getTransactionHistory()` and all
-      // pending entries (deduped by txHash). Multi-chain mixed view
-      // with per-row chain pill is in Phase 6+ scope per spec §6.
-      const apiHashes = new Set(
-        history.transactions.map((e) => e.txHash),
+      // Phase 7: `networkStore.chainId` is now the user's explicit
+      // choice (set via SendScreen selector and synced to Rust). Filter
+      // both confirmed and pending entries so the Activity tab shows
+      // only the selected chain. Per-row chain pill for multi-chain
+      // mixed view remains Phase 6+ scope per spec §6.
+      const filtered = history.transactions.filter(
+        (e) => e.chainId === currentChainId,
       );
+      const apiHashes = new Set(filtered.map((e) => e.txHash));
       const pending = pendingTxCache.getAll()
-        .filter((p) => !apiHashes.has(p.txHash))
+        .filter((p) => p.chainId === currentChainId && !apiHashes.has(p.txHash))
         .map(pendingToEntry);
-      const merged = [...pending, ...history.transactions];
+      const merged = [...pending, ...filtered];
 
       set({
         phase: 'loaded',

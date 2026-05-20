@@ -29,6 +29,7 @@ jest.mock('react-native-mmkv', () => ({
 
 const mockHandle = {
   getChainId: jest.fn(),
+  setChainId: jest.fn().mockResolvedValue(undefined),
 };
 
 jest.mock('../../lib/walletHandle', () => ({
@@ -39,6 +40,7 @@ describe('networkStore', () => {
   beforeEach(() => {
     mockStorage.clear();
     mockHandle.getChainId.mockReset();
+    mockHandle.setChainId.mockClear();
     jest.resetModules();
   });
 
@@ -86,13 +88,23 @@ describe('networkStore', () => {
     expect(useNetworkStore.getState().chainId).toBeUndefined();
   });
 
-  it('hydrate writes bridge chainId to store + MMKV', async () => {
+  it('hydrate sets state from bridge when nothing persisted', async () => {
     mockHandle.getChainId.mockResolvedValue(137n);
     const { useNetworkStore } =
       require('../networkStore') as typeof import('../networkStore');
     await useNetworkStore.getState().hydrate();
     expect(useNetworkStore.getState().chainId).toBe(137n);
-    expect(mockStorage.get('networkChainId')).toBe('137');
+    // MMKV remains empty — hydrate does not persist the fallback.
+    expect(mockStorage.get('networkChainId')).toBeUndefined();
+  });
+
+  it('hydrate restores persisted chainId to Rust and state', async () => {
+    mockStorage.set('networkChainId', '42161');
+    const { useNetworkStore } =
+      require('../networkStore') as typeof import('../networkStore');
+    await useNetworkStore.getState().hydrate();
+    expect(useNetworkStore.getState().chainId).toBe(42161n);
+    expect(mockHandle.setChainId).toHaveBeenCalledWith(42161n);
   });
 
   it('hydrate guard: bridge undefined leaves persisted cache intact', async () => {

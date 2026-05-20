@@ -33,7 +33,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { FlatList, Linking, RefreshControl, Text, View } from 'react-native';
+import { FlatList, Linking, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
@@ -45,8 +45,9 @@ import {
   TransactionRow,
   type TransactionDirection,
 } from '../../components/TransactionRow';
-import { txUrl } from '../../lib/chainExplorer';
+import { chainName, CHAIN_NAMES, txUrl } from '../../lib/chainExplorer';
 import { useActivityStore } from '../../stores/activityStore';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useWalletStore } from '../../stores/walletStore';
 
 function inferDirection(
@@ -70,6 +71,8 @@ function ActivityScreen() {
     })),
   );
   const address = useWalletStore((s) => s.address);
+  const chainId = useNetworkStore((s) => s.chainId);
+  const setChainId = useNetworkStore((s) => s.setChainId);
   const [refreshing, setRefreshing] = useState(false);
 
   useFocusEffect(
@@ -92,6 +95,13 @@ function ActivityScreen() {
       setRefreshing(false);
     }
   }, [fetch]);
+
+  const handleChipPress = useCallback((id: bigint) => {
+    if (id === chainId) return;
+    setChainId(id);
+    // Refresh activity list for the new chain.
+    fetch().catch(() => undefined);
+  }, [chainId, setChainId, fetch]);
 
   const handleRowPress = useCallback((entry: TransactionHistoryEntry) => {
     const url = txUrl(entry.chainId, entry.txHash);
@@ -141,6 +151,9 @@ function ActivityScreen() {
     );
   }
 
+  const chainDisplay =
+    (chainId !== undefined ? chainName(chainId) : null) ?? 'this network';
+
   if (entries.length === 0) {
     return (
       <View
@@ -152,7 +165,7 @@ function ActivityScreen() {
           No transactions yet
         </Text>
         <Text className="text-ink-muted text-sm text-center">
-          Your sent and received transactions will appear here
+          Your sent and received transactions on {chainDisplay} will appear here
         </Text>
       </View>
     );
@@ -166,6 +179,36 @@ function ActivityScreen() {
       <Text className="text-ink-primary text-2xl font-bold px-6 pt-4 pb-2">
         Activity
       </Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        className="px-6 pb-3"
+
+      >
+        {Array.from(CHAIN_NAMES.entries()).map(([id, name]) => {
+          const active = id === chainId;
+          return (
+            <Pressable
+              key={id.toString()}
+              onPress={() => handleChipPress(id)}
+              accessibilityLabel={`Filter by ${name}`}
+              className={`rounded-full px-3 py-1 border mr-2 ${
+                active
+                  ? 'bg-ink-primary border-ink-primary'
+                  : 'bg-canvas border-ink-muted'
+              }`}
+            >
+              <Text
+                className={`text-xs font-medium ${
+                  active ? 'text-canvas' : 'text-ink-primary'
+                }`}
+              >
+                {name}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
       <FlatList
         data={entries}
         keyExtractor={(e) => e.txHash}

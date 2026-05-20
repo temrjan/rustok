@@ -169,6 +169,7 @@ impl From<std::io::Error> for WalletServiceError {
 /// In-memory state for an unlocked wallet.
 struct UnlockedState {
     keyring: LocalKeyring,
+    preferred_chain_id: Option<u64>,
 }
 
 /// Wallet lifecycle service.
@@ -234,7 +235,10 @@ impl WalletService {
         cleanup_onboarding_mnemonic(&self.data_dir)?;
 
         let mut state = self.state.lock().await;
-        *state = Some(UnlockedState { keyring });
+        *state = Some(UnlockedState {
+            keyring,
+            preferred_chain_id: None,
+        });
 
         Ok(format_wallet_id(&address))
     }
@@ -285,7 +289,10 @@ impl WalletService {
 
         // Load into memory.
         let mut state = self.state.lock().await;
-        *state = Some(UnlockedState { keyring });
+        *state = Some(UnlockedState {
+            keyring,
+            preferred_chain_id: None,
+        });
 
         Ok(format_wallet_id(&address))
     }
@@ -315,7 +322,10 @@ impl WalletService {
         cleanup_onboarding_mnemonic(&self.data_dir)?;
 
         let mut state = self.state.lock().await;
-        *state = Some(UnlockedState { keyring });
+        *state = Some(UnlockedState {
+            keyring,
+            preferred_chain_id: None,
+        });
 
         Ok(format_wallet_id(&address))
     }
@@ -402,6 +412,22 @@ impl WalletService {
         render_qr_svg(&uri)
     }
 
+    /// Set the preferred chain id for the unlocked wallet.
+    /// Persists only in-memory; the caller is responsible for
+    /// persisting across app restarts (e.g. via MMKV on mobile).
+    pub async fn set_chain_id(&self, chain_id: u64) {
+        let mut state = self.state.lock().await;
+        if let Some(ref mut s) = *state {
+            s.preferred_chain_id = Some(chain_id);
+        }
+    }
+
+    /// Get the preferred chain id for the unlocked wallet, if set.
+    pub async fn get_chain_id(&self) -> Option<u64> {
+        let state = self.state.lock().await;
+        state.as_ref().and_then(|s| s.preferred_chain_id)
+    }
+
     /// Fetch the unified multi-chain balance for the currently-unlocked
     /// wallet. Errors with [`WalletServiceError::WalletNotUnlocked`] when
     /// locked. Provider-side per-chain failures are surfaced inside
@@ -415,7 +441,8 @@ impl WalletService {
     }
 
     /// Preview a native ETH transfer from the currently-unlocked wallet:
-    /// txguard analysis + cheapest-route selection. Does NOT broadcast.
+    /// txguard analysis + route for the preferred chain. Does NOT broadcast.
+    /// Falls back to the provider's primary chain if no preferred chain is set.
     /// Errors with [`WalletServiceError::WalletNotUnlocked`] when locked,
     /// or [`WalletServiceError::Send`] for txguard-block / routing failure.
     pub async fn preview_send(
@@ -425,14 +452,21 @@ impl WalletService {
         amount_wei: U256,
     ) -> Result<SendPreview, WalletServiceError> {
         let from = self.locked_address().await?;
-        Ok(send::preview_send(provider, from, to, amount_wei).await?)
+        let chain_id = self
+            .get_chain_id()
+            .await
+            .or(provider.primary_chain_id())
+            .ok_or(WalletServiceError::WalletNotUnlocked)?;
+        Ok(send::preview_send(provider, chain_id, from, to, amount_wei).await?)
     }
 
     /// Atomic preview-then-broadcast for a native ETH transfer from the
-    /// currently-unlocked wallet. The signer is cloned at entry; subsequent
-    /// state changes (e.g. background-timer auto-lock) do not abort the
-    /// in-flight execute (the cloned `PrivateKeySigner` owns its key bytes
-    /// and zeroizes on drop).
+    /// currently-unlocked wallet on the preferred chain. The signer is cloned
+    /// at entry; subsequent state changes (e.g. background-timer auto-lock)
+    /// do not abort the in-flight execute (the cloned `PrivateKeySigner`
+    /// owns its key bytes and zeroizes on drop).
+    ///
+    /// Falls back to the provider's primary chain if no preferred chain is set.
     ///
     /// Errors with [`WalletServiceError::WalletNotUnlocked`] when locked,
     /// or [`WalletServiceError::Send`] for txguard-block / routing /
@@ -451,7 +485,12 @@ impl WalletService {
             .map(|s| s.keyring.signer().clone())
             .ok_or(WalletServiceError::WalletNotUnlocked)?;
         let from = signer.address();
-        let preview = send::preview_send(provider, from, to, amount_wei).await?;
+        let chain_id = self
+            .get_chain_id()
+            .await
+            .or(provider.primary_chain_id())
+            .ok_or(WalletServiceError::WalletNotUnlocked)?;
+        let preview = send::preview_send(provider, chain_id, from, to, amount_wei).await?;
         let result = send::execute_send(provider, signer, to, amount_wei, &preview.route).await?;
         Ok(result)
     }

@@ -22,12 +22,13 @@ const EXPLORERS: ReadonlyMap<bigint, string> = new Map([
   [10n, 'https://optimistic.etherscan.io'],
 ]);
 
-const CHAIN_NAMES: ReadonlyMap<bigint, string> = new Map([
+export const CHAIN_NAMES: ReadonlyMap<bigint, string> = new Map([
   [1n, 'Ethereum'],
   [11155111n, 'Sepolia'],
   [42161n, 'Arbitrum'],
   [8453n, 'Base'],
   [10n, 'Optimism'],
+  [324n, 'zkSync Era'],
 ]);
 
 /**

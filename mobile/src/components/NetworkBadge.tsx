@@ -16,18 +16,11 @@
 
 import React from 'react';
 import { Text, View } from 'react-native';
+import { chainName } from '../lib/chainExplorer';
 import { useNetworkStore } from '../stores/networkStore';
 
-const CHAIN_NAMES: ReadonlyMap<bigint, string> = new Map([
-  [1n, 'Ethereum'],
-  [137n, 'Polygon'],
-  [42161n, 'Arbitrum'],
-  [8453n, 'Base'],
-  [56n, 'BNB Chain'],
-]);
-
 function nameFor(chainId: bigint): string {
-  return CHAIN_NAMES.get(chainId) ?? `Chain ${chainId.toString()}`;
+  return chainName(chainId) ?? `Chain ${chainId.toString()}`;
 }
 
 export function NetworkBadge() {

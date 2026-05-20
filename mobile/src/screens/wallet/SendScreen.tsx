@@ -33,13 +33,16 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
-import { ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button } from '../../components/Button';
+import { Modal } from '../../components/Modal';
 import { NetworkBadge } from '../../components/NetworkBadge';
+import { CHAIN_NAMES } from '../../lib/chainExplorer';
 import { PageHeader } from '../../components/PageHeader';
+import { useNetwork } from '../../hooks/useNetwork';
 import { useWallet } from '../../hooks/useWallet';
 import { formatWeiToEth, parseEthToWei } from '../../lib/ethAmount';
 import type { UnlockedParamList } from '../../navigation/types';
@@ -65,9 +68,11 @@ function SendScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const { balance } = useWallet();
+  const { chainId, setChainId } = useNetwork();
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [maxApplied, setMaxApplied] = useState(false);
+  const [selectorOpen, setSelectorOpen] = useState(false);
 
   const balanceWei = useMemo<bigint | null>(() => {
     if (balance === undefined) return null;
@@ -118,9 +123,13 @@ function SendScreen() {
         contentContainerStyle={{ paddingBottom: 16 }}
         className="flex-1"
       >
-        <View className="flex-row justify-center mt-4">
+        <Pressable
+          onPress={() => setSelectorOpen(true)}
+          className="flex-row justify-center mt-4"
+          accessibilityLabel="Change network"
+        >
           <NetworkBadge />
-        </View>
+        </Pressable>
 
         <View className="mx-6 mt-6">
           <Text className="text-ink-muted text-xs uppercase tracking-wide mb-1">
@@ -194,6 +203,43 @@ function SendScreen() {
           <Text className="text-ink-muted text-sm">Calculated on next step</Text>
         </View>
       </ScrollView>
+
+      <Modal
+        isOpen={selectorOpen}
+        onClose={() => setSelectorOpen(false)}
+        snapPoints={['40%']}
+      >
+        <Text className="text-ink-primary text-lg font-medium mb-4">
+          Select network
+        </Text>
+        {Array.from(CHAIN_NAMES.entries()).map(([id, name]) => {
+          const active = id === chainId;
+          return (
+            <Pressable
+              key={id.toString()}
+              onPress={() => {
+                setChainId(id);
+                setSelectorOpen(false);
+              }}
+              accessibilityLabel={name}
+              className={`flex-row items-center justify-between py-3 border-b border-ink-muted/20 ${
+                active ? 'bg-surface-card/50' : ''
+              }`}
+            >
+              <Text
+                className={`text-base ${
+                  active ? 'text-ink-primary font-semibold' : 'text-ink-primary'
+                }`}
+              >
+                {name}
+              </Text>
+              {active && (
+                <Text className="text-semantic-success text-sm">✓</Text>
+              )}
+            </Pressable>
+          );
+        })}
+      </Modal>
 
       <View
         style={{ paddingBottom: insets.bottom + 16 }}

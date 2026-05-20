@@ -69,7 +69,6 @@ import { txUrl } from '../../lib/chainExplorer';
 import { formatWeiToEth } from '../../lib/ethAmount';
 import * as pendingTxCache from '../../lib/pendingTxCache';
 import { getWalletHandle } from '../../lib/walletHandle';
-import { useNetworkStore } from '../../stores/networkStore';
 import { useWalletStore } from '../../stores/walletStore';
 import type { UnlockedParamList } from '../../navigation/types';
 
@@ -196,18 +195,6 @@ function ConfirmSendScreen() {
       const result = await getWalletHandle().sendEth(to, amountWei, {
         signal: controller.signal,
       });
-      // Sync networkStore with the chain the router actually used.
-      // Rust core's `get_chain_id()` is a documented placeholder until
-      // Phase 7 explicit selector (`crates/core/src/provider/multi.rs`
-      // ~L237 — returns Ethereum mainnet `1n` as `chains.first()`),
-      // while `send_eth` routes through `execute_send` which picks the
-      // cheapest available chain (typically Sepolia for testnet sends).
-      // After a successful broadcast the user-visible chain state must
-      // follow the chain that was actually used, otherwise NetworkBadge
-      // and Activity-tab filters see Mainnet while the tx lives on
-      // Sepolia. This stays correct after Phase 7 lands — the selector
-      // chooses the chain, the broadcast confirms it, the UI honors it.
-      useNetworkStore.getState().setChainId(result.chainId);
       // Record the broadcast in the local pending cache so the Activity
       // tab can surface it as Pending immediately, before the Blockscout
       // explorer API picks it up (typically 30 s – 2 min). Silent — the

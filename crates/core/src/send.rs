@@ -45,7 +45,7 @@ pub enum SendError {
 pub struct SendPreview {
     /// txguard verdict.
     pub verdict: Verdict,
-    /// Selected route (cheapest chain).
+    /// Selected route (explicitly chosen chain).
     pub route: Route,
     /// Human-readable explanation.
     pub explanation: String,
@@ -70,11 +70,12 @@ pub struct SendResult {
     pub estimated_gas_cost: U256,
 }
 
-/// Preview a send: run txguard analysis + find cheapest route.
+/// Preview a send on a specific chain: run txguard analysis + build route.
 ///
 /// Does NOT broadcast. Returns the preview for user confirmation.
 pub async fn preview_send(
     provider: &MultiProvider,
+    chain_id: u64,
     from: Address,
     to: Address,
     amount_wei: U256,
@@ -102,8 +103,9 @@ pub async fn preview_send(
         });
     }
 
-    // 4. Find cheapest route.
-    let route = router::cheapest_route(provider, from, to, calldata, amount_wei).await?;
+    // 4. Build route for the explicitly selected chain.
+    let route =
+        router::build_route_for_chain(provider, chain_id, from, to, calldata, amount_wei).await?;
 
     // 5. Generate explanation.
     let explanation = explainer::explain(&parsed, &verdict, Some(&route));

@@ -107,13 +107,11 @@ describe('activityStore', () => {
     expect(mockHandle.getTransactionHistory).not.toHaveBeenCalled();
   });
 
-  it('fetch() surfaces bridge entries from all chains (Phase 5 — no chain filter)', async () => {
-    // Phase 5 chain abstraction: Rust's `get_chain_id()` placeholder
-    // (mainnet `1n`) does not match the actual routing chain, so we do
-    // not filter bridge entries by `currentChainId`. Multi-chain mixed
-    // view with chain pills is Phase 6+ scope (spec §6). Until then,
-    // surface whatever the bridge returns.
-    mockNetworkChainId.mockReturnValue(1n);
+  it('fetch() filters bridge entries by current chainId', async () => {
+    // Phase 7: explicit chain selector. Entries are filtered to the
+    // user-selected chain so the Activity tab is consistent with the
+    // NetworkBadge / Send flow.
+    mockNetworkChainId.mockReturnValue(11155111n);
     mockHandle.getTransactionHistory.mockResolvedValue({
       transactions: [
         bridgeEntry({ txHash: '0xa', chainId: 11155111n }),
@@ -123,10 +121,7 @@ describe('activityStore', () => {
     });
     const store = loadStore();
     await store.getState().fetch();
-    expect(store.getState().entries.map((e) => e.txHash).sort()).toEqual([
-      '0xa',
-      '0xb',
-    ]);
+    expect(store.getState().entries.map((e) => e.txHash)).toEqual(['0xa']);
   });
 
   it('fetch() merges pending entries on top, dedups by txHash with API result', async () => {
@@ -162,13 +157,11 @@ describe('activityStore', () => {
     expect(store.getState().entries[0]?.timeAgo).toBe('Pending');
   });
 
-  it('fetch() surfaces pending entries regardless of current chain (Phase 5)', async () => {
-    // Mirror of the bridge-side decision above: pending entries are
-    // not chain-filtered in Phase 5. A Sepolia pending tx remains
-    // visible even after a cold restart re-syncs the networkStore to
-    // the placeholder `1n` — without this, the just-broadcast tx
-    // disappears from the Activity tab on every restart.
-    mockNetworkChainId.mockReturnValue(1n);
+  it('fetch() filters pending entries by current chainId', async () => {
+    // Phase 7: pending entries are also filtered so the Activity tab
+    // only shows the selected chain. A Sepolia pending tx is hidden
+    // when the user switches to Mainnet.
+    mockNetworkChainId.mockReturnValue(11155111n);
     const persistedPending = [
       {
         txHash: '0xpendingsepolia',

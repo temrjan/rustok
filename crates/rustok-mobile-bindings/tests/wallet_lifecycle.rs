@@ -220,14 +220,21 @@ async fn create_wallet_short_password_rejected() {
 }
 
 #[tokio::test]
-async fn get_chain_id_returns_some_for_default_provider() {
+async fn get_chain_id_returns_none_when_locked() {
     let dir = data_dir();
     let h = handle(&dir);
     let chain_id = h.get_chain_id().await;
-    assert!(
-        chain_id.is_some(),
-        "default provider must have a primary chain"
-    );
+    assert!(chain_id.is_none(), "locked wallet has no preferred chain");
+}
+
+#[tokio::test]
+async fn get_chain_id_returns_preferred_after_set() {
+    let dir = data_dir();
+    let h = handle(&dir);
+    h.create_wallet(PASSWORD.into()).await.expect("create");
+    h.set_chain_id(1u64).await;
+    let chain_id = h.get_chain_id().await;
+    assert_eq!(chain_id, Some(1u64), "preferred chain must be 1");
 }
 
 #[tokio::test]

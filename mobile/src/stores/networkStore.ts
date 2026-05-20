@@ -42,34 +42,38 @@ interface NetworkState {
   hydrate: () => Promise<void>;
 }
 
-export const useNetworkStore = create<NetworkState>((set, get) => ({
+export const useNetworkStore = create<NetworkState>((set) => ({
   chainId: readPersistedChainId(),
   setChainId: (chainId) => {
     if (chainId === undefined) {
       mmkv.remove(STORAGE_KEY);
     } else {
       mmkv.set(STORAGE_KEY, chainId.toString());
+      // Sync to Rust in-memory state so send-flow uses the right chain.
+      try {
+        getWalletHandle().setChainId(chainId).catch(() => undefined);
+      } catch {
+        // WalletHandle may not be ready during early bootstrap.
+      }
     }
     set({ chainId });
   },
   hydrate: async () => {
     try {
       const handle = getWalletHandle();
-      const chainId = await handle.getChainId();
-      // Phase 5 chain-abstraction note: Rust's `get_chain_id()` is a
-      // documented placeholder (`crates/core/src/provider/multi.rs`
-      // ~L237) — returns `chains.first()` (Ethereum mainnet `1n`)
-      // until Phase 7 lands an explicit selector. Meanwhile send
-      // routing picks the cheapest chain dynamically and
-      // `ConfirmSendScreen` calls `setChainId(result.chainId)` after
-      // each successful broadcast so the UI reflects the chain that
-      // was actually used. On cold start we must NOT overwrite that
-      // user-acknowledged value with the placeholder — doing so would
-      // hide pending / confirmed entries on Sepolia behind a Mainnet
-      // filter after every restart. Only adopt the bridge value when
-      // nothing is persisted yet (fresh install / first run).
-      if (chainId !== undefined && get().chainId === undefined) {
-        get().setChainId(chainId);
+      const persisted = readPersistedChainId();
+      // Phase 7: `getChainId()` now returns the user's preferred chain
+      // (set via `setChainId`). If we have a persisted value, restore
+      // it to Rust so the send-flow uses the right chain. If nothing
+      // persisted yet, adopt whatever Rust returns (fallback to primary).
+      if (persisted !== undefined) {
+        await handle.setChainId(persisted);
+        set({ chainId: persisted });
+      } else {
+        const chainId = await handle.getChainId();
+        if (chainId !== undefined) {
+          set({ chainId });
+        }
       }
     } catch {
       // Silent: persisted chainId remains the source for NetworkBadge.

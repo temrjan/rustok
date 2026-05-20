@@ -20,11 +20,18 @@ use crate::provider::{MultiProvider, ProviderError};
 /// Errors from routing operations.
 #[derive(Debug, Error)]
 pub enum RouterError {
-    /// No chain has sufficient balance for the transaction.
-    #[error("insufficient balance on all chains (need {needed} wei)")]
+    /// Insufficient balance to cover value + estimated gas cost.
+    #[error("insufficient balance (need {needed} wei)")]
     InsufficientBalance {
         /// Amount needed (value + estimated gas cost).
         needed: U256,
+    },
+
+    /// The requested chain is not configured.
+    #[error("chain {chain_id} not found in provider")]
+    ChainNotFound {
+        /// Chain ID that was requested.
+        chain_id: u64,
     },
 
     /// Provider error during fee/balance fetching.
@@ -141,6 +148,74 @@ pub async fn find_routes(
     routes.sort_by_key(|r| r.estimated_cost);
 
     Ok(routes)
+}
+
+/// Build a route for a specific chain.
+///
+/// Validates that the chain is configured, the sender has a non-zero
+/// balance, and that balance covers both the value and the estimated
+/// gas cost. Returns the route for that exact chain or an error.
+pub async fn build_route_for_chain(
+    provider: &MultiProvider,
+    chain_id: u64,
+    from: Address,
+    to: Address,
+    calldata: Bytes,
+    value: U256,
+) -> Result<Route, RouterError> {
+    let chain = provider
+        .chains()
+        .iter()
+        .find(|c| c.id == chain_id)
+        .ok_or(RouterError::ChainNotFound { chain_id })?;
+
+    let balance = provider
+        .balance_map(from)
+        .await
+        .get(&chain_id)
+        .copied()
+        .unwrap_or(U256::ZERO);
+
+    if balance.is_zero() {
+        return Err(RouterError::InsufficientBalance { needed: value });
+    }
+
+    let fees = match provider.gas_fees(chain_id).await {
+        Ok(f) => f,
+        Err(e) => {
+            tracing::debug!(chain_id, error = %e, "fee fetch failed for selected chain");
+            return Err(RouterError::Provider(e));
+        }
+    };
+
+    let estimated_gas = match provider
+        .estimate_gas(chain_id, from, to, calldata.clone(), value)
+        .await
+    {
+        Ok(gas) => gas,
+        Err(_) => {
+            // Fallback: 21000 for ETH transfer, 65000 for contract call
+            if calldata.is_empty() { 21_000 } else { 65_000 }
+        }
+    };
+
+    let estimated_cost =
+        U256::from(estimated_gas).saturating_mul(U256::from(fees.max_fee_per_gas));
+    let total_needed = value.saturating_add(estimated_cost);
+
+    if balance < total_needed {
+        return Err(RouterError::InsufficientBalance { needed: total_needed });
+    }
+
+    Ok(Route {
+        chain_id: chain.id,
+        chain_name: chain.name.clone(),
+        estimated_gas,
+        max_fee_per_gas: fees.max_fee_per_gas,
+        max_priority_fee_per_gas: fees.max_priority_fee_per_gas,
+        estimated_cost,
+        available_balance: balance,
+    })
 }
 
 /// Find the single cheapest route.
