@@ -199,12 +199,13 @@ pub async fn build_route_for_chain(
         }
     };
 
-    let estimated_cost =
-        U256::from(estimated_gas).saturating_mul(U256::from(fees.max_fee_per_gas));
+    let estimated_cost = U256::from(estimated_gas).saturating_mul(U256::from(fees.max_fee_per_gas));
     let total_needed = value.saturating_add(estimated_cost);
 
     if balance < total_needed {
-        return Err(RouterError::InsufficientBalance { needed: total_needed });
+        return Err(RouterError::InsufficientBalance {
+            needed: total_needed,
+        });
     }
 
     Ok(Route {
