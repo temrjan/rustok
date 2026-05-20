@@ -50,6 +50,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
+import * as Keychain from 'react-native-keychain';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -68,6 +69,21 @@ import { useWalletStore } from '../../stores/walletStore';
 import type { LockedStackParamList } from '../../navigation/types';
 
 type Nav = NativeStackNavigationProp<LockedStackParamList, 'UnlockPin'>;
+
+/** Human-readable label for the device's biometric type. */
+function biometryLabel(type: Keychain.BIOMETRY_TYPE | null): string {
+  if (type === null) return 'Biometric';
+  switch (type) {
+    case Keychain.BIOMETRY_TYPE.TOUCH_ID:
+      return 'Touch ID';
+    case Keychain.BIOMETRY_TYPE.FACE_ID:
+      return 'Face ID';
+    case Keychain.BIOMETRY_TYPE.FINGERPRINT:
+      return 'Fingerprint';
+    default:
+      return 'Biometric';
+  }
+}
 
 /** Delay before SpinnerOverlay shows up. Below this — verify likely
  *  resolves silently; above — user sees progress instead of а frozen UI. */
@@ -97,12 +113,21 @@ function UnlockPinScreen() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [keyInvalidated, setKeyInvalidated] = useState(false);
   const [lockoutRemaining, setLockoutRemaining] = useState<number | null>(null);
+  const [biometryType, setBiometryType] = useState<Keychain.BIOMETRY_TYPE | null>(null);
 
   const verifySpinnerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shakeTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   // Defends against React strict-mode double-fire and re-render races —
   // once а verify cycle is in-flight для these digits we never re-enter.
   const verifyInFlight = useRef(false);
+
+  // Detect available biometric type on mount (skip on simulator where
+  // biometry is unavailable).
+  useEffect(() => {
+    Keychain.getSupportedBiometryType()
+      .then((type) => setBiometryType(type))
+      .catch(() => setBiometryType(null));
+  }, []);
 
   // Cleanup all timers on unmount.
   useEffect(() => {
@@ -241,6 +266,24 @@ function UnlockPinScreen() {
     );
   }
 
+  async function handleBiometricUnlock(): Promise<void> {
+    if (isVerifying || lockoutRemaining !== null) return;
+    setIsVerifying(true);
+    try {
+      const secret = await retrieveUnlockSecret();
+      await getWalletHandle().unlockWallet(secret);
+      await useWalletStore.getState().refresh();
+    } catch (err: unknown) {
+      if (isKeyInvalidatedError(err)) {
+        setKeyInvalidated(true);
+        return;
+      }
+      toast.error('Biometric unlock failed. Please use your PIN.');
+    } finally {
+      setIsVerifying(false);
+    }
+  }
+
   if (keyInvalidated) {
     return (
       <ScrollView
@@ -320,6 +363,20 @@ function UnlockPinScreen() {
           onPressBackspace={handlePressBackspace}
           disabled={padDisabled}
         />
+        {biometryType !== null && (
+          <View className="mt-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onPress={() => {
+                handleBiometricUnlock().catch(() => {});
+              }}
+              accessibilityLabel={`Unlock with ${biometryLabel(biometryType)}`}
+            >
+              Unlock with {biometryLabel(biometryType)}
+            </Button>
+          </View>
+        )}
       </View>
       {isVerifying && (
         <View
