@@ -124,8 +124,8 @@ jest.mock('../../../stores/walletStore', () => ({
 const mockToastError = jest.fn();
 const mockToastInfo = jest.fn();
 jest.mock('../../../components', () => ({
-  Button: jest.fn(() => null),
-  Spinner: jest.fn(() => null),
+  Button: (_props: Record<string, unknown>) => null,
+  Spinner: (_props: Record<string, unknown>) => null,
   toast: {
     success: jest.fn(),
     error: (...args: unknown[]) => mockToastError(...args),
@@ -159,6 +159,8 @@ jest.mock('../../../components/PinDots', () => ({
 }));
 
 import UnlockPinScreen from '../UnlockPinScreen';
+
+import * as Keychain from 'react-native-keychain';
 
 const PIN = '123456';
 const SECRET_HEX = 'a'.repeat(64);
@@ -200,6 +202,7 @@ describe('UnlockPinScreen', () => {
     mockUnlockWallet.mockResolvedValue(undefined);
     mockLockWallet.mockResolvedValue(undefined);
     mockRefresh.mockResolvedValue(undefined);
+    jest.restoreAllMocks();
   });
 
   it('renders без throwing', () => {
@@ -324,5 +327,85 @@ describe('UnlockPinScreen', () => {
     // NativeWind css-interop may wrap, yielding duplicate matches; just
     // assert at least one host node rendered the countdown text.
     expect(countdownMatches.length).toBeGreaterThan(0);
+  });
+
+  describe('biometric CTA', () => {
+    it('does not render when biometry is unavailable', async () => {
+      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue(null);
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<UnlockPinScreen />);
+        await flush();
+      });
+      const buttons = tr.root.findAll(
+        (n) =>
+          typeof n.props?.accessibilityLabel === 'string' &&
+          (n.props.accessibilityLabel as string).startsWith('Unlock with'),
+      );
+      expect(buttons.length).toBe(0);
+    });
+
+    it('renders Face ID label when Face ID is available', async () => {
+      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue('FaceID' as any);
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<UnlockPinScreen />);
+        await drain();
+      });
+      const btn = tr.root.find(
+        (n) => n.props?.accessibilityLabel === 'Unlock with Face ID',
+      );
+      expect(btn).toBeDefined();
+    });
+
+    it('tap → retrieveSecret → unlockWallet → refresh on success', async () => {
+      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue('FaceID' as any);
+      mockRetrieveUnlockSecret.mockResolvedValue(SECRET_HEX);
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<UnlockPinScreen />);
+        await drain();
+      });
+      const btn = tr.root.find(
+        (n) => n.props?.accessibilityLabel === 'Unlock with Face ID',
+      );
+      await act(async () => {
+        btn.props.onPress();
+        await drain();
+      });
+      expect(mockRetrieveUnlockSecret).toHaveBeenCalledTimes(1);
+      expect(mockUnlockWallet).toHaveBeenCalledTimes(1);
+      expect(mockRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('tap → KeyPermanentlyInvalidated → recovery banner', async () => {
+      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue('Fingerprint' as any);
+      mockRetrieveUnlockSecret.mockRejectedValue(
+        new MockedException(
+          'crypto_failed',
+          'E_CRYPTO_FAILED',
+          'Wrapped error: Key permanently invalidated',
+          undefined,
+        ),
+      );
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<UnlockPinScreen />);
+        await drain();
+      });
+      const btn = tr.root.find(
+        (n) => n.props?.accessibilityLabel === 'Unlock with Fingerprint',
+      );
+      await act(async () => {
+        btn.props.onPress();
+        await drain();
+      });
+      const alerts = tr.root.findAll(
+        (n) => n.props?.accessibilityRole === 'alert',
+      );
+      expect(alerts.length).toBeGreaterThan(0);
+      expect(mockUnlockWallet).not.toHaveBeenCalled();
+      expect(mockRefresh).not.toHaveBeenCalled();
+    });
   });
 });

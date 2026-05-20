@@ -105,6 +105,14 @@ export const ACCESSIBLE = {
   WHEN_PASSCODE_SET_THIS_DEVICE_ONLY: 'AccessibleWhenPasscodeSetThisDeviceOnly',
 } as const;
 
+export const BIOMETRY_TYPE = {
+  TOUCH_ID: 'TouchID',
+  FACE_ID: 'FaceID',
+  FINGERPRINT: 'Fingerprint',
+  FACE: 'Face',
+  IRIS: 'Iris',
+} as const;
+
 export async function setGenericPassword(
   username: string,
   password: string,
@@ -151,6 +159,17 @@ export async function resetGenericPassword(
   return true;
 }
 
+let nextBiometryType: string | null = null;
+
+export async function getSupportedBiometryType(): Promise<string | null> {
+  maybeThrowQueuedError();
+  return nextBiometryType;
+}
+
+export function __setNextBiometryType(type: string | null): void {
+  nextBiometryType = type;
+}
+
 // ---------------------------------------------------------------------------
 // Test-only hooks. The `__` prefix keeps them out of production import sites
 // (they would compile but immediately throw at the auto-loaded mock layer in
@@ -162,6 +181,7 @@ export function __resetKeychainMock(): void {
   getCallCounter.clear();
   errorQueue.length = 0;
   nextSetReturnFalse = false;
+  nextBiometryType = null;
 }
 
 export function __simulateNextRawError(value: unknown): void {

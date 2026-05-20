@@ -26,8 +26,8 @@
 import 'react-native-gesture-handler';
 import './global.css';
 
-import React, { useEffect } from 'react';
-import { StatusBar, StyleSheet, useColorScheme } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { AppState, StatusBar, StyleSheet, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -36,6 +36,8 @@ import { ToastProvider } from './src/components';
 import AppShell from './src/navigation/AppShell';
 import { useWalletStore } from './src/stores/walletStore';
 import { useNetworkStore } from './src/stores/networkStore';
+import { useSettingsStore } from './src/stores/settingsStore';
+import { getWalletHandle } from './src/lib/walletHandle';
 
 function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -49,6 +51,7 @@ function App() {
   // Both `hydrate()` bodies catch their own errors and update store
   // state; the `.catch()` here is a defensive no-op for any future
   // bare throw and to satisfy the lint rule against floating Promises.
+  // M4 C3 init flow: fire both bridge hydrations on mount.
   useEffect(() => {
     useWalletStore
       .getState()
@@ -58,6 +61,47 @@ function App() {
       .getState()
       .hydrate()
       .catch(() => undefined);
+    useSettingsStore
+      .getState()
+      .hydrate()
+      .catch(() => undefined);
+  }, []);
+
+  // Phase 7: background auto-lock. Save timestamp on background only when
+  // wallet is unlocked; check elapsed time on foreground and lock if past
+  // the user-selected timeout.
+  const lastActiveAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background') {
+        if (useWalletStore.getState().phase === 'unlocked') {
+          lastActiveAtRef.current = Date.now();
+        }
+        return;
+      }
+      if (nextState !== 'active') return;
+
+      const lastActive = lastActiveAtRef.current;
+      lastActiveAtRef.current = null;
+      if (lastActive === null) return;
+
+      const timeoutSec = useSettingsStore.getState().lockTimeoutSec;
+      if (timeoutSec === 0) return; // Never lock
+
+      const elapsedMs = Date.now() - lastActive;
+      if (elapsedMs >= timeoutSec * 1000) {
+        if (useWalletStore.getState().phase === 'unlocked') {
+          getWalletHandle()
+            .lockWallet()
+            .catch(() => undefined)
+            .then(() => {
+              useWalletStore.getState().refresh().catch(() => undefined);
+            });
+        }
+      }
+    });
+
+    return () => subscription.remove();
   }, []);
 
   return (
