@@ -8,6 +8,7 @@
 //! diagnostic context for the FFI return).
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use alloy_network::TransactionBuilder;
 use alloy_primitives::keccak256;
@@ -33,9 +34,10 @@ use crate::types::{
 #[derive(uniffi::Object)]
 pub struct WalletHandle {
     wallet: Arc<WalletService>,
-    provider: Arc<MultiProvider>,
+    provider: std::sync::RwLock<Arc<MultiProvider>>,
     swap_provider: Arc<ZeroXProvider>,
     explorer: Arc<ExplorerClient>,
+    proxy_enabled: AtomicBool,
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -58,9 +60,10 @@ impl WalletHandle {
         let explorer = Arc::new(ExplorerClient::new());
         Ok(Arc::new(Self {
             wallet,
-            provider,
+            provider: std::sync::RwLock::new(provider),
             swap_provider,
             explorer,
+            proxy_enabled: AtomicBool::new(false),
         }))
     }
 
@@ -216,9 +219,10 @@ impl WalletHandle {
     ///
     /// [`BindingsError::Wallet`] with `NotUnlocked` if locked.
     pub async fn get_wallet_balance(&self) -> Result<crate::types::UnifiedBalance, BindingsError> {
+        let provider = self.provider.read().expect("poisoned").clone();
         let balance = self
             .wallet
-            .balance(self.provider.as_ref())
+            .balance(provider.as_ref())
             .await
             .map_err(BindingsError::from)?;
         Ok(balance.into())
@@ -240,7 +244,34 @@ impl WalletHandle {
     /// Primary chain id (fallback for send when no preferred chain set).
     /// `None` if no chains configured.
     pub async fn get_primary_chain_id(&self) -> Option<u64> {
-        self.provider.primary_chain_id()
+        self.provider
+            .read()
+            .expect("poisoned")
+            .clone()
+            .primary_chain_id()
+    }
+
+    /// Toggle RPC proxy routing (Cloudflare Worker) on or off.
+    /// Replaces the internal [`MultiProvider`] atomically; in-flight
+    /// calls continue on the old provider instance.
+    pub async fn set_proxy_enabled(&self, enabled: bool) {
+        let current = self.proxy_enabled.load(Ordering::Relaxed);
+        if current == enabled {
+            return;
+        }
+        let new_provider = if enabled {
+            Arc::new(MultiProvider::proxy_chains())
+        } else {
+            Arc::new(MultiProvider::default_chains())
+        };
+        let mut guard = self.provider.write().expect("poisoned");
+        *guard = new_provider;
+        self.proxy_enabled.store(enabled, Ordering::Relaxed);
+    }
+
+    /// Whether RPC proxy routing is currently enabled.
+    pub async fn is_proxy_enabled(&self) -> bool {
+        self.proxy_enabled.load(Ordering::Relaxed)
     }
 
     // ─── Native send (preview + execute) ────────────────────────
@@ -260,9 +291,10 @@ impl WalletHandle {
     ) -> Result<SendPreview, BindingsError> {
         let to_addr = parse_address(&to)?;
         let amount = parse_u256(&amount_wei)?;
+        let provider = self.provider.read().expect("poisoned").clone();
         let preview = self
             .wallet
-            .preview_send(self.provider.as_ref(), to_addr, amount)
+            .preview_send(provider.as_ref(), to_addr, amount)
             .await
             .map_err(BindingsError::from)?;
         Ok(preview.into())
@@ -281,9 +313,10 @@ impl WalletHandle {
     ) -> Result<SendResult, BindingsError> {
         let to_addr = parse_address(&to)?;
         let amount = parse_u256(&amount_wei)?;
+        let provider = self.provider.read().expect("poisoned").clone();
         let result = self
             .wallet
-            .execute_send(self.provider.as_ref(), to_addr, amount)
+            .execute_send(provider.as_ref(), to_addr, amount)
             .await
             .map_err(BindingsError::from)?;
         Ok(result.into())
@@ -321,7 +354,8 @@ impl WalletHandle {
             .with_value(parse_u256(&value)?)
             .with_input(parse_bytes(&data)?)
             .with_chain_id(chain_id);
-        let preview = sign::preview_transaction(self.provider.as_ref(), &tx, from, chain_id)
+        let provider = self.provider.read().expect("poisoned").clone();
+        let preview = sign::preview_transaction(provider.as_ref(), &tx, from, chain_id)
             .await
             .map_err(BindingsError::from)?;
         Ok(preview.into())
@@ -352,14 +386,11 @@ impl WalletHandle {
             .with_value(parse_u256(&value)?)
             .with_input(parse_bytes(&data)?)
             .with_chain_id(chain_id);
-        let hash = sign::sign_and_send_transaction_with_signer(
-            &signer,
-            self.provider.as_ref(),
-            tx,
-            chain_id,
-        )
-        .await
-        .map_err(BindingsError::from)?;
+        let provider = self.provider.read().expect("poisoned").clone();
+        let hash =
+            sign::sign_and_send_transaction_with_signer(&signer, provider.as_ref(), tx, chain_id)
+                .await
+                .map_err(BindingsError::from)?;
         Ok(format!("{hash:#x}"))
     }
 
@@ -465,7 +496,8 @@ impl WalletHandle {
     /// [`BindingsError::Swap`] / [`BindingsError::Rpc`] for preview failure.
     pub async fn preview_swap(&self, quote: SwapQuote) -> Result<SwapPreview, BindingsError> {
         let core_quote = quote.into_core()?;
-        let preview = swap::preview_swap(self.provider.as_ref(), &core_quote)
+        let provider = self.provider.read().expect("poisoned").clone();
+        let preview = swap::preview_swap(provider.as_ref(), &core_quote)
             .await
             .map_err(BindingsError::from)?;
         Ok(preview.into())
@@ -489,9 +521,10 @@ impl WalletHandle {
             })?;
         let tx = swap::quote_to_transaction(&core_quote, signer.address())
             .map_err(BindingsError::from)?;
+        let provider = self.provider.read().expect("poisoned").clone();
         let hash = sign::sign_and_send_transaction_with_signer(
             &signer,
-            self.provider.as_ref(),
+            provider.as_ref(),
             tx,
             core_quote.chain_id,
         )
@@ -516,9 +549,10 @@ impl WalletHandle {
                 kind: WalletErrorKind::NotUnlocked,
             })?;
         let addr = parse_address(&addr_str)?;
+        let provider = self.provider.read().expect("poisoned").clone();
         let history = self
             .explorer
-            .fetch_history(addr, self.provider.chains(), 20)
+            .fetch_history(addr, provider.chains(), 20)
             .await;
         Ok(history.into())
     }
