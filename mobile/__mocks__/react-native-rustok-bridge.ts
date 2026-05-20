@@ -80,6 +80,8 @@ export class WalletHandle {
   getChainId = jest.fn().mockResolvedValue(undefined);
   setChainId = jest.fn().mockResolvedValue(undefined);
   lockWallet = jest.fn().mockResolvedValue(undefined);
+  isProxyEnabled = jest.fn().mockResolvedValue(false);
+  setProxyEnabled = jest.fn().mockResolvedValue(undefined);
   // Phase 5 M3a — Receive screen renders this as inline SVG. Benign
   // stub keeps a minimal valid SVG document so react-native-svg's
   // `SvgXml` parser does not throw if a test actually mounts the screen
