@@ -36,6 +36,38 @@ export enum ActionDto {
   Allow,
 }
 
+// Mirrors the real `enum SeverityDto` shape.
+export enum SeverityDto {
+  Info,
+  Warning,
+  Danger,
+  Forbidden,
+}
+
+// Mirrors the real `enum RuleCategoryDto` shape.
+export enum RuleCategoryDto {
+  Approval,
+  Permit,
+  Send,
+  Swap,
+  Contract,
+  Address,
+}
+
+export type FindingDto = {
+  rule: string;
+  severity: SeverityDto;
+  category: RuleCategoryDto;
+  description: string;
+};
+
+export type VerdictDto = {
+  action: ActionDto;
+  riskScore: number;
+  findings: FindingDto[];
+  description: string;
+};
+
 export class WalletHandle {
   // Mirrors the real signature `(dataDir: string)` — underscore prefix
   // marks the param as intentionally unused in the mock.
@@ -88,7 +120,12 @@ export const generateMnemonic = jest
   .fn()
   .mockReturnValue('test test test test test test test test test test test test');
 
-export const analyzeTransaction = jest.fn().mockResolvedValue({});
+export const analyzeTransaction = jest.fn().mockReturnValue({
+  action: ActionDto.Allow,
+  riskScore: 0,
+  findings: [],
+  description: 'No issues found',
+});
 
 // Type-only exports erased at runtime — `unknown` keeps `import type`
 // sites compiling. Do not narrow unless a test depends on the shape.
