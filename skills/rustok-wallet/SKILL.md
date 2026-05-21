@@ -1,7 +1,16 @@
 ---
 name: rustok-wallet
 description: Self-custody Ethereum Agent Wallet. Read context, preview/execute ETH sends with hard policy limits, track DeFi positions (Aave v3, ERC-4626 vaults). All actions are append-only audit logged.
-metadata: {"openclaw": {"emoji": "🦀", "requires": {"bins": ["curl", "jq"], "env": ["RUSTOK_AGENT_PASSWORD"]}, "homepage": "https://github.com/temrjan/rustok"}}
+metadata:
+  openclaw:
+    emoji: "🦀"
+    requires:
+      bins:
+        - curl
+        - jq
+      env:
+        - RUSTOK_AGENT_PASSWORD
+    homepage: https://github.com/temrjan/rustok
 ---
 
 # rustok-wallet
