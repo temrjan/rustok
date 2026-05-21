@@ -52,7 +52,10 @@ impl McpServer {
             .route("/preview", post(preview_send_handler))
             .route("/execute", post(execute_send_handler))
             .route("/positions", post(get_positions_handler))
-            .layer(middleware::from_fn_with_state(self.state.clone(), auth_middleware))
+            .layer(middleware::from_fn_with_state(
+                self.state.clone(),
+                auth_middleware,
+            ))
             .with_state(self.state.clone());
 
         let app = Router::new()

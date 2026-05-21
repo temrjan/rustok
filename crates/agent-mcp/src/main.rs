@@ -82,9 +82,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Create wallet if requested and none exists.
     if cli.create_wallet {
         if !service.has_wallet().await? {
-            let pwd = unlock.password().ok_or(
-                "--create-wallet requires RUSTOK_AGENT_PASSWORD environment variable",
-            )?;
+            let pwd = unlock
+                .password()
+                .ok_or("--create-wallet requires RUSTOK_AGENT_PASSWORD environment variable")?;
             let addr = service.create_wallet(pwd).await?;
             info!(%addr, "created new agent wallet");
         } else {
