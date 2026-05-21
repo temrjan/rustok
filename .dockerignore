@@ -17,7 +17,6 @@ app/dist/
 # Documentation (keep only if needed in build)
 docs/
 *.md
-!crates/agent-mcp/README.md
 
 # IDE
 .vscode/

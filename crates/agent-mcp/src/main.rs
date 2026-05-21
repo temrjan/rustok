@@ -108,7 +108,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start server.
     let server = McpServer::new(Arc::new(service));
-    info!(port = cli.port, "starting MCP server");
+    info!(host = cli.host, port = cli.port, "starting MCP server");
     server.run(&cli.host, cli.port).await?;
     Ok(())
 }

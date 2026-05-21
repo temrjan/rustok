@@ -39,6 +39,7 @@ impl McpServer {
             .route("/preview", post(preview_send_handler))
             .route("/execute", post(execute_send_handler))
             .route("/positions", post(get_positions_handler))
+            .fallback(|| async { (StatusCode::NOT_FOUND, "not found") })
             .with_state(self.wallet);
 
         let addr = format!("{host}:{port}");

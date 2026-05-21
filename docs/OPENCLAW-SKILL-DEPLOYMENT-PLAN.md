@@ -62,14 +62,18 @@ git clone https://github.com/temrjan/rustok.git . || git pull origin main
 mkdir -p /root/.rustok/agent
 echo "RUSTOK_AGENT_PASSWORD=<strong_password>" > /root/server/.env
 
-# 3. One-shot wallet creation
+# 3. First deploy only: build image locally (registry is empty)
+#    Subsequent deploys use `docker compose pull` from CI/CD
 cd /root/server
+docker compose up -d --build rustok-agent-mcp
+
+# 4. One-shot wallet creation (uses running service image)
 docker compose run --rm rustok-agent-mcp \
   --host 0.0.0.0 --port 3000 \
   --data-dir /root/.rustok/agent \
   --unlock-env --create-wallet
 
-# 4. Start persistent service
+# 5. Restart persistent service (after wallet exists, remove --create-wallet from commands)
 docker compose up -d rustok-agent-mcp
 
 # 5. Configure OpenClaw skill entry in openclaw.json

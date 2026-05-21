@@ -76,4 +76,6 @@ jobs:
             git pull origin main
             docker compose pull rustok-agent-mcp
             docker compose up -d rustok-agent-mcp
+            sleep 5
+            docker compose exec rustok-agent-mcp curl -fsS http://localhost:3000/health
             docker compose ps rustok-agent-mcp
