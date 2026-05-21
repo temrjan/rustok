@@ -2,7 +2,7 @@
 # Builder: compile the Rust binary
 # Runtime: minimal Debian image with CA certificates
 
-FROM rust:slim-bookworm AS builder
+FROM rust:1.95-slim-bookworm AS builder
 
 WORKDIR /build
 
@@ -24,11 +24,16 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/target/release/rustok-agent-mcp /usr/local/bin/rustok-agent-mcp
+# Create non-root user for running the agent wallet
+RUN groupadd -r rustok && useradd -r -g rustok -m rustok
 
+# Pre-create data directory so named volumes inherit correct ownership
+RUN mkdir -p /home/rustok/.rustok/agent && chown -R rustok:rustok /home/rustok/.rustok
+
+COPY --from=builder --chown=rustok:rustok /build/target/release/rustok-agent-mcp /usr/local/bin/rustok-agent-mcp
+
+USER rustok
 EXPOSE 3000
-
 ENTRYPOINT ["/usr/local/bin/rustok-agent-mcp"]

@@ -74,8 +74,21 @@ jobs:
             set -e
             cd /root/rustok
             git pull origin main
+
+            # Tag current image for quick rollback
+            docker tag ghcr.io/temrjan/rustok-agent-mcp:latest ghcr.io/temrjan/rustok-agent-mcp:backup || true
+
             docker compose pull rustok-agent-mcp
             docker compose up -d rustok-agent-mcp
             sleep 5
-            docker compose exec rustok-agent-mcp curl -fsS http://localhost:3000/health
-            docker compose ps rustok-agent-mcp
+
+            # Health check using TCP probe (curl is not present in the runtime image)
+            if docker compose exec -T rustok-agent-mcp bash -c 'echo > /dev/tcp/localhost/3000'; then
+              echo "Deployment successful"
+              docker compose ps rustok-agent-mcp
+            else
+              echo "Health check failed — rolling back to backup image"
+              docker tag ghcr.io/temrjan/rustok-agent-mcp:backup ghcr.io/temrjan/rustok-agent-mcp:latest
+              docker compose up -d rustok-agent-mcp
+              exit 1
+            fi

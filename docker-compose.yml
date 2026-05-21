@@ -6,18 +6,19 @@ services:
     image: ghcr.io/temrjan/rustok-agent-mcp:latest
     environment:
       - RUSTOK_AGENT_PASSWORD=${RUSTOK_AGENT_PASSWORD}
+      - MCP_API_KEY=${MCP_API_KEY}
     volumes:
-      - rustok-agent-data:/root/.rustok/agent
+      - rustok-agent-data:/home/rustok/.rustok/agent
     networks:
       - openclaw_default
     command: >
       --host 0.0.0.0
       --port 3000
-      --data-dir /root/.rustok/agent
+      --data-dir /home/rustok/.rustok/agent
       --unlock-env
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/health"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/3000'"]
       interval: 10s
       timeout: 5s
       retries: 3

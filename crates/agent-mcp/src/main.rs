@@ -27,12 +27,8 @@ struct Cli {
     policy_config: Option<PathBuf>,
 
     /// Unlock via env var `RUSTOK_AGENT_PASSWORD`.
-    #[arg(long, group = "unlock")]
+    #[arg(long)]
     unlock_env: bool,
-
-    /// Unlock with a fixed password (insecure, prefer --unlock-env).
-    #[arg(long, group = "unlock")]
-    unlock_password: Option<String>,
 
     /// Create a new agent wallet if none exists.
     #[arg(long)]
@@ -52,9 +48,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     // Resolve data_dir (expand ~).
-    let data_dir = if cli.data_dir.starts_with("~") {
+    let data_dir = if let Some(stripped) = cli.data_dir.to_str().and_then(|s| s.strip_prefix("~")) {
         let home = dirs::home_dir().ok_or("home directory not found")?;
-        home.join(cli.data_dir.strip_prefix("~").unwrap())
+        home.join(stripped)
     } else {
         cli.data_dir
     };
@@ -62,7 +58,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Load policy.
     let policy = match &cli.policy_config {
         Some(path) => {
-            let raw = std::fs::read_to_string(path)
+            let raw = tokio::fs::read_to_string(path)
+                .await
                 .map_err(|e| format!("failed to read policy config '{}': {e}", path.display()))?;
             serde_json::from_str(&raw)
                 .map_err(|e| format!("invalid policy JSON in '{}': {e}", path.display()))?
@@ -70,14 +67,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         None => AgentPolicy::default(),
     };
 
-    // Resolve unlock strategy.
-    let unlock = if cli.unlock_env {
-        UnlockStrategy::EnvVar
-    } else if let Some(pwd) = cli.unlock_password {
-        UnlockStrategy::Fixed(zeroize::Zeroizing::new(pwd))
-    } else {
-        UnlockStrategy::EnvVar
-    };
+    // Unlock strategy: always read from RUSTOK_AGENT_PASSWORD env var.
+    let unlock = UnlockStrategy::EnvVar;
+
+    // API key for MCP authentication.
+    let api_key: Arc<str> = std::env::var("MCP_API_KEY")
+        .map_err(|_| "MCP_API_KEY environment variable must be set")?
+        .into();
 
     // Create service.
     let service = AgentWalletService::new(&data_dir, policy, unlock.clone())
@@ -87,7 +83,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if cli.create_wallet {
         if !service.has_wallet().await? {
             let pwd = unlock.password().ok_or(
-                "--create-wallet requires a password (--unlock-password or RUSTOK_AGENT_PASSWORD env var)",
+                "--create-wallet requires RUSTOK_AGENT_PASSWORD environment variable",
             )?;
             let addr = service.create_wallet(pwd).await?;
             info!(%addr, "created new agent wallet");
@@ -107,7 +103,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Start server.
-    let server = McpServer::new(Arc::new(service));
+    let server = McpServer::new(Arc::new(service), api_key);
     info!(host = cli.host, port = cli.port, "starting MCP server");
     server.run(&cli.host, cli.port).await?;
     Ok(())

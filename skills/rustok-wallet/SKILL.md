@@ -1,6 +1,7 @@
 ---
 name: rustok-wallet
 description: Self-custody Ethereum Agent Wallet. Read context, preview/execute ETH sends with hard policy limits, track DeFi positions (Aave v3, ERC-4626 vaults). All actions are append-only audit logged.
+version: 0.1.0
 metadata:
   openclaw:
     emoji: "🦀"
@@ -9,7 +10,7 @@ metadata:
         - curl
         - jq
       env:
-        - RUSTOK_AGENT_PASSWORD
+        - MCP_API_KEY
     homepage: https://github.com/temrjan/rustok
 ---
 
@@ -31,13 +32,15 @@ This wallet is **separate** from the user's main wallet. All spending limits, ad
 ### 1. Check wallet context
 
 ```bash
-curl -fsS -X POST http://rustok-agent-mcp:3000/context | jq
+curl -fsS -X POST http://rustok-agent-mcp:3000/context \
+  -H "Authorization: Bearer ${MCP_API_KEY}" | jq
 ```
 
 ### 2. Preview a transaction (always preview before execute)
 
 ```bash
 curl -fsS -X POST http://rustok-agent-mcp:3000/preview \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1}' | jq
 ```
@@ -46,6 +49,7 @@ curl -fsS -X POST http://rustok-agent-mcp:3000/preview \
 
 ```bash
 curl -fsS -X POST http://rustok-agent-mcp:3000/execute \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1,"preview_id":"PASTE_PREVIEW_ID_HERE"}' | jq
 ```
@@ -54,10 +58,11 @@ curl -fsS -X POST http://rustok-agent-mcp:3000/execute \
 
 ### POST /context — Wallet state
 
-Returns: address, cross-chain balances, policy limits, gas estimates, DeFi positions.
+Returns: address, cross-chain balances, policy limits, gas estimates.
 
 ```bash
-curl -fsS -X POST http://rustok-agent-mcp:3000/context | jq
+curl -fsS -X POST http://rustok-agent-mcp:3000/context \
+  -H "Authorization: Bearer ${MCP_API_KEY}" | jq
 ```
 
 ### POST /positions — DeFi positions
@@ -66,6 +71,7 @@ Get Aave v3 + ERC-4626 positions for an address. Omit `address` to use the agent
 
 ```bash
 curl -fsS -X POST http://rustok-agent-mcp:3000/positions \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"address":"0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"}' | jq
 ```
@@ -85,6 +91,7 @@ Runs policy + budget checks and txguard risk analysis. Returns a `preview_id` th
 
 ```bash
 curl -fsS -X POST http://rustok-agent-mcp:3000/preview \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1}' | jq
 ```
@@ -135,6 +142,7 @@ Requires a valid `preview_id` from the preceding `/preview` call. Re-runs policy
 
 ```bash
 curl -fsS -X POST http://rustok-agent-mcp:3000/execute \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1,"preview_id":"PASTE_PREVIEW_ID_HERE"}' | jq
 ```

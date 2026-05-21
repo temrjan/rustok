@@ -4,26 +4,40 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
+    body::Body,
     extract::State,
-    http::StatusCode,
+    http::{HeaderMap, Request, StatusCode},
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
 };
 use rustok_agent_wallet::{AgentWalletError, AgentWalletService};
 
 use crate::types::{ExecuteRequest, PositionsRequest, PreviewRequest, PreviewResponse};
 
+/// Application state shared across handlers.
+#[derive(Clone)]
+pub struct AppState {
+    /// The agent wallet service.
+    pub wallet: Arc<AgentWalletService>,
+    /// Bearer token required on all protected routes.
+    pub api_key: Arc<str>,
+}
+
 /// Simple MCP-over-HTTP server.
 ///
 /// Wraps an [`AgentWalletService`] in an Axum router.  Each route maps to a
 /// single tool that an LLM agent can invoke.
 pub struct McpServer {
-    wallet: Arc<AgentWalletService>,
+    state: AppState,
 }
 
 impl McpServer {
-    /// Create a new server around the given wallet service.
-    pub const fn new(wallet: Arc<AgentWalletService>) -> Self {
-        Self { wallet }
+    /// Create a new server around the given wallet service and API key.
+    pub const fn new(wallet: Arc<AgentWalletService>, api_key: Arc<str>) -> Self {
+        Self {
+            state: AppState { wallet, api_key },
+        }
     }
 
     /// Start the HTTP server and run until graceful shutdown (Ctrl-C).
@@ -33,14 +47,19 @@ impl McpServer {
     /// Returns `std::io::Error` if the TCP listener cannot be bound or the
     /// server encounters an I/O error.
     pub async fn run(self, host: &str, port: u16) -> Result<(), std::io::Error> {
-        let app = Router::new()
-            .route("/health", get(health_check))
+        let protected = Router::new()
             .route("/context", post(get_context_handler))
             .route("/preview", post(preview_send_handler))
             .route("/execute", post(execute_send_handler))
             .route("/positions", post(get_positions_handler))
+            .layer(middleware::from_fn_with_state(self.state.clone(), auth_middleware))
+            .with_state(self.state.clone());
+
+        let app = Router::new()
+            .route("/health", get(health_check))
+            .merge(protected)
             .fallback(|| async { (StatusCode::NOT_FOUND, "not found") })
-            .with_state(self.wallet);
+            .with_state(self.state);
 
         let addr = format!("{host}:{port}");
         let listener = tokio::net::TcpListener::bind(&addr).await?;
@@ -57,10 +76,30 @@ async fn health_check() -> &'static str {
     "ok"
 }
 
+async fn auth_middleware(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    match headers.get("authorization") {
+        Some(value) => {
+            let expected = format!("Bearer {}", state.api_key);
+            if value.as_bytes() == expected.as_bytes() {
+                Ok(next.run(request).await)
+            } else {
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        }
+        None => Err(StatusCode::UNAUTHORIZED),
+    }
+}
+
 async fn get_context_handler(
-    State(wallet): State<Arc<AgentWalletService>>,
+    State(state): State<AppState>,
 ) -> Result<Json<rustok_agent_wallet::context::WalletContext>, (StatusCode, String)> {
-    wallet
+    state
+        .wallet
         .context()
         .await
         .map(Json)
@@ -68,13 +107,14 @@ async fn get_context_handler(
 }
 
 async fn preview_send_handler(
-    State(wallet): State<Arc<AgentWalletService>>,
+    State(state): State<AppState>,
     Json(req): Json<PreviewRequest>,
 ) -> Result<Json<PreviewResponse>, (StatusCode, String)> {
     let to = parse_address(&req.to).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let amount_wei = parse_u256(&req.amount_wei).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
-    wallet
+    state
+        .wallet
         .preview_send(to, amount_wei, req.chain_id)
         .await
         .map(|(preview_id, preview)| {
@@ -87,13 +127,14 @@ async fn preview_send_handler(
 }
 
 async fn execute_send_handler(
-    State(wallet): State<Arc<AgentWalletService>>,
+    State(state): State<AppState>,
     Json(req): Json<ExecuteRequest>,
 ) -> Result<Json<rustok_core::send::SendResult>, (StatusCode, String)> {
     let to = parse_address(&req.to).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let amount_wei = parse_u256(&req.amount_wei).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
-    wallet
+    state
+        .wallet
         .execute_send(to, amount_wei, req.chain_id, req.preview_id)
         .await
         .map(Json)
@@ -101,13 +142,14 @@ async fn execute_send_handler(
 }
 
 async fn get_positions_handler(
-    State(wallet): State<Arc<AgentWalletService>>,
+    State(state): State<AppState>,
     Json(req): Json<PositionsRequest>,
 ) -> Result<Json<Vec<rustok_agent_dapps::types::Position>>, (StatusCode, String)> {
     let address = match req.address {
         Some(addr) => parse_address(&addr).map_err(|e| (StatusCode::BAD_REQUEST, e))?,
         None => {
-            let addr = wallet
+            let addr = state
+                .wallet
                 .address()
                 .await
                 .ok_or((StatusCode::UNAUTHORIZED, "wallet locked".into()))?;
@@ -115,9 +157,10 @@ async fn get_positions_handler(
         }
     };
 
-    wallet
+    state
+        .wallet
         .tracker()
-        .track(wallet.provider(), address)
+        .track(state.wallet.provider(), address)
         .await
         .map(Json)
         .map_err(|e| (map_dapp_error(&e), e.to_string()))
@@ -152,7 +195,7 @@ const fn map_dapp_error(e: &rustok_agent_dapps::DappError) -> StatusCode {
         rustok_agent_dapps::DappError::Rpc(_) | rustok_agent_dapps::DappError::Decode(_) => {
             StatusCode::BAD_GATEWAY
         }
-        rustok_agent_dapps::DappError::Reverted(_) => StatusCode::OK,
+        rustok_agent_dapps::DappError::Reverted(_) => StatusCode::UNPROCESSABLE_ENTITY,
     }
 }
 
