@@ -1,7 +1,33 @@
-target/
-app/src/
-app/src-tauri/src/
-app/src-tauri/gen/
-docs/
+# Git
 .git/
+.gitignore
+
+# Rust build artifacts
+target/
+
+# Node.js
+node_modules/
+package-lock.json
+
+# Mobile / App
+mobile/
+app/src/
+app/dist/
+
+# Documentation (keep only if needed in build)
+docs/
 *.md
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+*.log
+coverage/

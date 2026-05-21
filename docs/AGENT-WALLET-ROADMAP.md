@@ -192,6 +192,7 @@ All policy limits are **code-level** — enforced in `AgentPolicy::check()` befo
 | 3. Transaction Templates | ⏸️ Backlog | Нет rollback. Крон — новая инфраструктура. |
 | 4. OnchainMonitor | ⏸️ Backlog | Нет mobile push / UI. Пolling без alerts = orphan feature. |
 | 5. StrategyEngine | ❌ Rejected | `Box<dyn Fn>` broken в async Rust. LLM + Context достаточно. |
+| 6. Network Abstraction (auto-select) | ❌ Rejected | Ручной выбор сети через `chain_id` — текущее поведение. Не добавлять auto-routing, gas-based selection, AI-driven network choice. Explicit > implicit. |
 
 ---
 

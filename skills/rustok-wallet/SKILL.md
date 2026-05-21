@@ -1,174 +1,84 @@
 ---
 name: rustok-wallet
+description: Self-custody Ethereum Agent Wallet. Read context, preview/execute ETH sends with hard policy limits, track DeFi positions (Aave v3, ERC-4626 vaults). All actions are append-only audit logged.
 version: 0.1.0
-author: temrjan
-description: |
-  Self-custody Ethereum Agent Wallet. Read wallet context, preview and execute
-  ETH sends with hard policy limits, and track DeFi positions (Aave v3,
-  ERC-4626 vaults). All actions are append-only audit logged.
-permissions: [network]
-tags: [crypto, ethereum, wallet, defi, agent-wallet, mcp]
-minOpenClawVersion: "0.8.0"
+metadata:
+  openclaw:
+    emoji: "🦀"
+    requires:
+      bins:
+        - curl
+        - jq
+      env:
+        - MCP_API_KEY
+    homepage: https://github.com/temrjan/rustok
 ---
 
 # rustok-wallet
 
-This skill connects OpenClaw to a self-hosted Agent Wallet MCP server
-(`rustok-agent-mcp`). The wallet is **isolated** from your main wallet and
-enforces **code-level** spending limits that the LLM cannot bypass.
+You are connected to an isolated Ethereum Agent Wallet via the internal `rustok-agent-mcp` service (`http://rustok-agent-mcp:3000`).
 
-## Architecture
+This wallet is **separate** from the user's main wallet. All spending limits, address blocklists, and daily budgets are enforced in **code** — you cannot negotiate them away.
 
-```
-┌─────────────┐     HTTP      ┌─────────────────────┐
-│  OpenClaw   │  ───────────▶ │ rustok-agent-mcp    │
-│   Agent     │               │  (localhost:3000)   │
-└─────────────┘               └─────────────────────┘
-                                      │
-                    ┌─────────────────┼─────────────────┐
-                    ▼                 ▼                 ▼
-              ┌─────────┐      ┌──────────┐      ┌───────────┐
-              │Keystore │      │  Policy  │      │  Audit    │
-              │(SQLite) │      │  Engine  │      │  Log      │
-              └─────────┘      └──────────┘      └───────────┘
-                    │
-                    ▼
-              ┌─────────────────────────────────────┐
-              │  DeFi Connectors (Aave, ERC-4626)   │
-              │  Multi-chain RPC (Alchemy/Infura)   │
-              └─────────────────────────────────────┘
-```
+## When to use
 
-## Setup
+- User asks about wallet balance, address, or holdings
+- User wants to send ETH or check transaction status
+- User asks about DeFi positions (Aave, vaults)
+- User asks to preview a transaction before executing
 
-### 1. Build & run the MCP server
+## Quick Start
+
+### 1. Check wallet context
 
 ```bash
-git clone https://github.com/temrjan/rustok
-cd rustok
-cargo build --release -p rustok-agent-mcp
-export RUSTOK_AGENT_PASSWORD="your_strong_password"
-./target/release/rustok-agent-mcp --create-wallet --policy-config ~/.rustok/policy.json
+curl -fsS -X POST http://rustok-agent-mcp:3000/context \
+  -H "Authorization: Bearer ${MCP_API_KEY}" | jq
 ```
 
-### 2. Policy configuration (optional)
+### 2. Preview a transaction (always preview before execute)
 
-Create `~/.rustok/policy.json`:
-
-```json
-{
-  "max_single_tx_eth": 0.1,
-  "max_daily_spend_eth": 0.5,
-  "max_gas_fee_gwei": 100,
-  "blocked_addresses": [],
-  "allowed_chain_ids": [1, 10, 42161, 8453],
-  "block_unlimited_approvals": true
-}
+```bash
+curl -fsS -X POST http://rustok-agent-mcp:3000/preview \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1}' | jq
 ```
 
-All limits are **enforced in code** — the LLM cannot negotiate them away.
+### 3. Execute a transaction (requires preview_id from step 2)
 
-## Tools
-
-### wallet_context
-
-Get current wallet state: address, cross-chain balances, policy limits, gas
-estimates, and DeFi positions.
-
-**HTTP:** `POST /context`
-
-**Response:** `WalletContext`
-```json
-{
-  "address": "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B",
-  "balances": {
-    "total_eth": "1.234500000000000000",
-    "per_chain": [
-      { "chain_id": 1, "chain_name": "Ethereum", "balance_wei": "1000000000000000000" }
-    ]
-  },
-  "allowed_chains": [1, 10, 42161, 8453],
-  "limits": {
-    "max_single_tx_eth": 0.1,
-    "max_daily_spend_eth": 0.5,
-    "daily_spend_remaining_eth": 0.45,
-    "max_gas_fee_gwei": 100
-  },
-  "gas_oracle": {
-    "chains": [
-      {
-        "chain_id": 1,
-        "max_fee_per_gas_gwei": 25.5,
-        "max_priority_fee_per_gas_gwei": 1.5
-      }
-    ]
-  },
-  "positions": [
-    {
-      "protocol": "aave_v3",
-      "chain_id": 1,
-      "asset_address": "0x...",
-      "asset_symbol": "aWETH",
-      "asset_name": "Aave WETH",
-      "asset_decimals": 18,
-      "balance": "1500000000000000000",
-      "balance_formatted": "1.5",
-      "value_usd": 3000.0,
-      "health_factor": "1.85"
-    }
-  ]
-}
+```bash
+curl -fsS -X POST http://rustok-agent-mcp:3000/execute \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1,"preview_id":"PASTE_PREVIEW_ID_HERE"}' | jq
 ```
 
-### wallet_positions
+## API Reference
 
-Get tracked DeFi positions (Aave v3 lending, ERC-4626 vaults) for a given
-address. If `address` is omitted, uses the agent wallet's own address.
+### POST /context — Wallet state
 
-**HTTP:** `POST /positions`
+Returns: address, cross-chain balances, policy limits, gas estimates.
 
-**Body:** `PositionsRequest`
-```json
-{
-  "address": "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
-}
+```bash
+curl -fsS -X POST http://rustok-agent-mcp:3000/context \
+  -H "Authorization: Bearer ${MCP_API_KEY}" | jq
 ```
 
-**Response:** `Vec<Position>`
-```json
-[
-  {
-    "protocol": "aave_v3",
-    "chain_id": 1,
-    "asset_address": "0x...",
-    "asset_symbol": "aWETH",
-    "asset_name": "Aave WETH",
-    "asset_decimals": 18,
-    "balance": "1500000000000000000",
-    "balance_formatted": "1.5",
-    "value_usd": 3000.0,
-    "health_factor": "1.85"
-  },
-  {
-    "protocol": "erc4626",
-    "chain_id": 1,
-    "asset_address": "0x...",
-    "asset_symbol": "yvWETH",
-    "asset_name": "Yearn WETH Vault",
-    "asset_decimals": 18,
-    "balance": "1000000000000000000",
-    "balance_formatted": "1.0",
-    "value_usd": null
-  }
-]
+### POST /positions — DeFi positions
+
+Get Aave v3 + ERC-4626 positions for an address. Omit `address` to use the agent wallet's own address.
+
+```bash
+curl -fsS -X POST http://rustok-agent-mcp:3000/positions \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"address":"0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"}' | jq
 ```
 
-### preview_transaction
+### POST /preview — Simulate + risk analysis
 
-Preview a native ETH send. Runs policy + budget checks and txguard risk
-analysis. Returns a `preview_id` that must be passed to `execute_transaction`.
-
-**HTTP:** `POST /preview`
+Runs policy + budget checks and txguard risk analysis. Returns a `preview_id` that must be passed to `/execute`.
 
 **Body:** `PreviewRequest`
 ```json
@@ -179,9 +89,17 @@ analysis. Returns a `preview_id` that must be passed to `execute_transaction`.
 }
 ```
 
-**Response:** `SendPreview`
+```bash
+curl -fsS -X POST http://rustok-agent-mcp:3000/preview \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1}' | jq
+```
+
+**Response:** `PreviewResponse`
 ```json
 {
+  "preview_id": "550e8400-e29b-41d4-a716-446655440000",
   "verdict": {
     "action": "allow",
     "risk_score": 15,
@@ -208,12 +126,9 @@ analysis. Returns a `preview_id` that must be passed to `execute_transaction`.
 }
 ```
 
-### execute_transaction
+### POST /execute — Sign and broadcast
 
-Execute a signed transaction. Requires a valid `preview_id` from the preceding
-`/preview` call. Re-runs policy and budget checks as defense-in-depth.
-
-**HTTP:** `POST /execute`
+Requires a valid `preview_id` from the preceding `/preview` call. Re-runs policy and budget checks as defense-in-depth.
 
 **Body:** `ExecuteRequest`
 ```json
@@ -223,6 +138,13 @@ Execute a signed transaction. Requires a valid `preview_id` from the preceding
   "chain_id": 1,
   "preview_id": "550e8400-e29b-41d4-a716-446655440000"
 }
+```
+
+```bash
+curl -fsS -X POST http://rustok-agent-mcp:3000/execute \
+  -H "Authorization: Bearer ${MCP_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"to":"0x0000000000000000000000000000000000000001","amount_wei":"100000000000000000","chain_id":1,"preview_id":"PASTE_PREVIEW_ID_HERE"}' | jq
 ```
 
 **Response on success:** `SendResult`
@@ -239,23 +161,23 @@ Execute a signed transaction. Requires a valid `preview_id` from the preceding
 ```
 
 **Response on policy block (HTTP 403):**
-```json
-"policy blocked: exceeds max_single_tx_eth"
+```
+policy blocked: exceeds max_single_tx_eth
 ```
 
 **Response on budget exceeded (HTTP 403):**
-```json
-"daily budget exceeded: 0.450000 / 0.500000 ETH"
+```
+daily budget exceeded: 0.450000 / 0.500000 ETH
 ```
 
 **Response on preview expired (HTTP 400):**
-```json
-"preview expired"
+```
+preview expired
 ```
 
 **Response on preview mismatch (HTTP 400):**
-```json
-"preview mismatch"
+```
+preview mismatch
 ```
 
 ## Safety Guarantees
@@ -270,10 +192,10 @@ Execute a signed transaction. Requires a valid `preview_id` from the preceding
 | Wallet isolation | Separate `~/.rustok/agent/` directory |
 | No prompt injection bypass | Limits are not in system prompt; they are in code |
 
-## Changelog
+## Behavioral Guidelines
 
-### 0.1.0
-- Initial release
-- Wallet context, ETH send (preview + execute)
-- Aave v3 + ERC-4626 position tracking
-- Hard policy gates and audit logging
+1. **Always preview before execute.** Never call `/execute` without a fresh `/preview`.
+2. **Respect policy blocks.** If the API returns 403, explain why to the user — do not retry.
+3. **Show the preview to the user.** Before executing, summarize the preview (amount, destination, estimated cost, risk score).
+4. **Use `/context` first.** Before any operation, check wallet state so you do not hallucinate balances or chain availability.
+5. **Handle errors gracefully.** If `rustok-agent-mcp` is unreachable, inform the user that the wallet service is offline.

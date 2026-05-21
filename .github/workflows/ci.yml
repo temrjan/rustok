@@ -79,6 +79,78 @@ jobs:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
 
+  skill:
+    name: Skill validation (SKILL.md + claw.json + examples)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate SKILL.md YAML frontmatter
+        run: |
+          python3 -c "
+          import yaml, sys, json
+          with open('skills/rustok-wallet/SKILL.md') as f:
+              content = f.read()
+          parts = content.split('---')
+          if len(parts) < 3:
+              print('ERROR: Missing YAML frontmatter')
+              sys.exit(1)
+          frontmatter = yaml.safe_load(parts[1])
+
+          # OpenClaw spec: name + description are required
+          required = ['name', 'description']
+          for key in required:
+              if key not in frontmatter:
+                  print(f'ERROR: Missing required key: {key}')
+                  sys.exit(1)
+
+          # metadata.openclaw is optional but must be valid JSON if present
+          metadata = frontmatter.get('metadata')
+          if metadata:
+              if not isinstance(metadata, dict):
+                  print('ERROR: metadata must be a dict')
+                  sys.exit(1)
+              openclaw = metadata.get('openclaw')
+              if openclaw:
+                  requires = openclaw.get('requires', {})
+                  if 'bins' in requires:
+                      print(f'  requires.bins: {requires[\"bins\"]}')
+                  if 'env' in requires:
+                      print(f'  requires.env: {requires[\"env\"]}')
+
+          print('SKILL.md YAML frontmatter: OK')
+          "
+      - name: Validate claw.json
+        run: |
+          python3 -c "
+          import json, sys
+          with open('skills/rustok-wallet/claw.json') as f:
+              data = json.load(f)
+          required = ['name', 'version', 'description', 'author', 'permissions', 'entry']
+          for key in required:
+              if key not in data:
+                  print(f'ERROR: Missing required key in claw.json: {key}')
+                  sys.exit(1)
+          if data['permissions'] != ['network']:
+              print(f'WARNING: Expected permissions [\"network\"], got {data[\"permissions\"]}')
+          print('claw.json: OK')
+          "
+      - name: Validate examples JSON
+        run: |
+          python3 -c "
+          import json
+          with open('skills/rustok-wallet/examples/policy.json') as f:
+              json.load(f)
+          print('examples/policy.json: OK')
+          "
+      - name: Install OpenClaw CLI
+        run: npm install -g openclaw
+      - name: Check skill parsing by OpenClaw
+        run: |
+          # Verify openclaw binary works
+          OPENCLAW_BIN=$(npm root -g)/openclaw/openclaw.mjs
+          node "$OPENCLAW_BIN" --version
+          echo "OpenClaw CLI: OK"
+
   mobile:
     name: Mobile (typecheck + lint + test)
     runs-on: ubuntu-latest

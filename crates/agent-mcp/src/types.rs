@@ -1,6 +1,6 @@
-//! Request types for MCP HTTP endpoints.
+//! Request and response types for MCP HTTP endpoints.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Request body for `/preview`.
 #[derive(Debug, Deserialize)]
@@ -32,4 +32,14 @@ pub struct PositionsRequest {
     /// Optional address override (hex, with or without `0x`).
     /// If omitted, uses the agent wallet's own address.
     pub address: Option<String>,
+}
+
+/// Response body for `/preview`.
+#[derive(Debug, Serialize)]
+pub struct PreviewResponse {
+    /// Preview ID — pass this to `/execute`.
+    pub preview_id: uuid::Uuid,
+    /// txguard verdict + route + explanation.
+    #[serde(flatten)]
+    pub preview: rustok_core::send::SendPreview,
 }

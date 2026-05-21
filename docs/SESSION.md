@@ -1,5 +1,8 @@
 # Rustok — Master Session Document
 
+> ⚠️ **DEPRECATED — устаревший стек.** Этот файл описывает Tauri+Leptos (WebView), отменён 2026-04-28.
+> **Источник истины:** `docs/NATIVE-MIGRATION-PLAN.md` — React Native + uniffi-bindgen-react-native + Rust core.
+>
 > **Единая точка входа для AI-сессий.** Прочитай этот файл ПОЛНОСТЬЮ перед любой работой.
 > Обновляй раздел «Статус» после каждой сессии. Код — источник правды, этот файл — навигация.
 
@@ -95,6 +98,7 @@
 | Phase 2: Agent Context + MCP | ✅ | WalletContext + TTL cache, txguard risk_score → audit, MCP HTTP server (3 tools) |
 | Phase 3: DeFi Connectors (MVP) | ✅ | `crates/agent-dapps/`: Aave v3 + ERC-4626 connectors, PositionTracker, `/positions` endpoint — 7 тестов |
 | Phase 4: OpenClaw Skill | ✅ | `skills/rustok-wallet/`: `SKILL.md` + `claw.json` + `README.md` + `examples/policy.json`, `rustok-agent-mcp` binary |
+| Phase 4.5: Agent E2E Verified | ✅ | First LLM → on-chain tx: OpenClaw gateway → skill → MCP → AgentWallet → Sepolia. Tx: `0x495ea9af...113653`. Auth middleware + security fixes deployed to 7demo. |
 
 ### 📋 Known gaps (не блокеры)
 
@@ -105,6 +109,8 @@
 | No token support | — | ETH only, Phase 4+ |
 | Multiple keystores → unlock picks first | `commands.rs` | Fixed, но архитектура single-wallet |
 | ~~No "Scan Again" button~~ | `analyze.rs` | ✅ Done |
+| Agent MCP rate limiting | `server.rs` | Нет ограничения на `/preview`/`/execute` — отложено (governor/tower) |
+| Agent MCP tests | `crates/agent-mcp/` | 0 тестов — отложено |
 | Biometric не протестирован на реальном устройстве | — | Требует enrollment |
 
 ---
@@ -156,6 +162,18 @@
 | D3 | **HomeVariant::Chart** | `home.rs`, `prices.rs` |
 
 ### Этап E: Advanced (Phase 5+)
+
+| # | Шаг | Файлы |
+|---|-----|-------|
+| E1 | Show Recovery Phrase (v2 keystore format) | `keyring/` |
+| E2 | Transaction history polling в Activity | `activity.rs` |
+| E3 | AI Router / NLP commands | `router/`, `explainer/` |
+| E4 | Passkey + WebAuthn | `auth/` |
+| E5 | Hardened Runtime (seL4) | отдельная команда |
+
+---
+
+*Документ создан: 2026-04-25. Последняя сессия: 2026-05-21 — Agent E2E milestone (tx 0x495ea9af...113653), security review fixes, session closed cleanly.*
 
 | # | Шаг |
 |---|-----|
