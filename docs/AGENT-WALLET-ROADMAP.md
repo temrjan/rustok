@@ -2,7 +2,7 @@
 
 **Дата:** 2026-05-21  
 **Ветка:** `feat/agent-wallet-pivot`  
-**Статус:** Phase 1–3 ✅ done. Phase 4 🔄 in progress
+**Статус:** Phase 1–4 ✅ done. Phase 5 ⏸️ pending
 
 ---
 
@@ -107,13 +107,56 @@ impl AgentWalletService {
 - [x] `cargo test --workspace` проходит (161 тест)
 - [x] `cargo fmt`, `cargo clippy --workspace --all-targets` clean
 
-## Phase 4: OpenClaw Skill 🔄
+## Phase 4: OpenClaw Skill ✅
 
 **Goal:** Publish `rustok-wallet` skill on clawhub.ai.
 
 **Why:** Нет crypto wallet skill в OpenClaw экосистеме. First-mover advantage.
 
 **Unblocked:** Phase 2 (MCP: `/context`, `/preview`, `/execute`) + Phase 3 (`/positions`) дают 4 рабочих tools — достаточно для skill MVP.
+
+### 4.1 Binary: `rustok-agent-mcp`
+
+```
+rustok-agent-mcp [OPTIONS]
+  --port <PORT>              [default: 3000]
+  --data-dir <DIR>           [default: ~/.rustok/agent]
+  --policy-config <PATH>     JSON policy file
+  --create-wallet            Create wallet on first run
+```
+
+### 4.2 Skill Scaffold
+
+```
+skills/rustok-wallet/
+├── SKILL.md              # YAML frontmatter + tool specs
+├── claw.json             # Manifest (name, version, permissions, tags)
+├── README.md             # Setup, CLI ref, troubleshooting
+└── examples/
+    └── policy.json       # Example policy configuration
+```
+
+### 4.3 Tools exposed via HTTP
+
+| Tool | Endpoint | What it does |
+|------|----------|-------------|
+| `wallet_context` | `GET /context` | Address, balances, limits, gas, positions |
+| `wallet_positions` | `POST /positions` | Aave + ERC-4626 positions across chains |
+| `preview_transaction` | `POST /preview` | Simulate + risk analysis without executing |
+| `execute_transaction` | `POST /execute` | Policy check → sign → broadcast → audit |
+
+### 4.4 Safety Model
+
+All policy limits are **code-level** — enforced in `AgentPolicy::check()` before every execution. The LLM cannot negotiate them away.
+
+**Definition of Done:**
+- [x] `rustok-agent-mcp` binary compiles and passes tests
+- [x] `skills/rustok-wallet/SKILL.md` — YAML frontmatter + 4 tool specs
+- [x] `skills/rustok-wallet/claw.json` — manifest with permissions
+- [x] `skills/rustok-wallet/README.md` — setup, CLI, troubleshooting
+- [x] `skills/rustok-wallet/examples/policy.json` — example configuration
+- [x] `cargo test --workspace` проходит (168 тестов)
+- [x] `cargo fmt`, `cargo clippy --workspace --all-targets` clean
 
 ---
 

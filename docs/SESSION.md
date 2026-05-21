@@ -94,6 +94,7 @@
 | Phase 1: Agent Wallet Core | ✅ | Keystore, policy, audit, budget, unlock — 14 тестов |
 | Phase 2: Agent Context + MCP | ✅ | WalletContext + TTL cache, txguard risk_score → audit, MCP HTTP server (3 tools) |
 | Phase 3: DeFi Connectors (MVP) | ✅ | `crates/agent-dapps/`: Aave v3 + ERC-4626 connectors, PositionTracker, `/positions` endpoint — 7 тестов |
+| Phase 4: OpenClaw Skill | ✅ | `skills/rustok-wallet/`: `SKILL.md` + `claw.json` + `README.md` + `examples/policy.json`, `rustok-agent-mcp` binary |
 
 ### 📋 Known gaps (не блокеры)
 
@@ -175,7 +176,13 @@ rustok/
 │   ├── core/         — wallet core (64 теста: keyring, provider, router, send, explorer)
 │   ├── types/        — shared DTO (serde, без U256 в WASM)
 │   ├── cli/          — CLI для разработчиков
-│   └── api/          — HTTP API (axum, 3 endpoints)
+│   ├── api/          — HTTP API (axum, 3 endpoints)
+│   ├── agent-wallet/ — Agent Wallet Core: keystore, policy, audit, budget, unlock (14 тестов)
+│   ├── agent-mcp/    — MCP HTTP server: Axum, /context /preview /execute /positions (4 endpoints)
+│   └── agent-dapps/  — DeFi connectors: Aave v3 + ERC-4626 (7 тестов)
+│
+├── skills/
+│   └── rustok-wallet/ — OpenClaw skill: SKILL.md, claw.json, README.md, examples/ |
 │
 ├── app/
 │   ├── src-tauri/    — Tauri 2.0 backend (19 commands, Mutex safety)
@@ -274,4 +281,4 @@ adb logcat -s rustok:V
 
 ---
 
-*Документ создан: 2026-04-25. Последняя сессия: B3 (Brand launcher icon).*\n*Следующий приоритет: C1 — Cloudflare Worker proxy toggle.*
+*Документ создан: 2026-04-25. Последняя сессия: Phase 4 — OpenClaw Skill (rustok-wallet) — skill scaffold + docs.*\n*Следующий приоритет: Phase 5 — Mobile Agent Dashboard (React Native PnL / audit / budget / kill switch).*
