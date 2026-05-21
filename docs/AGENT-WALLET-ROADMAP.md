@@ -2,7 +2,7 @@
 
 **Дата:** 2026-05-21  
 **Ветка:** `feat/agent-wallet-pivot`  
-**Статус:** Phase 1 ✅ done, Phase 2 in progress
+**Статус:** Phase 1–3 ✅ done. Phase 4 🔄 in progress
 
 ---
 
@@ -107,13 +107,13 @@ impl AgentWalletService {
 - [x] `cargo test --workspace` проходит (161 тест)
 - [x] `cargo fmt`, `cargo clippy --workspace --all-targets` clean
 
-## Phase 4: OpenClaw Skill ⏸️
+## Phase 4: OpenClaw Skill 🔄
 
 **Goal:** Publish `rustok-wallet` skill on clawhub.ai.
 
 **Why:** Нет crypto wallet skill в OpenClaw экосистеме. First-mover advantage.
 
-**Blocked by:** стабильный MCP interface + минимум 3 рабочих tools.
+**Unblocked:** Phase 2 (MCP: `/context`, `/preview`, `/execute`) + Phase 3 (`/positions`) дают 4 рабочих tools — достаточно для skill MVP.
 
 ---
 

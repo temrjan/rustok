@@ -3,7 +3,7 @@
 > **Роль:** Code Reviewer (Rust)  
 > **Область:** `crates/agent-wallet/`, `crates/agent-mcp/`  
 > **Ветка:** `feat/agent-wallet-pivot`  
-> **Статус:** Phase 1 (core) + Phase 2 (WalletContext + MCP) — DONE, ожидают следующей фазы  
+> **Статус:** Phase 1–3 — DONE. Phase 4 (OpenClaw Skill) — IN PROGRESS  
 > **Дата:** 2026-05-21
 
 ---
@@ -175,9 +175,9 @@ crates/agent-mcp/
 
 | Phase | Что планируется | Когда ревьюить |
 |---|---|---|
-| **Phase 3** | `PositionTracker` (Aave, Uniswap LP, vaults) | Когда Инженер передаст diff |
-| **Phase 3.5** | `OnchainMonitor` (event-driven, proactive agent) | Когда Инженер передаст diff |
-| **Phase 4** | `TransactionTemplate` (reusable strategies, cron) | В бэклоге |
+| **Phase 3** | `PositionTracker` (Aave, ERC-4626 vaults) | ✅ DONE, замержено в `feat/agent-wallet-pivot` |
+| **Phase 4** | `OpenClaw Skill` (publish на clawhub.ai) | 🔄 IN PROGRESS — ожидает diff от Инженера |
+| **Phase 5** | `TransactionTemplate` (reusable strategies, cron) | В бэклоге |
 | **Phase 5** | `StrategyEngine` — **НЕ ДЕЛАЕМ** (architectural anti-pattern) | — |
 
 ---
