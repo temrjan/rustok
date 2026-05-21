@@ -10,7 +10,7 @@ use axum::{
 };
 use rustok_agent_wallet::{AgentWalletError, AgentWalletService};
 
-use crate::types::{ExecuteRequest, PositionsRequest, PreviewRequest};
+use crate::types::{ExecuteRequest, PositionsRequest, PreviewRequest, PreviewResponse};
 
 /// Simple MCP-over-HTTP server.
 ///
@@ -69,14 +69,19 @@ async fn get_context_handler(
 async fn preview_send_handler(
     State(wallet): State<Arc<AgentWalletService>>,
     Json(req): Json<PreviewRequest>,
-) -> Result<Json<rustok_core::send::SendPreview>, (StatusCode, String)> {
+) -> Result<Json<PreviewResponse>, (StatusCode, String)> {
     let to = parse_address(&req.to).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let amount_wei = parse_u256(&req.amount_wei).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
     wallet
         .preview_send(to, amount_wei, req.chain_id)
         .await
-        .map(|(_, preview)| Json(preview))
+        .map(|(preview_id, preview)| {
+            Json(PreviewResponse {
+                preview_id,
+                preview,
+            })
+        })
         .map_err(|e| (map_error(&e), e.to_string()))
 }
 

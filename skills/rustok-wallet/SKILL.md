@@ -179,9 +179,10 @@ analysis. Returns a `preview_id` that must be passed to `execute_transaction`.
 }
 ```
 
-**Response:** `SendPreview`
+**Response:** `PreviewResponse`
 ```json
 {
+  "preview_id": "550e8400-e29b-41d4-a716-446655440000",
   "verdict": {
     "action": "allow",
     "risk_score": 15,

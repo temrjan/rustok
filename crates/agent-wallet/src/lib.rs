@@ -384,10 +384,17 @@ impl AgentWalletService {
         drop(audit_guard);
 
         // 3. Core preview (includes txguard analysis)
-        let preview = self
+        let from = self
             .wallet
-            .preview_send(&self.provider, to, amount_wei)
-            .await?;
+            .current_address()
+            .await
+            .ok_or(AgentWalletError::WalletLocked)?
+            .parse()
+            .map_err(|e| AgentWalletError::Wallet(format!("invalid address: {e}")))?;
+        let preview =
+            rustok_core::send::preview_send(&self.provider, chain_id, from, to, amount_wei)
+                .await
+                .map_err(|e| AgentWalletError::Wallet(e.to_string()))?;
 
         // 4. Cache preview (with params) for execute_send trust boundary
         let id = uuid::Uuid::new_v4();
@@ -470,10 +477,19 @@ impl AgentWalletService {
         drop(audit_guard);
 
         // Broadcast
-        match self
+        let signer = self
             .wallet
-            .execute_send(&self.provider, to, amount_wei)
+            .current_signer()
             .await
+            .ok_or(AgentWalletError::WalletLocked)?;
+        match rustok_core::send::execute_send(
+            &self.provider,
+            signer,
+            to,
+            amount_wei,
+            &cached.preview.route,
+        )
+        .await
         {
             Ok(result) => {
                 info!(tx_hash = %result.tx_hash, "agent send executed");
