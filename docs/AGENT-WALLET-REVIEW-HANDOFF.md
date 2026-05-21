@@ -2,8 +2,8 @@
 
 > **Роль:** Code Reviewer (Rust)  
 > **Область:** `crates/agent-wallet/`, `crates/agent-mcp/`  
-> **Ветка:** `feat/agent-wallet-pivot`  
-> **Статус:** Phase 1–3 — DONE. Phase 4 (OpenClaw Skill) — IN PROGRESS  
+> **Ветка:** `feat/openclaw-skill`  
+> **Статус:** Phase 1–4 — DONE. Phase 5 postponed.  
 > **Дата:** 2026-05-21
 
 ---
@@ -14,8 +14,10 @@
 |---|---|---|
 | **Phase 1** | `2659652` → `6da4145` | `AgentWalletService`: keystore, policy, audit (SQLite), budget, auto-unlock. Прошло 2 итерации ревью. 14 тестов. |
 | **Phase 2** | `4e0351c` → `650161f` → `57eb5c0` → `f2d70d0` | `WalletContext` (TTL cache + gas oracle), `txguard_risk_score` propagation, `agent-mcp` (Axum HTTP сервер с `/context`, `/preview`, `/execute`). Preview cache с trust boundary (Uuid + parameter validation). Graceful shutdown. |
+| **Phase 3** | — | `PositionTracker` (Aave v3, ERC-4626 vaults), `/positions` endpoint. |
+| **Phase 4** | — | OpenClaw Skill (`skills/rustok-wallet/`): SKILL.md, claw.json, examples, health-check.sh. E2E tested on Sepolia. Real tx executed (hash: `0x04ad4fa...a8f79c`). |
 
-**Всё замержено в `feat/agent-wallet-pivot`.** Инженер начинает Phase 3 (новый код). Твоя задача — ревьюить diff'ы.
+**Всё замержено в `feat/openclaw-skill`.** PR #39 открыт. Phase 5 в бэклоге.
 
 ---
 
@@ -160,8 +162,18 @@ crates/agent-mcp/
 ├── Cargo.toml
 ├── src/
 │   ├── lib.rs          # module re-exports
+│   ├── main.rs         # CLI entrypoint (clap), auto-unlock, server start
 │   ├── server.rs       # Axum router, handlers, graceful shutdown
-│   └── types.rs        # PreviewRequest, ExecuteRequest
+│   └── types.rs        # PreviewRequest, ExecuteRequest, PreviewResponse
+
+skills/rustok-wallet/
+├── SKILL.md            # OpenClaw skill spec (YAML frontmatter + 4 tools)
+├── claw.json           # Skill manifest
+├── README.md           # User-facing docs
+├── examples/
+│   └── policy.json     # Example policy config
+└── scripts/
+    └── health-check.sh # MCP server health check
 ```
 
 **Ключевые файлы для ревью:**
@@ -175,10 +187,11 @@ crates/agent-mcp/
 
 | Phase | Что планируется | Когда ревьюить |
 |---|---|---|
-| **Phase 3** | `PositionTracker` (Aave, ERC-4626 vaults) | ✅ DONE, замержено в `feat/agent-wallet-pivot` |
-| **Phase 4** | `OpenClaw Skill` (publish на clawhub.ai) | 🔄 IN PROGRESS — E2E тестирование, доработка до 100%. Phase 5 отложена. |
+| **Phase 3** | `PositionTracker` (Aave, ERC-4626 vaults) | ✅ DONE, замержено в `main` через PR #38 |
+| **Phase 4** | `OpenClaw Skill` (publish на clawhub.ai) | ✅ DONE — E2E tested, PR #39 open (`feat/openclaw-skill` → `main`) |
 | **Phase 5** | `TransactionTemplate` (reusable strategies, cron) | В бэклоге |
 | **Phase 5** | `StrategyEngine` — **НЕ ДЕЛАЕМ** (architectural anti-pattern) | — |
+| **Rejected** | Network Abstraction (auto-select `chain_id`) | ❌ Rejected — ручной выбор `chain_id`. Документировано в ROADMAP. |
 
 ---
 
@@ -188,7 +201,7 @@ crates/agent-mcp/
 cd /home/temrjan/Dev/projects/rustok
 
 # Проверить ветку
-git branch --show-current  # должно быть feat/agent-wallet-pivot
+git branch --show-current  # должно быть feat/openclaw-skill
 
 # Проверить последние коммиты
 git log --oneline -5
