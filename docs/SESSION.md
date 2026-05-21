@@ -87,6 +87,14 @@
 - **Security audit fixes** — txguard unknown selector bypass, scam checks in approval/permit/transferFrom, zeroize leaks (B256 stack, biometric password, mnemonic), frontend cancel tokens for all async signal writes
 - **BIOMETRIC_KEY hardcoded** — заменён на platform-native secure storage (Android Keystore / iOS Keychain / desktop keyring). Убран `aes-gcm` и `biometric.dat`.
 
+### 🤖 Agent Wallet Pivot (`feat/agent-wallet-pivot`)
+
+| Phase | Статус | Что сделано |
+|-------|--------|-------------|
+| Phase 1: Agent Wallet Core | ✅ | Keystore, policy, audit, budget, unlock — 14 тестов |
+| Phase 2: Agent Context + MCP | ✅ | WalletContext + TTL cache, txguard risk_score → audit, MCP HTTP server (3 tools) |
+| Phase 3: DeFi Connectors (MVP) | ✅ | `crates/agent-dapps/`: Aave v3 + ERC-4626 connectors, PositionTracker, `/positions` endpoint — 7 тестов |
+
 ### 📋 Known gaps (не блокеры)
 
 | Gap | Где | Статус |
