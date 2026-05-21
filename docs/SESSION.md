@@ -1,5 +1,8 @@
 # Rustok — Master Session Document
 
+> ⚠️ **DEPRECATED — устаревший стек.** Этот файл описывает Tauri+Leptos (WebView), отменён 2026-04-28.
+> **Источник истины:** `docs/NATIVE-MIGRATION-PLAN.md` — React Native + uniffi-bindgen-react-native + Rust core.
+>
 > **Единая точка входа для AI-сессий.** Прочитай этот файл ПОЛНОСТЬЮ перед любой работой.
 > Обновляй раздел «Статус» после каждой сессии. Код — источник правды, этот файл — навигация.
 
