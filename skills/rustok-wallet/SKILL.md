@@ -6,7 +6,7 @@ description: |
   Self-custody Ethereum Agent Wallet. Read wallet context, preview and execute
   ETH sends with hard policy limits, and track DeFi positions (Aave v3,
   ERC-4626 vaults). All actions are append-only audit logged.
-permissions: [network, shell]
+permissions: [network]
 tags: [crypto, ethereum, wallet, defi, agent-wallet, mcp]
 minOpenClawVersion: "0.8.0"
 ---
@@ -72,135 +72,190 @@ All limits are **enforced in code** — the LLM cannot negotiate them away.
 
 ### wallet_context
 
-Get current wallet state: address, balances, chain status, policy summary, gas
+Get current wallet state: address, cross-chain balances, policy limits, gas
 estimates, and DeFi positions.
 
-**HTTP:** `GET http://localhost:3000/context`
+**HTTP:** `POST /context`
 
-**Response:**
+**Response:** `WalletContext`
 ```json
 {
-  "address": "0x...",
-  "eth_balance_wei": "1234500000000000000",
-  "eth_balance": "1.2345 ETH",
-  "chain_id": 1,
-  "policy": {
+  "address": "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B",
+  "balances": {
+    "total_eth": "1.234500000000000000",
+    "per_chain": [
+      { "chain_id": 1, "chain_name": "Ethereum", "balance_wei": "1000000000000000000" }
+    ]
+  },
+  "allowed_chains": [1, 10, 42161, 8453],
+  "limits": {
     "max_single_tx_eth": 0.1,
     "max_daily_spend_eth": 0.5,
+    "daily_spend_remaining_eth": 0.45,
     "max_gas_fee_gwei": 100
   },
-  "daily_spent_wei": "50000000000000000",
-  "gas_estimate": {
-    "base_fee_gwei": 12.5,
-    "priority_fee_gwei": 1.2,
-    "total_estimate_gwei": 13.7
-  }
-}
-```
-
-### wallet_positions
-
-Get tracked DeFi positions (Aave v3 lending, ERC-4626 vaults) across supported
-chains.
-
-**HTTP:** `POST http://localhost:3000/positions`
-
-**Body:**
-```json
-{
-  "chains": [1, 42161],
-  "include_empty": false
-}
-```
-
-**Response:**
-```json
-{
+  "gas_oracle": {
+    "chains": [
+      {
+        "chain_id": 1,
+        "max_fee_per_gas_gwei": 25.5,
+        "max_priority_fee_per_gas_gwei": 1.5
+      }
+    ]
+  },
   "positions": [
     {
       "protocol": "aave_v3",
       "chain_id": 1,
-      "health_factor": "1.85",
-      "collateral": [...],
-      "debt": [...]
-    },
-    {
-      "protocol": "erc4626",
-      "chain_id": 1,
-      "vault": "0x...",
-      "asset": "0x...",
-      "balance": "1000000000000000000"
+      "asset_address": "0x...",
+      "asset_symbol": "aWETH",
+      "asset_name": "Aave WETH",
+      "asset_decimals": 18,
+      "balance": "1500000000000000000",
+      "balance_formatted": "1.5",
+      "value_usd": 3000.0,
+      "health_factor": "1.85"
     }
   ]
 }
 ```
 
-### preview_transaction
+### wallet_positions
 
-Simulate a transaction and get risk analysis without executing.
+Get tracked DeFi positions (Aave v3 lending, ERC-4626 vaults) for a given
+address. If `address` is omitted, uses the agent wallet's own address.
 
-**HTTP:** `POST http://localhost:3000/preview`
+**HTTP:** `POST /positions`
 
-**Body:**
+**Body:** `PositionsRequest`
 ```json
 {
-  "to": "0x...",
-  "value": "100000000000000000",
-  "data": "0x",
+  "address": "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B"
+}
+```
+
+**Response:** `Vec<Position>`
+```json
+[
+  {
+    "protocol": "aave_v3",
+    "chain_id": 1,
+    "asset_address": "0x...",
+    "asset_symbol": "aWETH",
+    "asset_name": "Aave WETH",
+    "asset_decimals": 18,
+    "balance": "1500000000000000000",
+    "balance_formatted": "1.5",
+    "value_usd": 3000.0,
+    "health_factor": "1.85"
+  },
+  {
+    "protocol": "erc4626",
+    "chain_id": 1,
+    "asset_address": "0x...",
+    "asset_symbol": "yvWETH",
+    "asset_name": "Yearn WETH Vault",
+    "asset_decimals": 18,
+    "balance": "1000000000000000000",
+    "balance_formatted": "1.0",
+    "value_usd": null
+  }
+]
+```
+
+### preview_transaction
+
+Preview a native ETH send. Runs policy + budget checks and txguard risk
+analysis. Returns a `preview_id` that must be passed to `execute_transaction`.
+
+**HTTP:** `POST /preview`
+
+**Body:** `PreviewRequest`
+```json
+{
+  "to": "0x0000000000000000000000000000000000000001",
+  "amount_wei": "100000000000000000",
   "chain_id": 1
 }
 ```
 
-**Response:**
+**Response:** `SendPreview`
 ```json
 {
-  "risk": "low",
-  "risk_score": 15,
-  "warnings": [],
-  "gas_estimate": 21000,
-  "policy_check": "pass",
-  "estimated_cost_eth": "0.0003"
+  "verdict": {
+    "action": "allow",
+    "risk_score": 15,
+    "findings": [],
+    "description": "Send 0.1 ETH to 0x0000...0001",
+    "simulation": {
+      "eth_change": -100000000000000000,
+      "token_changes": [],
+      "approval_changes": [],
+      "gas_used": 21000,
+      "reverted": false
+    }
+  },
+  "route": {
+    "chain_id": 1,
+    "chain_name": "Ethereum",
+    "estimated_gas": 21000,
+    "max_fee_per_gas": "25000000000",
+    "max_priority_fee_per_gas": "1500000000",
+    "estimated_cost": "525000000000000",
+    "available_balance": "1000000000000000000"
+  },
+  "explanation": "Send 0.1 ETH on Ethereum. Estimated cost: 0.000525 ETH (21k gas @ 25 gwei)."
 }
 ```
 
 ### execute_transaction
 
-Execute a signed transaction after policy check and txguard risk analysis.
+Execute a signed transaction. Requires a valid `preview_id` from the preceding
+`/preview` call. Re-runs policy and budget checks as defense-in-depth.
 
-**HTTP:** `POST http://localhost:3000/execute`
+**HTTP:** `POST /execute`
 
-**Body:**
+**Body:** `ExecuteRequest`
 ```json
 {
-  "to": "0x...",
-  "value": "100000000000000000",
-  "data": "0x",
-  "chain_id": 1
+  "to": "0x0000000000000000000000000000000000000001",
+  "amount_wei": "100000000000000000",
+  "chain_id": 1,
+  "preview_id": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
-**Response on success:**
+**Response on success:** `SendResult`
 ```json
 {
-  "tx_hash": "0x...",
-  "status": "pending",
-  "risk_score": 15,
-  "gas_used": 21000
+  "tx_hash": "0xabc123...",
+  "chain_id": 1,
+  "chain_name": "Ethereum",
+  "from": "0xAb5801a7D398351b8bE11C439e05C5B3259aeC9B",
+  "to": "0x0000000000000000000000000000000000000001",
+  "amount_wei": "100000000000000000",
+  "estimated_gas_cost": "525000000000000"
 }
 ```
 
-**Response on policy block:**
+**Response on policy block (HTTP 403):**
 ```json
-{
-  "error": "Policy violation: exceeds max_single_tx_eth"
-}
+"policy blocked: exceeds max_single_tx_eth"
 ```
 
-**Response on risk rejection:**
+**Response on budget exceeded (HTTP 403):**
 ```json
-{
-  "error": "Risk score 78 exceeds threshold (70)"
-}
+"daily budget exceeded: 0.450000 / 0.500000 ETH"
+```
+
+**Response on preview expired (HTTP 400):**
+```json
+"preview expired"
+```
+
+**Response on preview mismatch (HTTP 400):**
+```json
+"preview mismatch"
 ```
 
 ## Safety Guarantees
