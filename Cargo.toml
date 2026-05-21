@@ -74,6 +74,7 @@ clap = { version = "4", features = ["derive"] }
 # Logging
 tracing = "0.1"
 tracing-subscriber = "0.3"
+uuid = "1"
 
 # ─── Build profiles ────────────────────────────────────────────────
 # Optimize crypto crates in dev for tolerable Argon2id unlock times.

@@ -41,7 +41,7 @@ pub enum SendError {
 }
 
 /// Preview of a send operation (before broadcasting).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SendPreview {
     /// txguard verdict.
     pub verdict: Verdict,
@@ -52,7 +52,7 @@ pub struct SendPreview {
 }
 
 /// Result of a successful send.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct SendResult {
     /// Transaction hash.
     pub tx_hash: alloy_primitives::B256,

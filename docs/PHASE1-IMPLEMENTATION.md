@@ -1,618 +1,504 @@
-# Phase 1: LLM Agent — Подробный план реализации
+# Phase 1: LLM Agent — План реализации (v2)
 
 **Статус:** Ready for execution  
 **Срок:** 10-12 недель  
 **Цель:** Production-ready LLM-агент с 4 core tools (get_balance, send_tx, explain_tx, query_history)  
-**Стек:** Rig (rust-core) + Tauri 2.0 + Leptos 0.7 + rusqlite
+**Стек:** rig-core 0.37 + rig-derive 0.1 + React Native 0.85.2 + uniffi-bindgen-react-native 0.31.0-2
 
 ---
 
-## Неделя 0: Подготовка (3 дня)
+## Архитектура (фактическая)
 
-### День 0.1: Окружение
-- [ ] Клонировать `rustok` репозиторий
-- [ ] Убедиться, что `cargo`, `rustc`, `node`, `pnpm` установлены
-- [ ] Проверить сборку: `cargo test --workspace`
-- [ ] Проверить Tauri dev: `cd app && pnpm tauri dev`
-- [ ] Установить `cargo-edit`: `cargo install cargo-edit`
+```
+┌─────────────────────────────────────────────────────────────┐
+│  REACT NATIVE FRONTEND (mobile/)                            │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  AgentScreen.tsx — чат с агентом                     │    │
+│  │  - Сообщения пользователя / агента                  │    │
+│  │  - Streaming chunks (анимация печати)               │    │
+│  │  - Кнопки подтверждения / отмены                    │    │
+│  │  - Индикатор [THINKING] / [TOOL]                    │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                       │                                     │
+│  Zustand stores       │ agentStore.ts (dialog state)        │
+│  MMKV persistence     │ agentHistory.ts (chat history)      │
+│  Keychain secrets     │ llmApiKey.ts (encrypted API key)    │
+│                       ▼                                     │
+│  react-native-rustok-bridge (TurboModule)                   │
+└───────────────────────┬─────────────────────────────────────┘
+                        │ uniffi FFI
+                        ▼
+┌─────────────────────────────────────────────────────────────┐
+│  RUST MOBILE BINDINGS (crates/rustok-mobile-bindings/)      │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  WalletHandle — существующий facade                  │    │
+│  │  AgentHandle    — НОВЫЙ facade для LLM-агента       │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                       │                                     │
+│                       ▼                                     │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  crates/agent/ — LLM Agent core (rig)                │    │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │    │
+│  │  │   Intent    │  │   Dialog    │  │  Guardrails │  │    │
+│  │  │   Parser    │  │   Manager   │  │   Engine    │  │    │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  │    │
+│  │                                                      │    │
+│  │  ┌─────────────────────────────────────────────────┐  │    │
+│  │  │  TOOLS (#[rig_tool] async fn)                   │  │    │
+│  │  │  get_balance | send_tx | explain_tx | query_hist│  │    │
+│  │  └─────────────────────────────────────────────────┘  │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                       │                                     │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │  RIG FOUNDATION (rig-core)                          │    │
+│  │  Agent, CompletionModel, Tool Registry, Streaming   │    │
+│  └─────────────────────────────────────────────────────┘    │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  TXGUARD CRATE (txguard/) — ОБЯЗАТЕЛЬНЫЙ GATEKEEPER        │
+│  Parser + Rules + Simulator + Verdict                       │
+└──────────────────────────┬──────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────┐
+│  CORE CRATE (core/) — keyring, provider, router, explorer   │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### День 0.2: Изучить Rig
-- [ ] Прочитать `rig-core` docs: https://docs.rig.rs
-- [ ] Изучить примеры в `rig-core/examples/`
-  - `agent_with_tools.rs`
-  - `streaming.rs`
-  - `ollama_with_tools.rs`
-- [ ] Прочитать `rig-tool-macro` docs: https://docs.rs/rig-tool-macro
-- [ ] Запустить локальный пример с Ollama (если есть)
+### Граница Rust ↔ React Native
 
-### День 0.3: Архитектура
-- [ ] Прочитать `docs/RUSTOK_LLM_AGENT_PLAN_RIG.md`
-- [ ] Создать диаграмму данных flow (на бумаге или в excalidraw)
-- [ ] Утвердить границы: что в Phase 1, что отложено
-- [ ] Создать ветку: `git checkout -b feat/llm-agent-phase1`
+| Direction | Mechanism | Notes |
+|-----------|-----------|-------|
+| RN → Rust | `AgentHandle.chat(message)` — async uniffi call | Returns `AgentResponse` enum |
+| RN → Rust | `AgentHandle.confirm()` / `AgentHandle.cancel()` | State mutations |
+| Rust → RN | Polling / chunked response (uniffi `AsyncIterator`) | Streaming LLM chunks |
+| Secrets | `react-native-keychain` → passed to Rust on init | API key never persisted in Rust |
 
 ---
 
-## Неделя 1: Scaffold (E0 + E1)
+## 1. Зависимости
 
-### День 1.1: Создать crate `agent/`
-```bash
-cd crates
-cargo new --lib agent
+### Rust (crates/agent/Cargo.toml)
+
+```toml
+[package]
+name = "rustok-agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Rig — официальные пакеты
+rig-core = "0.37"
+rig-derive = "0.1"
+
+# Async (согласовано с workspace)
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = "1"
+
+# Internal
+rustok-core = { path = "../core" }
+txguard = { path = "../txguard" }
+rustok-types = { path = "../types" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "test-util"] }
+tempfile = "3"
 ```
 
-**Файлы:**
-- `crates/agent/Cargo.toml` — зависимости (rig-core, rig-tool-macro, tokio, serde, thiserror)
-- `crates/agent/src/lib.rs` — публичный API
-- `crates/agent/src/error.rs` — `AgentError` enum
-- `crates/agent/src/config.rs` — `AgentConfig` struct
+### React Native (mobile/)
 
-**DoD:** `cargo check -p agent` проходит без ошибок.
+Уже присутствуют:
+- `react-native-keychain` — для API key storage
+- `react-native-mmkv` — для dialog history
+- `zustand` — state management
 
-### День 1.2: Подключить `agent` к workspace
-- [ ] Добавить `agent` в корневой `Cargo.toml` workspace.members
-- [ ] Проверить, что весь workspace собирается: `cargo check --workspace`
+---
 
-### День 1.3: Intent types
-**Файл:** `crates/agent/src/intent/types.rs`
+## 2. Структура crates
+
+### crates/agent/ — LLM Agent core
+
+```
+crates/agent/
+├── Cargo.toml
+├── src/
+│   ├── lib.rs              # Публичный API
+│   ├── error.rs            # AgentError
+│   ├── config.rs           # AgentConfig, ProviderConfig
+│   │
+│   ├── intent/
+│   │   ├── mod.rs
+│   │   ├── types.rs        # IntentAction, IntentParams, ParseResult
+│   │   ├── parser.rs       # NL → Intent через Rig completion
+│   │   └── resolver.rs     # "Алиса" → 0x... (address book)
+│   │
+│   ├── dialog/
+│   │   ├── mod.rs
+│   │   ├── types.rs        # DialogState, DialogMessage
+│   │   └── manager.rs      # State machine
+│   │
+│   ├── guardrails/         # ⭐ NeMo-inspired code-level safety
+│   │   ├── mod.rs
+│   │   ├── engine.rs       # GuardrailEngine
+│   │   └── policy.rs       # Policy (amount limits, blocklists)
+│   │
+│   ├── validator/
+│   │   ├── mod.rs
+│   │   ├── address.rs
+│   │   ├── amount.rs       # "0.5", "max", "half" → U256
+│   │   └── balance.rs
+│   │
+│   ├── tools/              # ⭐ #[rig_tool] обёртки
+│   │   ├── mod.rs
+│   │   ├── get_balance.rs
+│   │   ├── send_tx.rs
+│   │   ├── explain_tx.rs
+│   │   └── query_history.rs
+│   │
+│   ├── provider.rs         # Factory для OpenRouter/Anthropic/Ollama
+│   └── agent.rs            # WalletAgent — сборка Rig Agent
+│
+└── tests/
+    ├── integration_tests.rs
+    ├── intent_tests.rs
+    ├── guardrail_tests.rs
+    └── tool_tests.rs
+```
+
+### crates/rustok-mobile-bindings/ — добавить AgentHandle
+
+Расширить существующий crate новыми uniffi-экспортами:
 
 ```rust
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum IntentAction {
-    Send,
-    Swap,
-    Bridge,
-    Approve,
-    Revoke,
-    QueryBalance,
-    QueryHistory,
-    ExplainTx,
+// src/agent_handle.rs (НОВЫЙ ФАЙЛ)
+#[derive(uniffi::Object)]
+pub struct AgentHandle {
+    agent: Arc<tokio::sync::Mutex<rustok_agent::WalletAgent>>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IntentParams {
-    pub action: IntentAction,
-    pub amount: Option<String>,
-    pub token: Option<String>,
-    pub to: Option<String>,
-    pub from: Option<String>,
-    pub chain: Option<String>,
-    pub slippage: Option<f64>,
-}
+#[uniffi::export(async_runtime = "tokio")]
+impl AgentHandle {
+    #[uniffi::constructor]
+    pub fn new(api_key: String, provider: String) -> Result<Arc<Self>, BindingsError> {
+        let config = build_config(&provider, &api_key)?;
+        let agent = rustok_agent::WalletAgent::new(config)?;
+        Ok(Arc::new(Self {
+            agent: Arc::new(tokio::sync::Mutex::new(agent)),
+        }))
+    }
 
-#[derive(Debug, Clone)]
-pub enum ParseResult {
-    Ready(IntentParams),
-    NeedsClarification(String),
-    Ambiguous(Vec<IntentParams>),
+    /// Send a message to the agent. Returns the complete response.
+    pub async fn chat(&self, message: String) -> Result<AgentResponse, BindingsError> {
+        let agent = self.agent.lock().await;
+        let response = agent.process(&message).await?;
+        Ok(response.into())
+    }
+
+    /// Confirm the pending action (after user taps "Confirm").
+    pub async fn confirm(&self) -> Result<String, BindingsError> {
+        let agent = self.agent.lock().await;
+        let result = agent.confirm_pending().await?;
+        Ok(result)
+    }
+
+    /// Cancel the pending action.
+    pub async fn cancel(&self) -> Result<(), BindingsError> {
+        let agent = self.agent.lock().await;
+        agent.cancel().await?;
+        Ok(())
+    }
+
+    /// Get current dialog state (for RN UI to show/hide confirm buttons).
+    pub async fn dialog_state(&self) -> Result<DialogStateDto, BindingsError> {
+        let agent = self.agent.lock().await;
+        Ok(agent.dialog_state().into())
+    }
 }
 ```
 
-**DoD:** Типы компилируются.
+### mobile/src/screens/agent/ — React Native UI
 
-### День 1.4: Dialog types
-**Файл:** `crates/agent/src/dialog/types.rs`
-
-```rust
-#[derive(Debug, Clone)]
-pub enum DialogState {
-    Idle,
-    AwaitingClarification { question: String, context: IntentParams },
-    AwaitingConfirmation { intent: IntentParams, explanation: String },
-    Processing,
-    Completed(Result<String, AgentError>),
-}
 ```
-
-### День 1.5: Error types
-**Файл:** `crates/agent/src/error.rs`
-
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum AgentError {
-    #[error("LLM provider error: {0}")]
-    Provider(String),
-    #[error("Validation error: {0}")]
-    Validation(String),
-    #[error("txguard blocked: {0}")]
-    TxGuardBlocked(String),
-    #[error("User cancelled")]
-    Cancelled,
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
+mobile/src/screens/agent/
+├── AgentScreen.tsx         # Основной экран чата
+├── components/
+│   ├── ChatBubble.tsx      # Сообщение пользователя / агента
+│   ├── ChatInput.tsx       # Поле ввода с кнопкой отправки
+│   ├── ConfirmButtons.tsx  # [Подтвердить] [Отменить]
+│   ├── ThinkingIndicator.tsx
+│   └── ToolCallBadge.tsx   # [TOOL: get_balance]
+├── hooks/
+│   ├── useAgentChat.ts     # Логика чата (send, stream, state)
+│   └── useAgentConfirm.ts  # Подтверждение / отмена
+└── stores/
+    └── agentStore.ts       # Zustand: messages, state, loading
 ```
 
 ---
 
-## Неделя 2: Rig Provider + Config (E1 завершение)
+## 3. Guardrails Engine (NeMo-inspired)
 
-### День 2.1: Provider config
-**Файл:** `crates/agent/src/config.rs`
-
-```rust
-pub struct AgentConfig {
-    pub provider: ProviderConfig,
-    pub timeout_seconds: u64,
-    pub max_retries: u32,
-    pub fallback: FallbackStrategy,
-}
-
-pub enum ProviderConfig {
-    OpenRouter { api_key: String, model: String },
-    Anthropic { api_key: String, model: String },
-    Ollama { base_url: String, model: String },
-}
-```
-
-### День 2.2: Создать модель Rig
-**Файл:** `crates/agent/src/provider.rs`
+Code-level safety gates. **НЕ prompt-level.**
 
 ```rust
-use rig::providers::openai::Client;
+// crates/agent/src/guardrails/engine.rs
+pub struct GuardrailEngine {
+    policy: Policy,
+    known_scam_addresses: Vec<String>,
+}
 
-pub fn create_model(config: &ProviderConfig) -> Result<Box<dyn CompletionModel>, AgentError> {
-    match config {
-        ProviderConfig::OpenRouter { api_key, model } => {
-            let client = Client::from_url("https://openrouter.ai/api/v1", api_key);
-            Ok(Box::new(client.completion_model(model)))
+impl GuardrailEngine {
+    /// Gate 1: Проверка intent ДО вызова tools/txguard
+    pub fn check_intent(&self, intent: &IntentParams) -> GuardrailResult {
+        match intent.action {
+            IntentAction::Send => self.check_send(intent),
+            IntentAction::Approve => self.check_approve(intent),
+            IntentAction::Swap | IntentAction::Bridge => GuardrailResult::Warn {
+                message: "Cross-chain / swap is experimental".into(),
+                requires_confirmation: true,
+            },
+            _ => GuardrailResult::Allow,
         }
-        // ...
+    }
+
+    fn check_send(&self, intent: &IntentParams) -> GuardrailResult {
+        if let Some(amount_str) = &intent.amount {
+            if let Ok(amount) = amount_str.parse::<f64>() {
+                if amount > self.policy.max_single_send_eth {
+                    return GuardrailResult::Block {
+                        reason: format!("Amount {:.2} ETH exceeds max ({:.2} ETH)", 
+                            amount, self.policy.max_single_send_eth)
+                    };
+                }
+                if amount > self.policy.require_confirmation_above_eth {
+                    return GuardrailResult::Warn {
+                        message: format!("Large transaction: {:.2} ETH", amount),
+                        requires_confirmation: true,
+                    };
+                }
+            }
+        }
+        GuardrailResult::Allow
+    }
+
+    fn check_approve(&self, intent: &IntentParams) -> GuardrailResult {
+        if self.policy.block_unlimited_approve {
+            if let Some(amount) = &intent.amount {
+                if amount.to_lowercase() == "unlimited" || amount == "max" {
+                    return GuardrailResult::Block {
+                        reason: "Unlimited token approvals are blocked".into(),
+                    };
+                }
+            }
+        }
+        GuardrailResult::Warn {
+            message: "Token approval requires confirmation".into(),
+            requires_confirmation: true,
+        }
     }
 }
 ```
 
-**DoD:** Модель создаётся, `cargo test` проходит.
-
-### День 2.3: Подключить к Tauri state
-**Файл:** `app/src-tauri/src/agent_state.rs`
-
-```rust
-pub struct AgentState {
-    pub agent: Arc<Mutex<WalletAgent>>,
-}
-```
-
-**DoD:** Tauri собирается с новым state.
-
-### День 2.4: Tauri command skeleton
-**Файл:** `app/src-tauri/src/commands/agent.rs`
-
-```rust
-#[tauri::command]
-pub async fn agent_chat(
-    state: State<'_, AgentState>,
-    message: String,
-) -> Result<String, String> {
-    // TODO: implement
-    Ok("pong".into())
-}
-```
-
-**DoD:** Frontend может вызвать `invoke("agent_chat", { message: "test" })` и получить "pong".
+**3 Gate безопасности:**
+1. **Guardrails check intent** — до txguard (amount limits, blocklist)
+2. **txguard preview** — симуляция + rules engine
+3. **User confirmation** — явное подтверждение в UI
 
 ---
 
-## Неделя 3: Tool Skeleton (E2 начало)
+## 4. Поток выполнения
 
-### День 3.1: GetBalance tool (mock)
-**Файл:** `crates/agent/src/tools/get_balance.rs`
-
-```rust
-#[rig_tool(
-    name = "get_balance",
-    description = "Get wallet balance..."
-)]
-pub async fn get_balance(params: GetBalanceParams) -> Result<String, AgentError> {
-    // MOCK: return hardcoded value
-    Ok("Balance: 1.5 ETH".into())
-}
 ```
+Пользователь вводит: "Отправь 0.5 ETH Алисе на Base"
 
-**DoD:** Tool компилируется, `#[rig_tool]` макрос работает.
+1. AgentScreen → useAgentChat.sendMessage(message)
+   → AgentHandle.chat(message) через uniffi
 
-### День 3.2: SendTx tool (mock)
-**Файл:** `crates/agent/src/tools/send_tx.rs`
+2. Rust: WalletAgent.process(message)
+   └── IntentParser.parse(message) → IntentParams { action: Send, amount: "0.5", ... }
 
-```rust
-#[rig_tool(...)]
-pub async fn send_transaction(params: SendTxParams) -> Result<String, AgentError> {
-    Ok("Transaction preview: Send 0.5 ETH to 0x1234...5678. Please confirm.".into())
-}
+3. Gate 1: GuardrailEngine.check_intent(intent)
+   └── amount 0.5 < 1.0 → GuardrailResult::Allow ✅
+
+4. SendTx tool:
+   └── resolver: "Алиса" → 0x1234...5678
+   └── validator: amount=0.5 ✅, chain=base ✅
+   └── txguard preview → Verdict: 🟢 ALLOW
+
+5. Gate 2: txguard preview passed ✅
+
+6. DialogManager → AwaitingConfirmation
+   └── Returns: "Send 0.5 ETH to Alice (0x1234...). Confirm?"
+
+7. AgentResponse::AwaitingConfirmation → RN UI
+   └── Показываются кнопки [Подтвердить] [Отменить]
+
+8. Пользователь нажимает "Подтвердить"
+   → AgentHandle.confirm()
+   → Rust: execute_send() → Keyring.sign() → Provider.broadcast()
+   → Returns: "✅ Sent. Tx: 0xabcd..."
 ```
-
-### День 3.3: ExplainTx tool (mock)
-**Файл:** `crates/agent/src/tools/explain_tx.rs`
-
-```rust
-#[rig_tool(...)]
-pub async fn explain_transaction(params: ExplainTxParams) -> Result<String, AgentError> {
-    Ok("This is a transfer of 0.5 ETH to Alice.".into())
-}
-```
-
-### День 3.4: QueryHistory tool (mock)
-**Файл:** `crates/agent/src/tools/query_history.rs`
-
-### День 3.5: Agent builder
-**Файл:** `crates/agent/src/agent.rs`
-
-```rust
-pub struct WalletAgent {
-    agent: Agent<dyn CompletionModel>,
-    dialog: DialogManager,
-}
-
-impl WalletAgent {
-    pub fn new(model: impl CompletionModel) -> Self {
-        let agent = Agent::new(model)
-            .preamble("You are Rustok wallet assistant...")
-            .tool(get_balance)
-            .tool(send_transaction)
-            .tool(explain_transaction)
-            .tool(query_history);
-        
-        Self { agent, dialog: DialogManager::new() }
-    }
-}
-```
-
-**DoD:** `cargo test -p agent` проходит. Агент создаётся с tools.
 
 ---
 
-## Неделя 4: Intent Parser (E3)
+## 5. План реализации по неделям
 
-### День 4.1: Parser skeleton
-**Файл:** `crates/agent/src/intent/parser.rs`
+### Неделя 0: Подготовка (3 дня)
 
-```rust
-pub struct IntentParser {
-    model: Box<dyn CompletionModel>,
-}
+- [ ] Изучить Rig: `rig-core 0.37`, `rig-derive 0.1`, примеры `#[rig_tool]`
+- [ ] Изучить uniffi: как добавить новый объект в `rustok-mobile-bindings`
+- [ ] Изучить bridge: `ubrn build`, `ubrn.config.yaml`, `react-native-rustok-bridge`
+- [ ] Изучить NeMo Guardrails концепцию (code-level gates)
+- [ ] Создать ветку: `git checkout -b feat/llm-agent-phase1`
+- [ ] Проверить: `cargo test --workspace` (110+ тестов зелёные)
 
-impl IntentParser {
-    pub async fn parse(&self, input: &str) -> Result<ParseResult, AgentError> {
-        // Use Rig completion to extract structured intent
-        let prompt = format!(
-            "Parse the following user request into a JSON object with fields: \
-             action, amount, token, to, chain.\n\nUser: {}",
-            input
-        );
-        
-        let response = self.model.prompt(&prompt).await?;
-        // Parse JSON from response
-        todo!()
-    }
-}
-```
+### Неделя 1: Scaffold
 
-### День 4.2: JSON extraction
-**Файл:** `crates/agent/src/intent/parser.rs`
+- **Day 1.1:** Создать `crates/agent/`, `Cargo.toml` с `rig-core`, `rig-derive`
+- **Day 1.2:** `agent-types`: `IntentAction`, `IntentParams`, `ParseResult`, `DialogState`
+- **Day 1.3:** `agent/error.rs` + `agent/config.rs`
+- **Day 1.4:** Подключить `agent` в workspace, `cargo check --workspace`
+- **Day 1.5:** Guardrails: `Policy`, `GuardrailResult`, `GuardrailEngine` skeleton
 
-- Извлечь JSON из markdown-ответа LLM
-- Десериализовать в `ParsedIntent`
-- Преобразовать в `IntentParams`
+**DoD:** `cargo check -p rustok-agent` проходит.
 
-### День 4.3: Clarification logic
-- Если LLM вернул `needs_clarification=true` → `ParseResult::NeedsClarification`
-- Иначе → `ParseResult::Ready`
+### Неделя 2: Rig Provider + Guardrails
 
-### День 4.4: Address resolution
-**Файл:** `crates/agent/src/intent/resolver.rs`
+- **Day 2.1:** Provider factory (OpenRouter, Anthropic, Ollama)
+- **Day 2.2:** Guardrails engine (amount limits, blocklist, approve blocking)
+- **Day 2.3:** Guardrail tests (10+ тестов)
+- **Day 2.4:** `AgentHandle` в `rustok-mobile-bindings` (uniffi scaffolding)
+- **Day 2.5:** `ubrn build` проходит, TypeScript types генерируются
 
-```rust
-pub fn resolve_name(name: &str, address_book: &AddressBook) -> Option<String> {
-    address_book.get(name).cloned()
-}
-```
+### Неделя 3: Tool Skeleton (mock)
 
-### День 4.5: Тесты парсера
-**Файл:** `crates/agent/tests/intent_tests.rs`
+- **Day 3.1:** `get_balance` tool (mock → "1.5 ETH")
+- **Day 3.2:** `send_transaction` tool (mock → preview)
+- **Day 3.3:** `explain_transaction` tool (mock)
+- **Day 3.4:** `query_history` tool (mock)
+- **Day 3.5:** `WalletAgent` builder с `.tool(...)`
 
-```rust
-#[test]
-fn test_parse_send() {
-    let input = "Отправь 0.5 ETH Алисе на Base";
-    // Use mock parser
-    let result = mock_parse(input);
-    assert_eq!(result.action, IntentAction::Send);
-    assert_eq!(result.amount, Some("0.5".into()));
-}
-```
+**DoD:** `cargo test -p rustok-agent` проходит. Агент создаётся с tools.
 
-**DoD:** 10+ тестов парсера, все проходят.
+### Неделя 4: Intent Parser
+
+- **Day 4.1:** Parser skeleton через Rig completion
+- **Day 4.2:** JSON extraction из markdown-ответа
+- **Day 4.3:** Clarification logic (needs_clarification → вопрос)
+- **Day 4.4:** Address resolution (address book)
+- **Day 4.5:** Intent tests (20+ тестов)
+
+### Неделя 5: Dialog Manager
+
+- **Day 5.1:** `DialogManager` struct + state machine
+- **Day 5.2:** State transitions (Idle → AwaitingClarification → Idle → AwaitingConfirmation)
+- **Day 5.3:** Confirmation logic (amount > threshold → require confirmation)
+- **Day 5.4:** History persistence (SQLite через rusqlite — в Rust)
+- **Day 5.5:** Dialog integration tests
+
+### Неделя 6: Validator + txguard Bridge
+
+- **Day 6.1:** Address validator
+- **Day 6.2:** Amount parser ("max", "half", decimal)
+- **Day 6.3:** Chain + Balance validators
+- **Day 6.4:** txguard bridge + Final Guardrail Gate
+- **Day 6.5:** End-to-end integration test
+
+### Неделя 7-8: React Native UI
+
+- **Day 7.1:** `mobile/src/screens/agent/` — scaffold экрана
+- **Day 7.2:** `ChatBubble`, `ChatInput` компоненты
+- **Day 7.3:** `useAgentChat` hook — вызов `AgentHandle.chat()`
+- **Day 7.4:** `ConfirmButtons` + `useAgentConfirm` (confirm/cancel)
+- **Day 7.5:** Streaming / chunking UI (typing indicator)
+- **Day 8.1:** Agent store (Zustand) — messages, state, loading
+- **Day 8.2:** Navigation — добавить Agent tab в TabsNavigator
+- **Day 8.3:** History persistence (MMKV)
+- **Day 8.4:** Mobile responsive (SafeArea, keyboard avoiding)
+- **Day 8.5:** Error states + retry
+
+### Неделя 9: API Key + Storage
+
+- **Day 9.1:** `react-native-keychain` — хранение API key
+- **Day 9.2:** Onboarding: экран ввода OpenRouter API key
+- **Day 9.3:** Pass API key из RN в Rust при создании AgentHandle
+- **Day 9.4:** Fallback: Ollama detection + offline mode
+- **Day 9.5:** Settings: смена provider / model
+
+### Неделя 10: Tests + Polish
+
+- **Day 10.1:** Unit tests: intent (20+), validator (15+), dialog (10+), guardrails (10+)
+- **Day 10.2:** Integration tests: e2e send flow
+- **Day 10.3:** Security tests (guardrail blocks)
+- **Day 10.4:** Performance: latency < 500ms parse, < 1s tool
+- **Day 10.5:** CI: cargo test, clippy, fmt + mobile build
+
+### Неделя 11-12: Mobile Build + Beta
+
+- **Day 11.1:** Android build: `ubrn build android`, Gradle build
+- **Day 11.2:** iOS build: `ubrn build ios`, Xcode build
+- **Day 11.3:** Device testing (real iPhone / Android)
+- **Day 11.4:** Internal beta (TestFlight / Play Console Internal)
+- **Day 11.5:** Bug fixes + stabilization
 
 ---
 
-## Неделя 5: Dialog Manager (E4)
+## 6. Безопасность
 
-### День 5.1: DialogManager struct
-**Файл:** `crates/agent/src/dialog/manager.rs`
+### API Keys
 
-```rust
-pub struct DialogManager {
-    state: DialogState,
-    history: Vec<DialogMessage>,
-}
+**Никогда не вшивать ключи в бинарник.**
+
+```typescript
+// RN: сохранение
+import * as Keychain from 'react-native-keychain';
+await Keychain.setGenericPassword('openrouter_api_key', apiKey, {
+  service: 'com.rustok.llm',
+  accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+});
+
+// RN: чтение при создании AgentHandle
+const credentials = await Keychain.getGenericPassword({ service: 'com.rustok.llm' });
+const handle = new AgentHandle(credentials.password, 'openrouter');
 ```
 
-### День 5.2: State transitions
-- Idle → AwaitingClarification
-- Idle → AwaitingConfirmation
-- AwaitingClarification → Idle (смержить ответ)
-- AwaitingConfirmation → Processing (подтверждение)
-- AwaitingConfirmation → Idle (отмена)
-
-### День 5.3: Confirmation logic
-**Файл:** `crates/agent/src/dialog/confirm.rs`
+### Fallback
 
 ```rust
-pub fn requires_confirmation(intent: &IntentParams) -> bool {
-    match intent.action {
-        IntentAction::Send if parse_amount(&intent.amount) > 1.0 => true,
-        IntentAction::Approve => true,
-        IntentAction::Swap => true,
-        _ => false,
-    }
-}
-```
-
-### День 5.4: History persistence
-- Сохранять историю в SQLite (пока mock — в памяти)
-- Загружать при старте
-
-### День 5.5: Integration test
-```rust
-#[tokio::test]
-async fn test_dialog_flow_send() {
-    let mut dialog = DialogManager::new();
-    
-    // User: "Отправь 0.5 ETH Алисе"
-    let result = dialog.process("Отправь 0.5 ETH Алисе").await?;
-    assert!(matches!(dialog.state(), DialogState::AwaitingConfirmation { .. }));
-    
-    // User: "Да"
-    let result = dialog.process("Да").await?;
-    assert!(matches!(dialog.state(), DialogState::Completed(Ok(_))));
+pub enum FallbackStrategy {
+    SwitchProvider { backup: ProviderConfig },
+    LocalModel { base_url: String, model: String }, // Ollama
+    Manual, // Без LLM — только базовые команды
 }
 ```
 
 ---
 
-## Неделя 6: Validator + txguard Bridge (E5)
-
-### День 6.1: Address validator
-**Файл:** `crates/agent/src/validator/address.rs`
-
-```rust
-pub fn validate_address(addr: &str) -> Result<Address, ValidationError> {
-    if addr.starts_with("0x") && addr.len() == 42 {
-        Ok(addr.parse()?)
-    } else {
-        Err(ValidationError::InvalidAddress)
-    }
-}
-```
-
-### День 6.2: Amount parser
-**Файл:** `crates/agent/src/validator/amount.rs`
-
-```rust
-pub fn parse_amount(amount: &str, token: &str, balance: U256) -> Result<U256, ValidationError> {
-    match amount.to_lowercase().as_str() {
-        "max" => Ok(balance),
-        "half" => Ok(balance / 2),
-        _ => Ok(parse_decimal(amount, decimals(token))?),
-    }
-}
-```
-
-### День 6.3: Chain + Balance validators
-**Файлы:** `validator/chain.rs`, `validator/balance.rs`
-
-### День 6.4: txguard Bridge
-**Файл:** `crates/agent/src/bridge/txguard.rs`
-
-```rust
-pub async fn intent_to_txguard(
-    intent: &IntentParams,
-    txguard: &TxGuard,
-) -> Result<TxPreview, AgentError> {
-    let tx = build_transaction(intent)?;
-    let verdict = txguard.analyze(&tx).await?;
-    Ok(TxPreview { tx, verdict })
-}
-```
-
-### День 6.5: Integration test end-to-end
-```rust
-#[tokio::test]
-async fn test_full_flow_send() {
-    let agent = create_test_agent().await;
-    
-    // Step 1: Parse
-    let intent = agent.parse("Отправь 0.5 ETH Алисе на Base").await?;
-    
-    // Step 2: Validate
-    agent.validate(&intent).await?;
-    
-    // Step 3: txguard
-    let preview = agent.txguard_preview(&intent).await?;
-    assert_eq!(preview.verdict.action, Action::Allow);
-}
-```
-
----
-
-## Неделя 7-8: Tauri + Leptos UI (E6)
-
-### День 7.1: Tauri streaming command
-**Файл:** `app/src-tauri/src/commands/agent.rs`
-
-```rust
-#[tauri::command]
-pub async fn agent_chat_stream(
-    app: AppHandle,
-    state: State<'_, AgentState>,
-    message: String,
-) -> Result<(), String> {
-    let mut stream = state.agent.stream(&message).await.map_err(|e| e.to_string())?;
-    
-    while let Some(chunk) = stream.next().await {
-        app.emit("agent:chunk", chunk).map_err(|e| e.to_string())?;
-    }
-    
-    app.emit("agent:done", ()).map_err(|e| e.to_string())?;
-    Ok(())
-}
-```
-
-### День 7.2: Leptos terminal component
-**Файл:** `app/src/pages/agent_terminal.rs`
-
-- Terminal UI с зелёным текстом на чёрном фоне
-- Input с приглашением `>`
-- Вывод сообщений потоком
-
-### День 7.3: Event listeners
-- Подписка на `agent:chunk` — добавление текста
-- Подписка на `agent:state_change` — показ кнопок подтверждения
-- Подписка на `agent:done` — разблокировка input
-
-### День 7.4: Confirmation UI
-- Когда backend отправляет `AwaitingConfirmation` — показать две кнопки
-- [Подтвердить] → `invoke("agent_confirm")`
-- [Отменить] → `invoke("agent_cancel")`
-
-### День 7.5: Mobile responsive
-- Terminal UI адаптируется под мобильный экран
-- Input фиксирован внизу
-- Scroll сообщений
-
----
-
-## Неделя 9: API Key + Stronghold (E7)
-
-### День 9.1: tauri-plugin-stronghold
-```bash
-cargo add tauri-plugin-stronghold
-```
-
-### День 9.2: Key storage
-**Файл:** `app/src-tauri/src/stronghold.rs`
-
-```rust
-pub fn store_api_key(api_key: &str) -> Result<(), StrongholdError> {
-    let stronghold = Stronghold::default();
-    let client = stronghold.load_client("rustok")?;
-    client.store.insert("openrouter_api_key", api_key.as_bytes())?;
-    Ok(())
-}
-
-pub fn get_api_key() -> Result<Option<String>, StrongholdError> {
-    // ...
-}
-```
-
-### День 9.3: Onboarding screen
-**Файл:** `app/src/pages/onboarding.rs`
-
-- Экран при первом запуске: "Введите ваш OpenRouter API key"
-- Кнопка "Где взять?" → ссылка на openrouter.ai
-- Сохранение в Stronghold
-
-### День 9.4: Fallback logic
-- Если LLM недоступен → показать сообщение + кнопка "Использовать локальную модель"
-- Если Ollama не запущен → инструкция по установке
-
----
-
-## Неделя 10: Tests + Polish (E8)
-
-### День 10.1: Unit tests
-- Intent parser: 20+ тестов
-- Validator: 15+ тестов
-- Dialog manager: 10+ тестов
-- Tools: 10+ тестов (mock core)
-
-### День 10.2: Integration tests
-**Файл:** `crates/agent/tests/integration_tests.rs`
-
-```rust
-#[tokio::test]
-async fn test_e2e_send_eth() {
-    let (agent, mock_core) = setup_test_env().await;
-    
-    // User sends message
-    let response = agent.process("Отправь 0.5 ETH Алисе на Base").await?;
-    
-    // Expect confirmation request
-    assert!(response.contains("Please confirm"));
-    
-    // User confirms
-    let result = agent.confirm().await?;
-    assert!(result.contains("Отправлено"));
-}
-```
-
-### День 10.3: Security tests
-- "Отправь всё на 0xScam" → BLOCK
-- "Send -1 ETH" → VALIDATION ERROR
-- "Approve unlimited USDC" → WARN + confirmation
-- Invalid address → VALIDATION ERROR
-
-### День 10.4: Performance tests
-- Latency parse: < 500ms
-- Latency tool execution: < 1s (mock)
-- Memory: < 50MB overhead
-
-### День 10.5: CI/CD
-- GitHub Actions: cargo test, clippy, fmt
-- Tauri build: macOS, iOS, Android
-- Coverage report
-
----
-
-## Неделя 11-12: Mobile Build + Beta (E9)
-
-### День 11.1: iOS build
-```bash
-cd app && pnpm tauri ios build
-```
-- Проверить, что SQLite bundled работает
-- Проверить Stronghold на iOS
-
-### День 11.2: Android build
-```bash
-cd app && pnpm tauri android build
-```
-- Проверить Android permissions
-- Проверить keyboard input в terminal
-
-### День 11.3: Device testing
-- iPhone: terminal UI, streaming, confirmation
-- Android: то же самое
-- Offline mode: fallback работает?
-
-### День 11.4: Internal beta
-- Распространить TestFlight / Internal Testing
-- Собрать feedback от команды
-
-### День 11.5: Bug fixes + stabilization
-- Исправить критические баги
-- Подготовить релизные notes
-
----
-
-## Definition of Done (Phase 1)
+## 7. Definition of Done (Phase 1)
 
 - [ ] 4 tools работают (get_balance, send_tx, explain_tx, query_history)
 - [ ] Intent parser 90%+ accuracy на тестовых фразах
 - [ ] Dialog manager handles clarification + confirmation
-- [ ] txguard integration: каждая транзакция проходит через защиту
-- [ ] Terminal UI в Leptos: streaming, confirmations
-- [ ] API key хранится в Stronghold
+- [ ] **Guardrails работают:**
+  - [ ] Code-level policy checks (amount limits, blocklist)
+  - [ ] txguard integration: каждая транзакция проходит через защиту
+  - [ ] Явное пользовательское подтверждение для рискованных операций
+- [ ] React Native UI: чат, streaming, confirm buttons
+- [ ] API key хранится в Keychain (encrypted)
 - [ ] Fallback: Ollama + offline mode
 - [ ] 100+ тестов, все проходят
 - [ ] CI зелёный
@@ -621,73 +507,59 @@ cd app && pnpm tauri android build
 
 ---
 
-## Что отложено в Phase 2 (не делать сейчас)
+## 8. Что отложено в Phase 2
 
 | Фича | Почему отложено |
 |------|-----------------|
-| WalletConnect / dApp connector | Требует отдельного research (нет зрелого Rust SDK) |
+| WalletConnect / dApp connector | Требует отдельного research |
 | DeFi yield aggregator | Требует dApp connector + внешние API |
 | Swap/Bridge tools | Требует Phase 4 cross-chain инфраструктуры |
 | Voice input | UX enhancement, не core |
 | Push notifications | Требует backend инфраструктуры |
+| RAG / Document Q&A | Не нужно для wallet assistant |
 
 ---
 
-## Каждый день: workflow
+## 9. Workflow (ежедневно)
 
 ```bash
 # Утро
  git status
  git log --oneline -5
- 
+
 # Работа
 # ... кодинг ...
- 
+
 # Перед коммитом
  cargo fmt --all --check
- cargo clippy --workspace --all-targets -- -D warnings
+ RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets --all-features
  cargo test --workspace
- 
+
 # Коммит
  git add .
  git commit -m "feat(agent): [что сделано]"
- 
+
 # Вечер
-# Push ветки, если готово
  git push origin feat/llm-agent-phase1
 ```
 
 ---
 
-## Зависимости
+## 10. Ресурсы
 
-```toml
-# crates/agent/Cargo.toml
-[dependencies]
-rig-core = "0.37"
-rig-tool-macro = "0.1"
-tokio = { version = "1", features = ["full"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-thiserror = "1"
-anyhow = "1"
-
-# Database
-rusqlite = { version = "0.32", features = ["bundled"] }
-
-# Tauri (в app crate)
-tauri = { version = "2", features = [] }
-tauri-plugin-stronghold = "2"
-```
+| Ресурс | URL / Путь |
+|--------|-----------|
+| Rig docs | https://docs.rig.rs |
+| Rig examples | https://github.com/0xPlaygrounds/rig |
+| rig-derive examples | `crates/rig-derive/examples/rig_tool/` |
+| uniffi-rs docs | https://mozilla.github.io/uniffi-rs |
+| ubrn docs | https://github.com/jhugman/uniffi-bindgen-react-native |
+| NeMo Guardrails (concept) | https://github.com/NVIDIA/NeMo-Guardrails |
+| This document | `docs/PHASE1-IMPLEMENTATION.md` |
+| Architecture | `docs/RUSTOK_LLM_AGENT_PLAN_RIG.md` |
+| Session status | `docs/SESSION.md` |
 
 ---
 
-## Ресурсы для разработки
-
-- Rig docs: https://docs.rig.rs
-- Rig examples: https://github.com/0xPlaygrounds/rig/tree/main/rig-core/examples
-- Tauri v2 docs: https://v2.tauri.app
-- Leptos docs: https://leptos.dev
-- rusqlite docs: https://docs.rs/rusqlite
-- This document: `docs/PHASE1-IMPLEMENTATION.md`
-- Architecture: `docs/RUSTOK_LLM_AGENT_PLAN_RIG.md`
+*Обновлено: 2026-05-21 (v2)*  
+*Изменения от v1:* Tauri/Leptos → React Native + uniffi, rig-tool-macro → rig-derive, добавлен AgentHandle, Keychain storage, RN UI scaffold*
