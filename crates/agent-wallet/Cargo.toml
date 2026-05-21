@@ -41,6 +41,9 @@ tracing = { workspace = true }
 # Security
 zeroize = "1"
 
+# IDs
+uuid = { version = "1", features = ["v4", "serde"] }
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3"

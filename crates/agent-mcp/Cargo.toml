@@ -13,8 +13,8 @@ workspace = true
 rustok-agent-wallet = { path = "../agent-wallet" }
 rustok-core = { path = "../core" }
 
-axum = "0.7"
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+axum = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

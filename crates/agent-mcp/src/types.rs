@@ -22,6 +22,6 @@ pub struct ExecuteRequest {
     pub amount_wei: String,
     /// Target chain ID.
     pub chain_id: u64,
-    /// txguard risk score from the preceding preview call.
-    pub txguard_risk_score: u8,
+    /// Preview ID returned by the preceding `/preview` call.
+    pub preview_id: String,
 }

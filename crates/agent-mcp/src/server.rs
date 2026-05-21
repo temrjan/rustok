@@ -8,8 +8,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
-use rustok_agent_wallet::AgentWalletService;
-use tracing::warn;
+use rustok_agent_wallet::{AgentWalletError, AgentWalletService};
 
 use crate::types::{ExecuteRequest, PreviewRequest};
 
@@ -27,12 +26,13 @@ impl McpServer {
         Self { wallet }
     }
 
-    /// Start the HTTP server and block until shutdown.
+    /// Start the HTTP server and run until graceful shutdown (Ctrl-C).
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if the TCP listener cannot be bound.
-    pub async fn run(self, port: u16) {
+    /// Returns `std::io::Error` if the TCP listener cannot be bound or the
+    /// server encounters an I/O error.
+    pub async fn run(self, port: u16) -> Result<(), std::io::Error> {
         let app = Router::new()
             .route("/health", get(health_check))
             .route("/context", post(get_context_handler))
@@ -41,9 +41,13 @@ impl McpServer {
             .with_state(self.wallet);
 
         let addr = format!("127.0.0.1:{port}");
-        let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+        let listener = tokio::net::TcpListener::bind(&addr).await?;
         tracing::info!(%addr, "MCP server listening");
-        axum::serve(listener, app).await.unwrap();
+
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
+        Ok(())
     }
 }
 
@@ -53,57 +57,84 @@ async fn health_check() -> &'static str {
 
 async fn get_context_handler(
     State(wallet): State<Arc<AgentWalletService>>,
-) -> Result<Json<rustok_agent_wallet::context::WalletContext>, StatusCode> {
-    wallet.context().await.map(Json).map_err(|e| {
-        warn!(%e, "context request failed");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })
+) -> Result<Json<rustok_agent_wallet::context::WalletContext>, (StatusCode, String)> {
+    wallet
+        .context()
+        .await
+        .map(Json)
+        .map_err(|e| (map_error(&e), e.to_string()))
 }
 
 async fn preview_send_handler(
     State(wallet): State<Arc<AgentWalletService>>,
     Json(req): Json<PreviewRequest>,
-) -> Result<Json<rustok_core::send::SendPreview>, StatusCode> {
-    let to = parse_address(&req.to)?;
-    let amount_wei = parse_u256(&req.amount_wei)?;
+) -> Result<Json<rustok_core::send::SendPreview>, (StatusCode, String)> {
+    let to = parse_address(&req.to).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let amount_wei = parse_u256(&req.amount_wei).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
     wallet
         .preview_send(to, amount_wei, req.chain_id)
         .await
-        .map(Json)
-        .map_err(|e| {
-            warn!(%e, "preview request failed");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })
+        .map(|(_, preview)| Json(preview))
+        .map_err(|e| (map_error(&e), e.to_string()))
 }
 
 async fn execute_send_handler(
     State(wallet): State<Arc<AgentWalletService>>,
     Json(req): Json<ExecuteRequest>,
-) -> Result<Json<rustok_core::send::SendResult>, StatusCode> {
-    let to = parse_address(&req.to)?;
-    let amount_wei = parse_u256(&req.amount_wei)?;
+) -> Result<Json<rustok_core::send::SendResult>, (StatusCode, String)> {
+    let to = parse_address(&req.to).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
+    let amount_wei = parse_u256(&req.amount_wei).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
     wallet
-        .execute_send(to, amount_wei, req.chain_id, req.txguard_risk_score)
+        .execute_send(to, amount_wei, req.chain_id, req.preview_id)
         .await
         .map(Json)
-        .map_err(|e| {
-            warn!(%e, "execute request failed");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })
+        .map_err(|e| (map_error(&e), e.to_string()))
 }
 
-fn parse_address(s: &str) -> Result<alloy_primitives::Address, StatusCode> {
-    s.parse().map_err(|e| {
-        warn!(%s, %e, "invalid address");
-        StatusCode::BAD_REQUEST
-    })
+fn parse_address(s: &str) -> Result<alloy_primitives::Address, String> {
+    s.parse().map_err(|e| format!("invalid address '{s}': {e}"))
 }
 
-fn parse_u256(s: &str) -> Result<alloy_primitives::U256, StatusCode> {
-    s.parse().map_err(|e| {
-        warn!(%s, %e, "invalid u256");
-        StatusCode::BAD_REQUEST
-    })
+fn parse_u256(s: &str) -> Result<alloy_primitives::U256, String> {
+    s.parse().map_err(|e| format!("invalid u256 '{s}': {e}"))
+}
+
+const fn map_error(e: &AgentWalletError) -> StatusCode {
+    match e {
+        AgentWalletError::PolicyBlocked(_) | AgentWalletError::BudgetExceeded { .. } => {
+            StatusCode::FORBIDDEN
+        }
+        AgentWalletError::WalletLocked => StatusCode::UNAUTHORIZED,
+        AgentWalletError::InvalidAmount(_) => StatusCode::BAD_REQUEST,
+        AgentWalletError::PreviewExpired | AgentWalletError::PreviewMismatch => {
+            StatusCode::BAD_REQUEST
+        }
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
 }

@@ -28,7 +28,7 @@ use std::path::Path;
 
 use alloy_primitives::{Address, U256};
 use rustok_core::provider::MultiProvider;
-use rustok_core::send::{SendError, SendPreview, SendResult};
+use rustok_core::send::{SendPreview, SendResult};
 use rustok_core::wallet::WalletService;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
@@ -74,6 +74,14 @@ pub enum AgentWalletError {
     /// Wallet is locked.
     #[error("wallet locked")]
     WalletLocked,
+
+    /// Preview expired (TTL exceeded).
+    #[error("preview expired")]
+    PreviewExpired,
+
+    /// Preview parameters do not match the cached preview.
+    #[error("preview mismatch")]
+    PreviewMismatch,
 }
 
 impl From<std::io::Error> for AgentWalletError {
@@ -85,12 +93,6 @@ impl From<std::io::Error> for AgentWalletError {
 impl From<rusqlite::Error> for AgentWalletError {
     fn from(err: rusqlite::Error) -> Self {
         Self::Audit(err.to_string())
-    }
-}
-
-impl From<SendError> for AgentWalletError {
-    fn from(err: SendError) -> Self {
-        Self::Wallet(err.to_string())
     }
 }
 
@@ -116,6 +118,8 @@ pub struct AgentWalletService {
     unlock: UnlockStrategy,
     /// TTL cache for [`WalletContext`].
     context_cache: Mutex<Option<(std::time::Instant, context::WalletContext)>>,
+    /// TTL cache for [`SendPreview`] results (5 min).
+    preview_cache: Mutex<std::collections::HashMap<uuid::Uuid, (std::time::Instant, SendPreview)>>,
 }
 
 impl AgentWalletService {
@@ -144,6 +148,7 @@ impl AgentWalletService {
         let audit = Mutex::new(AuditLog::open(audit_path)?);
         let budget = BudgetTracker::new(policy.max_daily_spend_eth);
         let context_cache = Mutex::new(None);
+        let preview_cache = Mutex::new(std::collections::HashMap::new());
 
         Ok(Self {
             wallet,
@@ -153,6 +158,7 @@ impl AgentWalletService {
             budget,
             unlock,
             context_cache,
+            preview_cache,
         })
     }
 
@@ -253,19 +259,26 @@ impl AgentWalletService {
         };
 
         // 3. Gas oracle (best-effort, parallel)
-        let mut chains = Vec::with_capacity(allowed_chains.len());
-        for chain_id in &allowed_chains {
-            match self.provider.gas_fees(*chain_id).await {
-                Ok(gas) => {
-                    chains.push(context::ChainGasFees {
-                        chain_id: *chain_id,
+        let mut set = tokio::task::JoinSet::new();
+        for chain_id in allowed_chains.clone() {
+            let provider = self.provider.clone();
+            set.spawn(async move {
+                provider
+                    .gas_fees(chain_id)
+                    .await
+                    .map(|gas| context::ChainGasFees {
+                        chain_id,
                         max_fee_per_gas_gwei: gas.max_fee_per_gas as f64 / 1e9,
                         max_priority_fee_per_gas_gwei: gas.max_priority_fee_per_gas as f64 / 1e9,
-                    });
-                }
-                Err(e) => {
-                    tracing::warn!(chain_id, error = %e, "failed to fetch gas fees");
-                }
+                    })
+            });
+        }
+        let mut chains = Vec::with_capacity(allowed_chains.len());
+        while let Some(res) = set.join_next().await {
+            match res {
+                Ok(Ok(gas)) => chains.push(gas),
+                Ok(Err(e)) => tracing::warn!(error = %e, "failed to fetch gas fees"),
+                Err(e) => tracing::warn!(error = %e, "gas fetch task panicked"),
             }
         }
         let gas_oracle = context::GasSnapshot { chains };
@@ -289,8 +302,10 @@ impl AgentWalletService {
     /// 1. Checks policy (amount, chain, blocklist).
     /// 2. Checks daily budget.
     /// 3. Runs txguard in audit mode (logs risk, does NOT block).
-    /// 4. Returns the preview for the agent to inspect.
+    /// 4. Returns a preview ID + the preview for the agent to inspect.
     ///
+    /// The preview ID is valid for 5 minutes and must be passed to
+    /// [`execute_send`] so the trusted txguard risk score is used.
     /// No audit entry is written for a preview — the budget is only consumed
     /// when the transaction is actually executed.
     pub async fn preview_send(
@@ -298,7 +313,7 @@ impl AgentWalletService {
         to: Address,
         amount_wei: U256,
         chain_id: u64,
-    ) -> Result<SendPreview, AgentWalletError> {
+    ) -> Result<(uuid::Uuid, SendPreview), AgentWalletError> {
         let amount_eth = wei_to_eth(amount_wei)?;
 
         // 1. Policy gate
@@ -339,21 +354,44 @@ impl AgentWalletService {
             .preview_send(&self.provider, to, amount_wei)
             .await?;
 
-        Ok(preview)
+        // 4. Cache preview for execute_send trust boundary
+        let id = uuid::Uuid::new_v4();
+        self.preview_cache
+            .lock()
+            .await
+            .insert(id, (std::time::Instant::now(), preview.clone()));
+
+        Ok((id, preview))
     }
 
     /// Execute a native ETH send.
     ///
-    /// Re-runs policy and budget checks as defense-in-depth, broadcasts the
+    /// Re-runs policy and budget checks as defense-in-depth, verifies the
+    /// preview ID to obtain the trusted txguard risk score, broadcasts the
     /// transaction, and records the outcome in the audit log.
     pub async fn execute_send(
         &self,
         to: Address,
         amount_wei: U256,
         chain_id: u64,
-        txguard_risk_score: u8,
+        preview_id: String,
     ) -> Result<SendResult, AgentWalletError> {
         let amount_eth = wei_to_eth(amount_wei)?;
+
+        // Resolve preview ID → trusted risk score
+        let preview_id = preview_id
+            .parse::<uuid::Uuid>()
+            .map_err(|_| AgentWalletError::PreviewMismatch)?;
+        let preview = {
+            let cache = self.preview_cache.lock().await;
+            let (instant, preview) = cache
+                .get(&preview_id)
+                .ok_or(AgentWalletError::PreviewExpired)?;
+            if instant.elapsed() > std::time::Duration::from_secs(300) {
+                return Err(AgentWalletError::PreviewExpired);
+            }
+            preview.clone()
+        };
 
         // Defense-in-depth: re-check policy and budget at execution time.
         match self.policy.check_send(&to, amount_eth, chain_id) {
@@ -403,8 +441,9 @@ impl AgentWalletService {
                     tx_hash: Some(result.tx_hash.to_string()),
                     chain_id: Some(chain_id),
                     amount_eth,
-                    gas_cost_eth: 0.0, // actual cost requires receipt fetch
-                    txguard_risk_score,
+                    // TODO(#42): fetch receipt and compute actual gas cost
+                    gas_cost_eth: 0.0,
+                    txguard_risk_score: preview.verdict.risk_score,
                     success: true,
                     error: None,
                 })?;
@@ -422,8 +461,9 @@ impl AgentWalletService {
                     tx_hash: None,
                     chain_id: Some(chain_id),
                     amount_eth,
+                    // TODO(#42): fetch receipt and compute actual gas cost
                     gas_cost_eth: 0.0,
-                    txguard_risk_score,
+                    txguard_risk_score: preview.verdict.risk_score,
                     success: false,
                     error: Some(err_str.clone()),
                 })?;
