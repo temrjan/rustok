@@ -29,6 +29,7 @@ use alloy_primitives::{Address, U256};
 use rustok_core::provider::MultiProvider;
 use rustok_core::send::{SendError, SendPreview, SendResult};
 use rustok_core::wallet::WalletService;
+use tokio::sync::Mutex;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
@@ -64,6 +65,10 @@ pub enum AgentWalletError {
     /// IO / storage error.
     #[error("storage: {0}")]
     Storage(String),
+
+    /// Invalid amount conversion.
+    #[error("invalid amount: {0}")]
+    InvalidAmount(String),
 }
 
 impl From<std::io::Error> for AgentWalletError {
@@ -99,7 +104,7 @@ pub struct AgentWalletService {
     /// Hard limits.
     policy: AgentPolicy,
     /// Append-only audit log.
-    audit: AuditLog,
+    audit: Mutex<AuditLog>,
     /// Daily spend tracker.
     budget: BudgetTracker,
     /// How the wallet is unlocked headlessly.
@@ -129,7 +134,7 @@ impl AgentWalletService {
         let wallet = WalletService::new(&wallet_dir);
         let provider = MultiProvider::default_chains();
         let audit_path = wallet_dir.join("audit.db");
-        let audit = AuditLog::open(audit_path)?;
+        let audit = Mutex::new(AuditLog::open(audit_path)?);
         let budget = BudgetTracker::new(policy.max_daily_spend_eth);
 
         Ok(Self {
@@ -208,26 +213,32 @@ impl AgentWalletService {
     /// 2. Checks daily budget.
     /// 3. Runs txguard in audit mode (logs risk, does NOT block).
     /// 4. Returns the preview for the agent to inspect.
+    ///
+    /// No audit entry is written for a preview — the budget is only consumed
+    /// when the transaction is actually executed.
     pub async fn preview_send(
         &self,
         to: Address,
         amount_wei: U256,
         chain_id: u64,
     ) -> Result<SendPreview, AgentWalletError> {
-        let amount_eth = wei_to_eth(amount_wei);
+        let amount_eth = wei_to_eth(amount_wei)?;
 
         // 1. Policy gate
         match self.policy.check_send(&to, amount_eth, chain_id) {
             PolicyResult::Allow => {}
             PolicyResult::Block { reason } => {
-                self.log_policy_reject(AgentAction::Send, amount_eth, &reason, chain_id);
+                self.log_policy_reject(AgentAction::Send, amount_eth, &reason, chain_id)
+                    .await;
                 return Err(AgentWalletError::PolicyBlocked(reason));
             }
         }
 
         // 2. Budget gate
-        if !self.budget.can_spend(&self.audit, amount_eth)? {
-            let spent = self.budget.spent_today(&self.audit)?;
+        let audit_guard = self.audit.lock().await;
+        if !self.budget.can_spend(&audit_guard, amount_eth)? {
+            let spent = self.budget.spent_today(&audit_guard)?;
+            drop(audit_guard);
             self.log_policy_reject(
                 AgentAction::Send,
                 amount_eth,
@@ -236,12 +247,14 @@ impl AgentWalletService {
                     self.policy.max_daily_spend_eth
                 ),
                 chain_id,
-            );
+            )
+            .await;
             return Err(AgentWalletError::BudgetExceeded {
                 spent,
                 limit: self.policy.max_daily_spend_eth,
             });
         }
+        drop(audit_guard);
 
         // 3. Core preview (includes txguard analysis)
         let preview = self
@@ -249,42 +262,107 @@ impl AgentWalletService {
             .preview_send(&self.provider, to, amount_wei)
             .await?;
 
-        // 4. Log audit (preview only, not yet broadcast)
-        self.audit.append(&AuditEntry {
-            id: 0,
-            timestamp: chrono::Utc::now(),
-            action: AgentAction::Send,
-            protocol: None,
-            target_address: Some(format!("{to:#x}")),
-            tx_hash: None,
-            chain_id: Some(chain_id),
-            amount_eth,
-            gas_cost_eth: wei_to_eth(preview.route.estimated_cost),
-            txguard_risk_score: preview.verdict.risk_score,
-            success: true,
-            error: None,
-        })?;
-
         Ok(preview)
     }
 
-    /// Execute a native ETH send (policy already checked in preview).
+    /// Execute a native ETH send.
+    ///
+    /// Re-runs policy and budget checks as defense-in-depth, broadcasts the
+    /// transaction, and records the outcome in the audit log.
     pub async fn execute_send(
         &self,
         to: Address,
         amount_wei: U256,
+        chain_id: u64,
     ) -> Result<SendResult, AgentWalletError> {
-        let result = self
+        let amount_eth = wei_to_eth(amount_wei)?;
+
+        // Defense-in-depth: re-check policy and budget at execution time.
+        match self.policy.check_send(&to, amount_eth, chain_id) {
+            PolicyResult::Allow => {}
+            PolicyResult::Block { reason } => {
+                self.log_policy_reject(AgentAction::Send, amount_eth, &reason, chain_id)
+                    .await;
+                return Err(AgentWalletError::PolicyBlocked(reason));
+            }
+        }
+
+        let audit_guard = self.audit.lock().await;
+        if !self.budget.can_spend(&audit_guard, amount_eth)? {
+            let spent = self.budget.spent_today(&audit_guard)?;
+            drop(audit_guard);
+            self.log_policy_reject(
+                AgentAction::Send,
+                amount_eth,
+                &format!(
+                    "daily budget exceeded: {spent:.6} / {} ETH",
+                    self.policy.max_daily_spend_eth
+                ),
+                chain_id,
+            )
+            .await;
+            return Err(AgentWalletError::BudgetExceeded {
+                spent,
+                limit: self.policy.max_daily_spend_eth,
+            });
+        }
+        drop(audit_guard);
+
+        // Broadcast
+        match self
             .wallet
             .execute_send(&self.provider, to, amount_wei)
-            .await?;
-        info!(tx_hash = %result.tx_hash, "agent send executed");
-        Ok(result)
+            .await
+        {
+            Ok(result) => {
+                info!(tx_hash = %result.tx_hash, "agent send executed");
+                self.audit.lock().await.append(&AuditEntry {
+                    id: 0,
+                    timestamp: chrono::Utc::now(),
+                    action: AgentAction::Send,
+                    protocol: None,
+                    target_address: Some(format!("{to:#x}")),
+                    tx_hash: Some(result.tx_hash.to_string()),
+                    chain_id: Some(chain_id),
+                    amount_eth,
+                    gas_cost_eth: 0.0, // actual cost requires receipt fetch
+                    txguard_risk_score: 0,
+                    success: true,
+                    error: None,
+                })?;
+                Ok(result)
+            }
+            Err(e) => {
+                let err_str = e.to_string();
+                warn!(%err_str, "agent send failed");
+                self.audit.lock().await.append(&AuditEntry {
+                    id: 0,
+                    timestamp: chrono::Utc::now(),
+                    action: AgentAction::Send,
+                    protocol: None,
+                    target_address: Some(format!("{to:#x}")),
+                    tx_hash: None,
+                    chain_id: Some(chain_id),
+                    amount_eth,
+                    gas_cost_eth: 0.0,
+                    txguard_risk_score: 0,
+                    success: false,
+                    error: Some(err_str.clone()),
+                })?;
+                Err(AgentWalletError::Wallet(err_str))
+            }
+        }
     }
 
-    /// Read-only access to the audit log.
-    pub const fn audit(&self) -> &AuditLog {
-        &self.audit
+    /// Query the audit log.
+    pub async fn audit_query(
+        &self,
+        from: Option<chrono::DateTime<chrono::Utc>>,
+        to: Option<chrono::DateTime<chrono::Utc>>,
+        action: Option<AgentAction>,
+        limit: usize,
+    ) -> Result<Vec<AuditEntry>, AgentWalletError> {
+        Ok(self.audit.lock().await.query(from, to, action, limit)?)
     }
 
     /// Read-only access to the policy.
@@ -301,9 +379,15 @@ impl AgentWalletService {
     // Internal helpers
     // ------------------------------------------------------------------
 
-    fn log_policy_reject(&self, _action: AgentAction, amount: f64, reason: &str, chain_id: u64) {
+    async fn log_policy_reject(
+        &self,
+        _action: AgentAction,
+        amount: f64,
+        reason: &str,
+        chain_id: u64,
+    ) {
         warn!(%reason, amount, "agent operation blocked by policy");
-        let _ = self.audit.append(&AuditEntry {
+        let _ = self.audit.lock().await.append(&AuditEntry {
             id: 0,
             timestamp: chrono::Utc::now(),
             action: AgentAction::PolicyReject,
@@ -320,9 +404,10 @@ impl AgentWalletService {
     }
 }
 
-fn wei_to_eth(wei: U256) -> f64 {
+fn wei_to_eth(wei: U256) -> Result<f64, AgentWalletError> {
     let eth = alloy_primitives::utils::format_ether(wei);
-    eth.parse::<f64>().unwrap_or(0.0)
+    eth.parse::<f64>()
+        .map_err(|e| AgentWalletError::InvalidAmount(format!("invalid ether format: {e}")))
 }
 
 #[cfg(test)]
@@ -338,9 +423,12 @@ mod tests {
             max_daily_spend_eth: 0.5,
             ..Default::default()
         };
-        let service =
-            AgentWalletService::new(dir.path(), policy, UnlockStrategy::Fixed("test1234".into()))
-                .unwrap();
+        let service = AgentWalletService::new(
+            dir.path(),
+            policy,
+            UnlockStrategy::Fixed(Zeroizing::new("test1234".to_string())),
+        )
+        .unwrap();
 
         assert!(!service.has_wallet().await.unwrap());
 
@@ -373,9 +461,12 @@ mod tests {
             max_daily_spend_eth: 0.1,
             ..Default::default()
         };
-        let service =
-            AgentWalletService::new(dir.path(), policy, UnlockStrategy::Fixed("test1234".into()))
-                .unwrap();
+        let service = AgentWalletService::new(
+            dir.path(),
+            policy,
+            UnlockStrategy::Fixed(Zeroizing::new("test1234".to_string())),
+        )
+        .unwrap();
 
         service
             .create_wallet(Zeroizing::new("test1234".to_string()))
@@ -391,8 +482,8 @@ mod tests {
 
         // Audit log should have the rejection
         let rejects = service
-            .audit()
-            .query(None, None, Some(AgentAction::PolicyReject), 10)
+            .audit_query(None, None, Some(AgentAction::PolicyReject), 10)
+            .await
             .unwrap();
         assert_eq!(rejects.len(), 1);
     }

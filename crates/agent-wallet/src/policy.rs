@@ -8,6 +8,7 @@
 
 use alloy_primitives::Address;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 
 /// Hard limits for agent wallet operations.
 ///
@@ -32,7 +33,7 @@ pub struct AgentPolicy {
     /// Addresses that are unconditionally blocked (known scams, drainers).
     /// Default: empty.
     #[serde(default)]
-    pub blocked_addresses: Vec<String>,
+    pub blocked_addresses: HashSet<String>,
 
     /// Chain IDs that the agent is allowed to operate on.
     /// Default: [1, 10, 42161, 8453, 324, 11155111] — all supported chains.
@@ -51,7 +52,7 @@ impl Default for AgentPolicy {
             max_single_tx_eth: 0.1,
             max_daily_spend_eth: 0.5,
             max_gas_fee_gwei: 100,
-            blocked_addresses: Vec::new(),
+            blocked_addresses: HashSet::new(),
             allowed_chain_ids: default_allowed_chains(),
             block_unlimited_approvals: true,
         }
@@ -108,11 +109,7 @@ impl AgentPolicy {
 
         // Blocklist
         let to_str = format!("{to:#x}");
-        if self
-            .blocked_addresses
-            .iter()
-            .any(|a| a.eq_ignore_ascii_case(&to_str))
-        {
+        if self.blocked_addresses.contains(&to_str) {
             return PolicyResult::Block {
                 reason: format!("recipient {to_str} is in blocklist"),
             };
@@ -123,6 +120,7 @@ impl AgentPolicy {
 
     /// Check whether gas fees are within policy.
     #[must_use]
+    #[allow(dead_code)]
     pub fn check_gas_fee(&self, max_fee_per_gas_gwei: u64) -> PolicyResult {
         if max_fee_per_gas_gwei > self.max_gas_fee_gwei {
             return PolicyResult::Block {
@@ -137,6 +135,7 @@ impl AgentPolicy {
 
     /// Check whether an ERC-20 approval is within policy.
     #[must_use]
+    #[allow(dead_code)]
     pub fn check_approval(&self, amount: &alloy_primitives::U256) -> PolicyResult {
         if self.block_unlimited_approvals && *amount == alloy_primitives::U256::MAX {
             return PolicyResult::Block {
@@ -190,7 +189,7 @@ mod tests {
         let mut policy = AgentPolicy::default();
         policy
             .blocked_addresses
-            .push("0xdead000000000000000000000000000000000000".into());
+            .insert("0xdead000000000000000000000000000000000000".into());
         let result = policy.check_send(
             &address!("0xdead000000000000000000000000000000000000"),
             0.01,

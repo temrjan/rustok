@@ -31,6 +31,24 @@ pub enum AgentAction {
     PolicyReject,
 }
 
+impl AgentAction {
+    /// Stable string representation for database storage.
+    ///
+    /// Unlike `Debug`, this will not change if the variant is renamed in code.
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Self::Send => "send",
+            Self::Swap => "swap",
+            Self::Lend => "lend",
+            Self::Approve => "approve",
+            Self::ContractCall => "contract_call",
+            Self::SignMessage => "sign_message",
+            Self::SignTypedData => "sign_typed_data",
+            Self::PolicyReject => "policy_reject",
+        }
+    }
+}
+
 /// A single entry in the agent audit trail.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditEntry {
@@ -133,7 +151,7 @@ impl AuditLog {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 entry.timestamp.to_rfc3339(),
-                format!("{:?}", entry.action),
+                entry.action.as_str(),
                 entry.protocol.as_ref(),
                 entry.target_address.as_ref(),
                 entry.tx_hash.as_ref(),
@@ -180,7 +198,7 @@ impl AuditLog {
         }
         if let Some(a) = action {
             sql.push_str(" AND action = ?");
-            params.push(Box::new(format!("{:?}", a)));
+            params.push(Box::new(a.as_str()));
         }
 
         sql.push_str(" ORDER BY id DESC LIMIT ?");
@@ -196,7 +214,7 @@ impl AuditLog {
                     .get::<_, String>(1)?
                     .parse::<DateTime<Utc>>()
                     .unwrap_or_else(|_| Utc::now()),
-                action: parse_action(&row.get::<_, String>(2)?),
+                action: parse_action(&row.get::<_, String>(2)?)?,
                 protocol: row.get(3)?,
                 target_address: row.get(4)?,
                 tx_hash: row.get(5)?,
@@ -231,23 +249,27 @@ impl AuditLog {
     pub fn count_by_action(&self, action: AgentAction) -> Result<i64, rusqlite::Error> {
         self.conn.query_row(
             "SELECT COUNT(*) FROM audit_log WHERE action = ?1",
-            [format!("{:?}", action)],
+            [action.as_str()],
             |row| row.get(0),
         )
     }
 }
 
-fn parse_action(s: &str) -> AgentAction {
+fn parse_action(s: &str) -> Result<AgentAction, rusqlite::Error> {
     match s {
-        "Send" => AgentAction::Send,
-        "Swap" => AgentAction::Swap,
-        "Lend" => AgentAction::Lend,
-        "Approve" => AgentAction::Approve,
-        "ContractCall" => AgentAction::ContractCall,
-        "SignMessage" => AgentAction::SignMessage,
-        "SignTypedData" => AgentAction::SignTypedData,
-        "PolicyReject" => AgentAction::PolicyReject,
-        _ => AgentAction::ContractCall, // fallback
+        "send" => Ok(AgentAction::Send),
+        "swap" => Ok(AgentAction::Swap),
+        "lend" => Ok(AgentAction::Lend),
+        "approve" => Ok(AgentAction::Approve),
+        "contract_call" => Ok(AgentAction::ContractCall),
+        "sign_message" => Ok(AgentAction::SignMessage),
+        "sign_typed_data" => Ok(AgentAction::SignTypedData),
+        "policy_reject" => Ok(AgentAction::PolicyReject),
+        _ => Err(rusqlite::Error::InvalidColumnType(
+            0,
+            "action".into(),
+            rusqlite::types::Type::Text,
+        )),
     }
 }
 

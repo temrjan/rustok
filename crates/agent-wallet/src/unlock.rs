@@ -29,7 +29,7 @@ pub enum UnlockStrategy {
     /// # Security
     /// The password lives in memory for the lifetime of the process. Zeroize
     /// is used on drop, but this is not foolproof.
-    Fixed(String),
+    Fixed(Zeroizing<String>),
 
     /// The wallet is already unlocked in-memory (e.g. a long-running session
     /// that was unlocked once at startup).
@@ -41,7 +41,7 @@ impl UnlockStrategy {
     pub fn password(&self) -> Option<Zeroizing<String>> {
         match self {
             Self::EnvVar => env::var("RUSTOK_AGENT_PASSWORD").ok().map(Zeroizing::new),
-            Self::Fixed(pwd) => Some(Zeroizing::new(pwd.clone())),
+            Self::Fixed(pwd) => Some(pwd.clone()),
             Self::Session => None,
         }
     }
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn fixed_strategy_returns_password() {
-        let s = UnlockStrategy::Fixed("secret123".into());
+        let s = UnlockStrategy::Fixed(Zeroizing::new("secret123".to_string()));
         assert_eq!(s.password().unwrap().as_str(), "secret123");
     }
 
