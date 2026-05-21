@@ -55,7 +55,7 @@ OpenClaw agent in Telegram can manage the Agent Wallet via `rustok-agent-mcp` (M
 
 ```bash
 # 1. Ensure repo is cloned
-mkdir -p /root/server && cd /root/server
+mkdir -p /root/rustok && cd /root/rustok
 git clone https://github.com/temrjan/rustok.git . || git pull origin main
 
 # 2. Create wallet data directory and .env for Docker Compose
