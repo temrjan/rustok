@@ -11,7 +11,8 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 
 # Build only the agent-mcp crate and its dependencies
-RUN cargo build --release -p rustok-agent-mcp
+# Use --manifest-path to avoid loading the full workspace (app/src-tauri is excluded)
+RUN cargo build --manifest-path crates/agent-mcp/Cargo.toml --release
 
 # ─── Runtime stage ───────────────────────────────────────────────
 FROM debian:bookworm-slim
