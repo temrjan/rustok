@@ -23,5 +23,5 @@ pub struct ExecuteRequest {
     /// Target chain ID.
     pub chain_id: u64,
     /// Preview ID returned by the preceding `/preview` call.
-    pub preview_id: String,
+    pub preview_id: uuid::Uuid,
 }

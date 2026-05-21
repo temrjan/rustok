@@ -102,6 +102,15 @@ impl From<rustok_core::wallet::WalletServiceError> for AgentWalletError {
     }
 }
 
+/// Cached preview entry with request parameters for mismatch detection.
+#[derive(Debug, Clone)]
+struct CachedPreview {
+    to: Address,
+    amount_wei: U256,
+    chain_id: u64,
+    preview: SendPreview,
+}
+
 /// The agent wallet service — isolated keystore with policy, audit, and budget.
 pub struct AgentWalletService {
     /// Inner core wallet service (isolated data dir).
@@ -118,8 +127,9 @@ pub struct AgentWalletService {
     unlock: UnlockStrategy,
     /// TTL cache for [`WalletContext`].
     context_cache: Mutex<Option<(std::time::Instant, context::WalletContext)>>,
-    /// TTL cache for [`SendPreview`] results (5 min).
-    preview_cache: Mutex<std::collections::HashMap<uuid::Uuid, (std::time::Instant, SendPreview)>>,
+    /// TTL cache for preview results (5 min).
+    preview_cache:
+        Mutex<std::collections::HashMap<uuid::Uuid, (std::time::Instant, CachedPreview)>>,
 }
 
 impl AgentWalletService {
@@ -354,12 +364,18 @@ impl AgentWalletService {
             .preview_send(&self.provider, to, amount_wei)
             .await?;
 
-        // 4. Cache preview for execute_send trust boundary
+        // 4. Cache preview (with params) for execute_send trust boundary
         let id = uuid::Uuid::new_v4();
+        let cached = CachedPreview {
+            to,
+            amount_wei,
+            chain_id,
+            preview: preview.clone(),
+        };
         self.preview_cache
             .lock()
             .await
-            .insert(id, (std::time::Instant::now(), preview.clone()));
+            .insert(id, (std::time::Instant::now(), cached));
 
         Ok((id, preview))
     }
@@ -374,24 +390,28 @@ impl AgentWalletService {
         to: Address,
         amount_wei: U256,
         chain_id: u64,
-        preview_id: String,
+        preview_id: uuid::Uuid,
     ) -> Result<SendResult, AgentWalletError> {
         let amount_eth = wei_to_eth(amount_wei)?;
 
-        // Resolve preview ID → trusted risk score
-        let preview_id = preview_id
-            .parse::<uuid::Uuid>()
-            .map_err(|_| AgentWalletError::PreviewMismatch)?;
-        let preview = {
-            let cache = self.preview_cache.lock().await;
-            let (instant, preview) = cache
+        // Resolve preview ID → trusted risk score (with parameter validation)
+        let cached = {
+            let mut cache = self.preview_cache.lock().await;
+            // Cleanup expired entries (MEDIUM: memory leak prevention)
+            cache.retain(|_, (instant, _)| instant.elapsed() < std::time::Duration::from_secs(300));
+            let (instant, cached) = cache
                 .get(&preview_id)
                 .ok_or(AgentWalletError::PreviewExpired)?;
             if instant.elapsed() > std::time::Duration::from_secs(300) {
                 return Err(AgentWalletError::PreviewExpired);
             }
-            preview.clone()
+            cached.clone()
         };
+
+        // Defense-in-depth: verify execute params match the preview
+        if cached.to != to || cached.amount_wei != amount_wei || cached.chain_id != chain_id {
+            return Err(AgentWalletError::PreviewMismatch);
+        }
 
         // Defense-in-depth: re-check policy and budget at execution time.
         match self.policy.check_send(&to, amount_eth, chain_id) {
@@ -443,7 +463,7 @@ impl AgentWalletService {
                     amount_eth,
                     // TODO(#42): fetch receipt and compute actual gas cost
                     gas_cost_eth: 0.0,
-                    txguard_risk_score: preview.verdict.risk_score,
+                    txguard_risk_score: cached.preview.verdict.risk_score,
                     success: true,
                     error: None,
                 })?;
@@ -463,7 +483,7 @@ impl AgentWalletService {
                     amount_eth,
                     // TODO(#42): fetch receipt and compute actual gas cost
                     gas_cost_eth: 0.0,
-                    txguard_risk_score: preview.verdict.risk_score,
+                    txguard_risk_score: cached.preview.verdict.risk_score,
                     success: false,
                     error: Some(err_str.clone()),
                 })?;
