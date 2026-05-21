@@ -27,7 +27,7 @@
 
 ---
 
-## Phase 2: Agent Context + MCP Bridge 🔄
+## Phase 2: Agent Context + MCP Bridge ✅
 
 **Goal:** Агент перестаёт быть слепым и получает programmatic доступ к wallet через MCP.
 
@@ -139,8 +139,8 @@ impl AgentWalletService {
 
 ## Definition of Done для Phase 2
 
-- [ ] `WalletContext` struct + `AgentWalletService::context()` + TTL cache
-- [ ] txguard `risk_score` прокидывается в audit при `execute_send`
-- [ ] `crates/agent-mcp/` — Axum SSE сервер с 3 tools
-- [ ] `cargo test --workspace` проходит
-- [ ] `cargo fmt`, `cargo clippy --workspace --all-targets` clean
+- [x] `WalletContext` struct + `AgentWalletService::context()` + TTL cache
+- [x] txguard `risk_score` прокидывается в audit при `execute_send`
+- [x] `crates/agent-mcp/` — Axum HTTP сервер с 3 tools (`/context`, `/preview`, `/execute`)
+- [x] `cargo test --workspace` проходит (152 теста)
+- [x] `cargo fmt`, `cargo clippy --workspace --all-targets` clean
