@@ -2,34 +2,153 @@
 
 Ethereum wallet with chain abstraction and transaction security engine.
 
-**Status:** Alpha — Phase 3 functional — iOS + Android verified on Sepolia, BIP39 seed-phrase with cross-device recovery, Restore from phrase, 4-step create wizard. txguard API live.
+**Status:** Production — Phase 7 DONE — Android verified on Sepolia; iOS supported. React Native app with real on-chain transactions, full onboarding, and txguard live analysis.
 
 **Website:** [rustokwallet.com](https://rustokwallet.com) | **API:** [api.rustokwallet.com](https://api.rustokwallet.com/health) | **X:** [@rustokwallet](https://x.com/rustokwallet)
 
+---
+
 ## What is this?
 
-Ethereum wallet with chain abstraction and transaction protection:
+Rustok is a self-custody Ethereum wallet built around two ideas:
 
-- **Desktop app** — Tauri 2.0 + Leptos (full Rust). Home (auto-balance), Send (3-step with txguard), Receive (QR), Analyze, Settings, 4-step BIP39 create wizard, Restore from seed phrase. Bottom tab bar navigation.
-- **txguard** — Rust crate that analyzes EVM transactions before signing. Decodes calldata, runs security rules, simulates via revm, enriches with GoPlus threat intel.
-- **rustok core** — Multi-chain wallet with unified balance across L1/L2, encrypted keyring (AES-256-GCM + Argon2id), and CLI interface.
+1. **Your keys, your chains** — one seed phrase controls addresses across Ethereum, Arbitrum, Base, Optimism, and zkSync. Balance and routing are unified; you pick the chain, the wallet handles the rest.
+2. **Trust but verify** — every transaction is analyzed by `txguard` before signing. It decodes calldata, runs security rules, simulates execution via `revm`, and enriches findings with threat intelligence.
+
+The mobile app (Android + iOS) is the primary interface. A public HTTP API and CLI are available for headless txguard analysis.
+
+---
+
+## Features
+
+- **Multi-chain wallet** — unified balance, send, and receive across 5 mainnet chains + Sepolia testnet
+- **BIP39 seed phrase** — MetaMask-compatible path (`m/44'/60'/0'/0/0`), cross-device recovery
+- **txguard analysis** — pre-sign security scan with risk badge and per-finding breakdown
+- **PIN + Biometric lock** — Argon2id-hashed PIN, Face ID / fingerprint unlock, background auto-lock
+- **Onboarding** — create wallet (4-step wizard + phrase quiz), import from seed phrase, or recover from lockout / biometric change
+- **Activity history** — real transaction feed with pending-state tracking and explorer links
+- **Theme** — light / dark / system with design-token consistency across the UI
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Mobile App (Android / iOS)                │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌────────────────┐ │
+│  │ Wallet  │  │ Activity│  │ TxGuard │  │    Settings    │ │
+│  │  Tab    │  │  Tab    │  │  Tab    │  │  (Appearance,   │ │
+│  │         │  │         │  │         │  │   Biometric,   │ │
+│  │ • Hero  │  │ • TX    │  │ • Risk  │  │   Auto-lock,   │ │
+│  │   card  │  │   list  │  │   badge │  │   Network)     │ │
+│  │ • Send  │  │ • Pull  │  │ • Per-  │  │                │ │
+│  │ • QR    │  │   refresh│  │   finding│  │                │ │
+│  └─────────┘  └─────────┘  └─────────┘  └────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  React Navigation v7  •  Zustand 5  •  NativeWind v4   ││
+│  │  Reanimated 4  •  MMKV  •  Keychain  •  Argon2id       ││
+│  └─────────────────────────────────────────────────────────┘│
+└───────────────────────────┬─────────────────────────────────┘
+                            │ JS ↔ Rust Bridge
+┌───────────────────────────▼─────────────────────────────────┐
+│          react-native-rustok-bridge                          │
+│          (uniffi-bindgen-react-native 0.31)                 │
+└───────────────────────────┬─────────────────────────────────┘
+                            │ FFI
+┌───────────────────────────▼─────────────────────────────────┐
+│                      Rust Workspace                          │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │ rustok-core │  │   txguard   │  │    rustok-api       │ │
+│  │             │  │             │  │                     │ │
+│  │ • keyring   │  │ • parser    │  │  Axum HTTP server   │ │
+│  │ • provider  │  │ • rules     │  │  /health            │ │
+│  │ • router    │  │ • simulator │  │  /check-address     │ │
+│  │ • send      │  │ • enrichment│  │  /decode            │ │
+│  │ • explorer  │  │             │  │                     │ │
+│  │ • explainer │  │ 8 security  │  │  Live:              │ │
+│  │ • convert   │  │ rules       │  │  api.rustokwallet.com│ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │ rustok-cli  │  │ rustok-types│  │rustok-mobile-bindings│ │
+│  │             │  │             │  │                     │ │
+│  │  CLI binary │  │ Shared DTOs │  │  uniffi FFI exports │ │
+│  │  (decode,   │  │  (no crypto │  │  for iOS / Android  │ │
+│  │   analyze,  │  │   deps)     │  │                     │ │
+│  │   wallet,   │  │             │  │                     │ │
+│  │   send)     │  │             │  │                     │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| **Mobile** | React Native 0.85.2, React 19.2.3, TypeScript 5.8 |
+| **Navigation** | React Navigation v7 (bottom-tabs, native-stack) |
+| **Styling** | NativeWind v4, TailwindCSS 3.4, design-token system |
+| **State** | Zustand 5, MMKV (persistent), React Native Keychain (secrets) |
+| **Animations** | Reanimated 4.3, React Native Worklets, Gesture Handler |
+| **Bridge** | uniffi-bindgen-react-native 0.31.0-2 |
+| **Language** | Rust (edition 2024) |
+| **EVM** | revm v36, alloy-evm v0.30 |
+| **Ethereum** | alloy-rs v1.8 (provider, signer, primitives, consensus) |
+| **Crypto** | BIP39 (m/44'/60'/0'/0/0), AES-256-GCM, Argon2id, secp256k1 |
+| **HTTP** | Axum 0.8, Tower HTTP (CORS, trace) |
+| **Async** | Tokio, Futures |
+| **Serialization** | Serde, Serde JSON |
+| **CLI** | clap v4 |
+| **Logging** | tracing, tracing-subscriber |
+
+---
 
 ## Quick Start
 
+### Mobile App
+
+**Prerequisites:** Node.js ≥ 22.11, Android SDK (for Android) or Xcode + CocoaPods (for iOS).
+
 ```bash
-# Build
-cargo build
+# Install dependencies
+cd mobile && npm install
 
-# Run tests
-cargo test
+# Start Metro bundler
+npx react-native start --port 8081
 
-# CLI help
-cargo run -p rustok -- --help
+# Android (separate terminal)
+cd android && ./gradlew app:installDebug -PreactNativeDevServerPort=8081
+# Windows: .\gradlew.bat app:installDebug -PreactNativeDevServerPort=8081
+
+# iOS (macOS only, separate terminal)
+cd ios && pod install && cd .. && npx react-native run-ios
 ```
 
-## CLI Examples
+For physical Android devices:
+```bash
+adb reverse tcp:8081 tcp:8081
+```
 
-### Transaction Security Analysis
+> **Detailed mobile docs:** See [`mobile/README.md`](mobile/README.md) for onboarding flow, bridge surface, DEV escape hatches, and Android/Windows specifics.
+
+### Rust Workspace
+
+```bash
+# Run all tests
+cargo test --workspace
+
+# Build CLI
+cargo build -p rustok --release
+
+# Run API server locally
+cargo run -p rustok-api
+```
+
+### CLI Examples
+
+#### Transaction Security Analysis
 
 ```bash
 # Decode ERC-20 approve calldata
@@ -44,7 +163,7 @@ rustok analyze \
   --data 0x095ea7b3ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 ```
 
-### Wallet Operations
+#### Wallet Operations
 
 ```bash
 # Generate a new encrypted wallet
@@ -60,33 +179,7 @@ rustok wallet info --keystore 0xabc...def.json --password "your-password"
 rustok wallet send --keystore wallet.json --password "pwd" --to 0xd8dA...6045 --amount 0.1
 ```
 
-## Architecture
-
-```
-rustok/
-├── crates/
-│   ├── txguard/    # Transaction security engine
-│   │   ├── parser/       ERC-20/721/EIP-2612 calldata decoder
-│   │   ├── rules/        8 security rules (approvals, permits, scams)
-│   │   ├── simulator/    revm v36 fork simulation + Transfer/Approval inspector
-│   │   └── enrichment/   GoPlus API threat intelligence
-│   ├── core/       # Wallet core
-│   │   ├── keyring/      BIP39 seed (m/44'/60'/0'/0/0, MetaMask-compatible) + AES-256-GCM + Argon2id
-│   │   ├── provider/     Multi-chain RPC + EIP-1559 gas estimation
-│   │   ├── router/       Cheapest chain selection for transactions
-│   │   ├── send/         Send orchestration (preview + execute)
-│   │   ├── amount/       ETH amount parsing (decimal → wei)
-│   │   ├── explorer.rs   Block explorer API (Etherscan-compatible, 5 chains)
-│   │   ├── explainer/    Human-readable transaction descriptions
-│   │   └── convert/      DTO conversions (core types → frontend types)
-│   ├── types/      # Shared DTO types (core ↔ frontend, no crypto deps)
-│   ├── cli/        # CLI binary
-│   └── api/        # HTTP API (axum, live at api.rustokwallet.com)
-├── app/
-│   ├── src-tauri/  # Tauri backend (tauri::command → core)
-│   └── src/        # Leptos frontend (WASM, invokes backend)
-└── docs/           # Research & design documents
-```
+---
 
 ## Security Rules (txguard)
 
@@ -101,6 +194,8 @@ rustok/
 | `value_with_calldata` | Warning | ETH sent with contract call |
 | `send_to_contract` | Info | Transfer to contract address |
 
+---
+
 ## Supported Chains
 
 | Chain | ID | Status |
@@ -112,34 +207,7 @@ rustok/
 | zkSync Era | 324 | Active |
 | Sepolia | 11155111 | Testnet |
 
-## Desktop App
-
-```bash
-# Prerequisites
-rustup target add wasm32-unknown-unknown
-cargo install trunk --locked
-cargo install tauri-cli --version "^2.10" --locked
-
-# Run desktop app
-cargo tauri dev
-```
-
-Pages: Splash (1.4 s brand overlay on cold start), Welcome (brand landing + Create/Restore CTA), Home (hero balance + Send/Receive/Scan + chains list), Send (3-step DarkShell wizard: input → preview with txguard verdict → result), Receive (chain pills + white QR card + copy address), Analyze/TxGuard (risk badge + per-finding rows + Nexus Mutual CTA when blocked), Activity (dark cards with direction icons — ↑ DANGER, ↓ SUCCESS, swap ACCENT), Settings (wallet card + Appearance toggle Light/Dark + Face ID toggle + Lock + Create new wallet → Welcome), Wallet (6-step PIN create wizard: SetPin → Confirm → ShowPhrase → Quiz → BackupConfirm → Success), Restore (phrase + PIN + Success), Unlock (PIN keypad + Face ID).
-Navigation: bottom tab bar (Wallet / Activity / Settings) with SVG icons. Send / Receive / Scan push fullscreen from Home action buttons.
-Branding: navy + periwinkle palette (`#0A1123` / `#8387C3`), 6-digit PIN onboarding, periwinkle diamond logo. Theme: light/dark switch via Settings → Appearance toggle; choice persists across launches with anti-FOUC pre-paint. Recurring surfaces (Unlock + main app) follow the toggle, one-time onboarding stays light by design. Design foundation: `app/src/src/tokens.rs` (palette + `tokens::css` module exposing `var(--rw-*)` references) + `components/{icons,button,logo,dark_shell}.rs`. Copy address uses `tauri-plugin-clipboard-manager`.
-
-## iOS App
-
-```bash
-# Prerequisites
-# Xcode with iOS Simulator, Cocoapods
-rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
-
-# Run in iOS Simulator
-cargo tauri ios dev
-```
-
-Same pages as desktop, with safe area insets for iPhone notch/Dynamic Island.
+---
 
 ## txguard API
 
@@ -165,54 +233,81 @@ curl -X POST https://api.rustokwallet.com/decode \
 
 Deployed via Docker + Caddy on 185.197.195.191 (`deploy/`).
 
-## Tech Stack
-
-- **Language:** Rust (edition 2024)
-- **Desktop:** Tauri 2.0 (native shell) + Leptos 0.7 (WASM UI)
-- **EVM:** revm v36, alloy-evm v0.30
-- **Ethereum:** alloy-rs v1.8 (provider, signer, primitives)
-- **Crypto:** BIP39 (m/44'/60'/0'/0/0), AES-256-GCM, Argon2id, secp256k1
-- **CLI:** clap v4
-- **Async:** tokio
+---
 
 ## Tests
 
 ```
-112 tests, 0 failures
- - txguard: 38 tests (parser, rules, types, simulator inspector)
- - core: 64 tests (keyring + BIP39, provider, router, explainer, explorer, convert, amount)
- - desktop: 8 tests (password validation, value parsing, QR generation)
- - doc-tests: 2
+517 tests, 0 failures
+ - Rust workspace: 231 tests (txguard, core, types, mobile-bindings)
+ - Mobile (Jest):   286 tests (components, stores, hooks, screens)
 ```
+
+Pre-commit gates:
+```bash
+# Rust
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+
+# Mobile
+cd mobile && npm run typecheck && npm run lint && npm run test
+```
+
+---
+
+## Project Layout
+
+```
+rustok/
+├── mobile/                          # React Native app (primary UI)
+│   ├── src/
+│   │   ├── screens/                 # Wallet, Activity, TxGuard, Settings, Onboarding
+│   │   ├── components/              # Design system primitives
+│   │   ├── navigation/              # AppShell, navigators
+│   │   ├── stores/                  # Zustand + MMKV state
+│   │   ├── hooks/                   # Selectors and logic
+│   │   ├── lib/                     # Bridge, formatting, explorers
+│   │   └── theme/                   # Design tokens
+│   ├── android/                     # Gradle project
+│   └── ios/                         # Xcode project
+│
+├── packages/
+│   └── react-native-rustok-bridge/  # uniffi JS ↔ Rust bridge package
+│
+├── crates/                          # Rust workspace
+│   ├── txguard/                     # Transaction security engine
+│   ├── core/                        # Wallet logic (keyring, provider, router, send)
+│   ├── types/                       # Shared DTOs
+│   ├── api/                         # Axum HTTP server
+│   ├── cli/                         # CLI binary
+│   └── rustok-mobile-bindings/      # uniffi FFI exports
+│
+├── deploy/                          # Docker + Caddy deployment
+└── docs/                            # Architecture, phase handoffs, incident reports
+```
+
+---
 
 ## License
 
 Rustok is dual-licensed:
 
-- **[AGPL-3.0-or-later](LICENSE)** — open source. Free for any use that
-  complies with AGPL terms, including making source code of derivative
-  works and network-accessible services available to users.
-- **[Commercial License](LICENSE-COMMERCIAL.md)** — available from the
-  copyright holder for uses that cannot comply with AGPL-3.0 (e.g.
-  closed-source Apple App Store or Google Play distribution, bundling
-  into proprietary products).
+- **[AGPL-3.0-or-later](LICENSE)** — open source. Free for any use that complies with AGPL terms, including making source code of derivative works and network-accessible services available to users.
+- **[Commercial License](LICENSE-COMMERCIAL.md)** — available from the copyright holder for uses that cannot comply with AGPL-3.0 (e.g. closed-source Apple App Store or Google Play distribution, bundling into proprietary products).
 
-See [`NOTICE.md`](NOTICE.md) for a summary of licensing, trademarks, and
-contribution terms.
+See [`NOTICE.md`](NOTICE.md) for a summary of licensing, trademarks, and contribution terms.
 
 ### Trademarks
 
-"Rustok" and "txguard" are trademarks of Temrjan Khasenov. Source code
-is AGPL-3.0, but the marks are not — see [`TRADEMARK.md`](TRADEMARK.md).
+"Rustok" and "txguard" are trademarks of Temrjan Khasenov. Source code is AGPL-3.0, but the marks are not — see [`TRADEMARK.md`](TRADEMARK.md).
 
 ### Visual assets
 
-Logos, icons, and brand imagery are **not** under AGPL-3.0. See
-[`ASSETS-LICENSE.md`](ASSETS-LICENSE.md).
+Logos, icons, and brand imagery are **not** under AGPL-3.0. See [`ASSETS-LICENSE.md`](ASSETS-LICENSE.md).
 
 ### Contributing
 
-Contributions are accepted under the Developer Certificate of Origin
-(DCO). See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Contributions are accepted under the Developer Certificate of Origin (DCO). See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 Copyright (c) 2025-2026 Temrjan Khasenov.
