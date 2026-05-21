@@ -1,0 +1,46 @@
+[package]
+name = "rustok-agent-wallet"
+description = "Dedicated wallet engine for AI agents — keystore, policy, audit, auto-unlock"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rustok-core = { path = "../core" }
+txguard = { path = "../txguard" }
+rustok-types = { path = "../types" }
+
+# Ethereum
+alloy-primitives = { workspace = true }
+alloy-rpc-types-eth = { workspace = true }
+alloy-network = { workspace = true }
+
+# Async
+tokio = { workspace = true, features = ["sync", "time"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Database (audit log)
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+
+# Security
+zeroize = "1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tempfile = "3"
