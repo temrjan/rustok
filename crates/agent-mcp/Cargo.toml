@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 rustok-agent-wallet = { path = "../agent-wallet" }
+rustok-agent-dapps = { path = "../agent-dapps" }
 rustok-core = { path = "../core" }
 
 axum = { workspace = true }

@@ -10,7 +10,7 @@ use axum::{
 };
 use rustok_agent_wallet::{AgentWalletError, AgentWalletService};
 
-use crate::types::{ExecuteRequest, PreviewRequest};
+use crate::types::{ExecuteRequest, PositionsRequest, PreviewRequest};
 
 /// Simple MCP-over-HTTP server.
 ///
@@ -38,6 +38,7 @@ impl McpServer {
             .route("/context", post(get_context_handler))
             .route("/preview", post(preview_send_handler))
             .route("/execute", post(execute_send_handler))
+            .route("/positions", post(get_positions_handler))
             .with_state(self.wallet);
 
         let addr = format!("127.0.0.1:{port}");
@@ -91,6 +92,29 @@ async fn execute_send_handler(
         .await
         .map(Json)
         .map_err(|e| (map_error(&e), e.to_string()))
+}
+
+async fn get_positions_handler(
+    State(wallet): State<Arc<AgentWalletService>>,
+    Json(req): Json<PositionsRequest>,
+) -> Result<Json<Vec<rustok_agent_dapps::types::Position>>, (StatusCode, String)> {
+    let address = match req.address {
+        Some(addr) => parse_address(&addr).map_err(|e| (StatusCode::BAD_REQUEST, e))?,
+        None => {
+            let addr = wallet
+                .address()
+                .await
+                .ok_or((StatusCode::UNAUTHORIZED, "wallet locked".into()))?;
+            parse_address(&addr).map_err(|e| (StatusCode::BAD_REQUEST, e))?
+        }
+    };
+
+    wallet
+        .tracker()
+        .track(wallet.provider(), address)
+        .await
+        .map(Json)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
 }
 
 fn parse_address(s: &str) -> Result<alloy_primitives::Address, String> {

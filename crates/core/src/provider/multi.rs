@@ -288,6 +288,47 @@ impl MultiProvider {
         Self::broadcast_tx(chain, raw_tx, &self.http).await
     }
 
+    /// Execute a read-only `eth_call` on a specific chain with RPC fallback.
+    pub async fn call(
+        &self,
+        chain_id: u64,
+        tx: &alloy_rpc_types_eth::TransactionRequest,
+    ) -> Result<alloy_primitives::Bytes, ProviderError> {
+        let chain = self.find_chain(chain_id)?;
+        Self::fetch_call(chain, tx, &self.http).await
+    }
+
+    /// Fetch call result with RPC fallback.
+    async fn fetch_call(
+        chain: &Chain,
+        tx: &alloy_rpc_types_eth::TransactionRequest,
+        http: &reqwest::Client,
+    ) -> Result<alloy_primitives::Bytes, ProviderError> {
+        for rpc_url in &chain.rpc_urls {
+            let url = match rpc_url.parse() {
+                Ok(u) => u,
+                Err(_) => continue,
+            };
+
+            let provider = ProviderBuilder::new().connect_reqwest(http.clone(), url);
+
+            match provider.call(tx.clone()).await {
+                Ok(result) => return Ok(result),
+                Err(e) => {
+                    tracing::debug!(
+                        chain_id = chain.id,
+                        rpc = %rpc_url,
+                        error = %e,
+                        "eth_call failed, trying next"
+                    );
+                    continue;
+                }
+            }
+        }
+
+        Err(ProviderError::AllEndpointsFailed { chain_id: chain.id })
+    }
+
     /// Broadcast raw transaction with RPC fallback.
     async fn broadcast_tx(
         chain: &Chain,

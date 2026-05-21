@@ -6228,11 +6228,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustok-agent-dapps"
+version = "0.1.0"
+dependencies = [
+ "alloy-network",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-types-eth",
+ "alloy-sol-types",
+ "rustok-core",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "rustok-agent-mcp"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
  "axum",
+ "rustok-agent-dapps",
  "rustok-agent-wallet",
  "rustok-core",
  "serde",
@@ -6251,6 +6269,7 @@ dependencies = [
  "alloy-rpc-types-eth",
  "chrono",
  "rusqlite",
+ "rustok-agent-dapps",
  "rustok-core",
  "rustok-types",
  "serde",

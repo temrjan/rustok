@@ -79,18 +79,33 @@ impl AgentWalletService {
 
 ---
 
-## Phase 3: DeFi Connectors ⏸️
+## Phase 3: DeFi Connectors ✅ (MVP)
 
 **Goal:** Агент видит deployed capital и может взаимодействовать с протоколами.
 
-**Scope:**
-- `crates/agent-dapps/` — read-only connectors: Aave v3, Uniswap v3, ERC-4626 vaults.
-- `PositionTracker` — индексация позиций пользователя.
-- Integration с `WalletContext` (поле `positions: Vec<Position>`).
+**Scope (MVP):**
+- `crates/agent-dapps/` — read-only connectors: Aave v3, ERC-4626 vaults.
+- `PositionTracker` — parallel aggregation across protocols.
+- Integration с `WalletContext` (поле `positions: Vec<Position>`) + separate TTL cache (60 sec).
+- MCP `/positions` endpoint.
 
-**Blocked by:** нет RPC endpoints для DeFi-протоколов в `MultiProvider`. Нужны ABI + contract addresses.
+**Out of scope (Phase 3.1):**
+- Uniswap v3 NFT position tracking.
+- GoPlus / price oracle enrichment for `value_usd`.
+
+**Blocked by:** ~~нет RPC endpoints для DeFi-протоколов в `MultiProvider`~~ — resolved: добавлен `MultiProvider::call()` для generic `eth_call`.
 
 ---
+
+## Definition of Done для Phase 3 MVP
+
+- [x] `MultiProvider::call()` — generic `eth_call` с RPC fallback
+- [x] `crates/agent-dapps/` — новый crate с Aave v3 + ERC-4626 connectors
+- [x] `PositionTracker` — parallel fetch, zero-balance filter, error isolation
+- [x] `WalletContext.positions` — интеграция через `AgentWalletService::context()` + TTL cache
+- [x] MCP `/positions` endpoint — POST с optional address override
+- [x] `cargo test --workspace` проходит (161 тест)
+- [x] `cargo fmt`, `cargo clippy --workspace --all-targets` clean
 
 ## Phase 4: OpenClaw Skill ⏸️
 

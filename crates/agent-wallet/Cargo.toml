@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 rustok-core = { path = "../core" }
+rustok-agent-dapps = { path = "../agent-dapps" }
 txguard = { path = "../txguard" }
 rustok-types = { path = "../types" }
 

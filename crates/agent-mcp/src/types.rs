@@ -25,3 +25,11 @@ pub struct ExecuteRequest {
     /// Preview ID returned by the preceding `/preview` call.
     pub preview_id: uuid::Uuid,
 }
+
+/// Request body for `/positions`.
+#[derive(Debug, Deserialize)]
+pub struct PositionsRequest {
+    /// Optional address override (hex, with or without `0x`).
+    /// If omitted, uses the agent wallet's own address.
+    pub address: Option<String>,
+}

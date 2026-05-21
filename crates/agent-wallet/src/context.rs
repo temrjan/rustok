@@ -1,5 +1,6 @@
 //! Wallet context — snapshot of agent wallet state for LLM consumption.
 
+use rustok_agent_dapps::types::Position;
 use rustok_core::provider::UnifiedBalance;
 use serde::Serialize;
 
@@ -19,6 +20,8 @@ pub struct WalletContext {
     pub limits: PolicySnapshot,
     /// Gas fee estimates for allowed chains.
     pub gas_oracle: GasSnapshot,
+    /// DeFi positions (Aave, vaults, etc.).
+    pub positions: Vec<Position>,
 }
 
 /// Human-readable policy limits with current budget state.
