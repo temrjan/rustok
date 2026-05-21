@@ -20,6 +20,7 @@
 
 pub mod audit;
 pub mod budget;
+pub mod context;
 pub mod policy;
 pub mod unlock;
 
@@ -69,6 +70,10 @@ pub enum AgentWalletError {
     /// Invalid amount conversion.
     #[error("invalid amount: {0}")]
     InvalidAmount(String),
+
+    /// Wallet is locked.
+    #[error("wallet locked")]
+    WalletLocked,
 }
 
 impl From<std::io::Error> for AgentWalletError {
@@ -109,6 +114,8 @@ pub struct AgentWalletService {
     budget: BudgetTracker,
     /// How the wallet is unlocked headlessly.
     unlock: UnlockStrategy,
+    /// TTL cache for [`WalletContext`].
+    context_cache: Mutex<Option<(std::time::Instant, context::WalletContext)>>,
 }
 
 impl AgentWalletService {
@@ -136,6 +143,7 @@ impl AgentWalletService {
         let audit_path = wallet_dir.join("audit.db");
         let audit = Mutex::new(AuditLog::open(audit_path)?);
         let budget = BudgetTracker::new(policy.max_daily_spend_eth);
+        let context_cache = Mutex::new(None);
 
         Ok(Self {
             wallet,
@@ -144,6 +152,7 @@ impl AgentWalletService {
             audit,
             budget,
             unlock,
+            context_cache,
         })
     }
 
@@ -204,6 +213,74 @@ impl AgentWalletService {
     /// Cross-chain balance.
     pub async fn balance(&self) -> Result<rustok_core::provider::UnifiedBalance, AgentWalletError> {
         Ok(self.wallet.balance(&self.provider).await?)
+    }
+
+    /// Build a [`WalletContext`] snapshot for LLM consumption.
+    ///
+    /// Results are cached for 30 seconds to avoid RPC spam across multiple
+    /// LLM rounds.
+    pub async fn context(&self) -> Result<context::WalletContext, AgentWalletError> {
+        // 1. Check cache
+        {
+            let cache = self.context_cache.lock().await;
+            if let Some((instant, ctx)) = cache.as_ref() {
+                if instant.elapsed() < std::time::Duration::from_secs(30) {
+                    return Ok(ctx.clone());
+                }
+            }
+        }
+
+        // 2. Gather data
+        let address = self
+            .wallet
+            .current_address()
+            .await
+            .ok_or(AgentWalletError::WalletLocked)?;
+
+        let balances = self.wallet.balance(&self.provider).await?;
+        let allowed_chains = self.policy.allowed_chain_ids.clone();
+
+        let audit_guard = self.audit.lock().await;
+        let spent_today = self.budget.spent_today(&audit_guard)?;
+        let daily_spend_remaining = (self.policy.max_daily_spend_eth - spent_today).max(0.0);
+        drop(audit_guard);
+
+        let limits = context::PolicySnapshot {
+            max_single_tx_eth: self.policy.max_single_tx_eth,
+            max_daily_spend_eth: self.policy.max_daily_spend_eth,
+            daily_spend_remaining_eth: daily_spend_remaining,
+            max_gas_fee_gwei: self.policy.max_gas_fee_gwei,
+        };
+
+        // 3. Gas oracle (best-effort, parallel)
+        let mut chains = Vec::with_capacity(allowed_chains.len());
+        for chain_id in &allowed_chains {
+            match self.provider.gas_fees(*chain_id).await {
+                Ok(gas) => {
+                    chains.push(context::ChainGasFees {
+                        chain_id: *chain_id,
+                        max_fee_per_gas_gwei: gas.max_fee_per_gas as f64 / 1e9,
+                        max_priority_fee_per_gas_gwei: gas.max_priority_fee_per_gas as f64 / 1e9,
+                    });
+                }
+                Err(e) => {
+                    tracing::warn!(chain_id, error = %e, "failed to fetch gas fees");
+                }
+            }
+        }
+        let gas_oracle = context::GasSnapshot { chains };
+
+        let ctx = context::WalletContext {
+            address,
+            balances,
+            allowed_chains,
+            limits,
+            gas_oracle,
+        };
+
+        // 4. Store in cache
+        *self.context_cache.lock().await = Some((std::time::Instant::now(), ctx.clone()));
+        Ok(ctx)
     }
 
     /// Preview a native ETH send with policy + budget + txguard audit.
@@ -274,6 +351,7 @@ impl AgentWalletService {
         to: Address,
         amount_wei: U256,
         chain_id: u64,
+        txguard_risk_score: u8,
     ) -> Result<SendResult, AgentWalletError> {
         let amount_eth = wei_to_eth(amount_wei)?;
 
@@ -326,7 +404,7 @@ impl AgentWalletService {
                     chain_id: Some(chain_id),
                     amount_eth,
                     gas_cost_eth: 0.0, // actual cost requires receipt fetch
-                    txguard_risk_score: 0,
+                    txguard_risk_score,
                     success: true,
                     error: None,
                 })?;
@@ -345,7 +423,7 @@ impl AgentWalletService {
                     chain_id: Some(chain_id),
                     amount_eth,
                     gas_cost_eth: 0.0,
-                    txguard_risk_score: 0,
+                    txguard_risk_score,
                     success: false,
                     error: Some(err_str.clone()),
                 })?;
