@@ -114,7 +114,7 @@ async fn get_positions_handler(
         .track(wallet.provider(), address)
         .await
         .map(Json)
-        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+        .map_err(|e| (map_dapp_error(&e), e.to_string()))
 }
 
 fn parse_address(s: &str) -> Result<alloy_primitives::Address, String> {
@@ -136,6 +136,17 @@ const fn map_error(e: &AgentWalletError) -> StatusCode {
             StatusCode::BAD_REQUEST
         }
         _ => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+const fn map_dapp_error(e: &rustok_agent_dapps::DappError) -> StatusCode {
+    match e {
+        rustok_agent_dapps::DappError::UnsupportedChain { .. }
+        | rustok_agent_dapps::DappError::Validation(_) => StatusCode::BAD_REQUEST,
+        rustok_agent_dapps::DappError::Rpc(_) | rustok_agent_dapps::DappError::Decode(_) => {
+            StatusCode::BAD_GATEWAY
+        }
+        rustok_agent_dapps::DappError::Reverted(_) => StatusCode::OK,
     }
 }
 

@@ -71,13 +71,9 @@ impl PositionTracker {
             Err(e) => tracing::warn!(%e, "vault fetch failed"),
         }
 
-        // Sort by USD value desc, then by protocol name.
-        positions.sort_by(|a, b| {
-            b.value_usd
-                .partial_cmp(&a.value_usd)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| a.asset_symbol.cmp(&b.asset_symbol))
-        });
+        // Sort by protocol name for stable ordering.
+        // value_usd is currently a placeholder (None) until price oracle integration.
+        positions.sort_by(|a, b| a.asset_symbol.cmp(&b.asset_symbol));
 
         Ok(positions)
     }

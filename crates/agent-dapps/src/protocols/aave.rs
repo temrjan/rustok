@@ -9,6 +9,7 @@ use alloy_network::TransactionBuilder;
 use alloy_primitives::{Address, U256, address};
 use alloy_sol_types::{SolCall, sol};
 use rustok_core::provider::MultiProvider;
+use rustok_core::utils::format_u256;
 
 use crate::error::DappError;
 use crate::types::{Position, Protocol};
@@ -77,70 +78,79 @@ impl AaveConnector {
         provider: &MultiProvider,
         user: Address,
     ) -> Result<Vec<Position>, DappError> {
-        let mut positions = Vec::new();
+        let provider = provider.clone();
+        let futures: Vec<_> = self
+            .pools
+            .iter()
+            .map(|(&chain_id, &pool)| {
+                let provider = provider.clone();
+                async move {
+                    let tx = alloy_rpc_types_eth::TransactionRequest::default()
+                        .with_to(pool)
+                        .with_input(AaveV3Pool::getUserAccountDataCall { user }.abi_encode());
 
-        for (&chain_id, &pool) in &self.pools {
-            let tx = alloy_rpc_types_eth::TransactionRequest::default()
-                .with_to(pool)
-                .with_input(AaveV3Pool::getUserAccountDataCall { user }.abi_encode());
+                    let result = match provider.call(chain_id, &tx).await {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            tracing::warn!(%chain_id, %e, "Aave getUserAccountData call failed");
+                            return None;
+                        }
+                    };
 
-            let result = match provider.call(chain_id, &tx).await {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    tracing::warn!(%chain_id, %e, "Aave getUserAccountData call failed");
-                    continue;
+                    let data = match AaveV3Pool::getUserAccountDataCall::abi_decode_returns(&result)
+                    {
+                        Ok(d) => d,
+                        Err(e) => {
+                            tracing::warn!(%chain_id, %e, "Aave getUserAccountData decode failed");
+                            return None;
+                        }
+                    };
+
+                    // Skip if no position (zero collateral and zero debt)
+                    if data.totalCollateralBase.is_zero() && data.totalDebtBase.is_zero() {
+                        return None;
+                    }
+
+                    // Base unit is USD with 8 decimals in Aave oracle; treat as wei-like for formatting.
+                    let collateral_eth = format_u256(data.totalCollateralBase, 8);
+                    let debt_eth = format_u256(data.totalDebtBase, 8);
+
+                    let mut extra = serde_json::Map::new();
+                    extra.insert(
+                        "total_debt_usd".to_string(),
+                        serde_json::Value::String(debt_eth.clone()),
+                    );
+                    extra.insert(
+                        "available_borrows_usd".to_string(),
+                        serde_json::Value::String(format_u256(data.availableBorrowsBase, 8)),
+                    );
+                    extra.insert(
+                        "health_factor".to_string(),
+                        serde_json::Value::String(format_health_factor(data.healthFactor)),
+                    );
+                    extra.insert(
+                        "ltv".to_string(),
+                        serde_json::Value::String(format_ltv(data.ltv)),
+                    );
+
+                    Some(Position {
+                        protocol: Protocol::AaveV3,
+                        chain_id,
+                        asset_address: pool.to_string(),
+                        asset_symbol: "AAVE".to_string(),
+                        asset_name: "Aave V3 Pool".to_string(),
+                        asset_decimals: 8,
+                        balance: data.totalCollateralBase.to_string(),
+                        balance_formatted: collateral_eth,
+                        value_usd: None, // could be fetched from price oracle in future
+                        extra,
+                    })
                 }
-            };
+            })
+            .collect();
 
-            let data = match AaveV3Pool::getUserAccountDataCall::abi_decode_returns(&result) {
-                Ok(d) => d,
-                Err(e) => {
-                    tracing::warn!(%chain_id, %e, "Aave getUserAccountData decode failed");
-                    continue;
-                }
-            };
-
-            // Skip if no position (zero collateral and zero debt)
-            if data.totalCollateralBase.is_zero() && data.totalDebtBase.is_zero() {
-                continue;
-            }
-
-            // Base unit is USD with 8 decimals in Aave oracle; treat as wei-like for formatting.
-            let collateral_eth = format_units(data.totalCollateralBase, 8);
-            let debt_eth = format_units(data.totalDebtBase, 8);
-
-            let mut extra = serde_json::Map::new();
-            extra.insert(
-                "total_debt_usd".to_string(),
-                serde_json::Value::String(debt_eth.clone()),
-            );
-            extra.insert(
-                "available_borrows_usd".to_string(),
-                serde_json::Value::String(format_units(data.availableBorrowsBase, 8)),
-            );
-            extra.insert(
-                "health_factor".to_string(),
-                serde_json::Value::String(format_health_factor(data.healthFactor)),
-            );
-            extra.insert(
-                "ltv".to_string(),
-                serde_json::Value::String(format_ltv(data.ltv)),
-            );
-
-            positions.push(Position {
-                protocol: Protocol::AaveV3,
-                chain_id,
-                asset_address: pool.to_string(),
-                asset_symbol: "AAVE".to_string(),
-                asset_name: "Aave V3 Pool".to_string(),
-                asset_decimals: 8,
-                balance: data.totalCollateralBase.to_string(),
-                balance_formatted: collateral_eth,
-                value_usd: None, // could be fetched from price oracle in future
-                extra,
-            });
-        }
-
+        let results = futures::future::join_all(futures).await;
+        let positions: Vec<Position> = results.into_iter().flatten().collect();
         Ok(positions)
     }
 }
@@ -151,35 +161,15 @@ impl Default for AaveConnector {
     }
 }
 
-/// Format a Aave base-unit value (8 decimals) to human-readable string.
-fn format_units(value: U256, decimals: u8) -> String {
-    if value.is_zero() {
-        return "0".to_string();
-    }
-    let divisor = U256::from(10u64).pow(U256::from(decimals));
-    let whole = value / divisor;
-    let remainder = value % divisor;
-    if remainder.is_zero() {
-        return whole.to_string();
-    }
-    let remainder_str = format!("{:0>width$}", remainder, width = decimals as usize);
-    let trimmed = remainder_str.trim_end_matches('0');
-    if trimmed.is_empty() {
-        whole.to_string()
-    } else {
-        format!("{}.{}", whole, &trimmed[..trimmed.len().min(6)])
-    }
-}
-
 /// Format health factor (18 decimals, 1e18 = 1.0).
 fn format_health_factor(value: U256) -> String {
-    format_units(value, 18)
+    format_u256(value, 18)
 }
 
 /// Format LTV (4 decimals, 10000 = 100%).
 fn format_ltv(value: U256) -> String {
     // Multiply by 100 to convert basis-points (4 decimals) to percentage.
-    let pct = format_units(value.saturating_mul(U256::from(100)), 4);
+    let pct = format_u256(value.saturating_mul(U256::from(100)), 4);
     format!("{}%", pct)
 }
 
@@ -188,10 +178,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn format_units_basic() {
-        assert_eq!(format_units(U256::ZERO, 8), "0");
-        assert_eq!(format_units(U256::from(100_000_000u64), 8), "1");
-        assert_eq!(format_units(U256::from(150_000_000u64), 8), "1.5");
+    fn format_u256_basic() {
+        assert_eq!(format_u256(U256::ZERO, 8), "0");
+        assert_eq!(format_u256(U256::from(100_000_000u64), 8), "1");
+        assert_eq!(format_u256(U256::from(150_000_000u64), 8), "1.5");
     }
 
     #[test]

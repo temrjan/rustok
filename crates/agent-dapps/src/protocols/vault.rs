@@ -8,6 +8,7 @@ use alloy_network::TransactionBuilder;
 use alloy_primitives::{Address, U256};
 use alloy_sol_types::{SolCall, sol};
 use rustok_core::provider::MultiProvider;
+use rustok_core::utils::format_u256;
 
 use crate::error::DappError;
 use crate::types::{Position, Protocol};
@@ -83,16 +84,16 @@ impl VaultConnector {
                     }
                 };
 
-                let (name, symbol, decimals) =
+                let (name, symbol, decimals, asset_token) =
                     match self.fetch_metadata(provider, chain_id, vault).await {
                         Ok(m) => m,
                         Err(e) => {
                             tracing::warn!(%chain_id, %vault, %e, "vault metadata failed");
-                            ("Unknown Vault".to_string(), "VLT".to_string(), 18)
+                            ("Unknown Vault".to_string(), "VLT".to_string(), 18, None)
                         }
                     };
 
-                let formatted = format_wei(assets, decimals);
+                let formatted = format_u256(assets, decimals);
 
                 let mut extra = serde_json::Map::new();
                 extra.insert(
@@ -107,7 +108,7 @@ impl VaultConnector {
                 positions.push(Position {
                     protocol: Protocol::Erc4626,
                     chain_id,
-                    asset_address: vault.to_string(),
+                    asset_address: asset_token.map_or_else(|| vault.to_string(), |a| a.to_string()),
                     asset_symbol: symbol,
                     asset_name: name,
                     asset_decimals: decimals,
@@ -159,7 +160,7 @@ impl VaultConnector {
         provider: &MultiProvider,
         chain_id: u64,
         vault: Address,
-    ) -> Result<(String, String, u8), DappError> {
+    ) -> Result<(String, String, u8, Option<Address>), DappError> {
         let name_tx = alloy_rpc_types_eth::TransactionRequest::default()
             .with_to(vault)
             .with_input(IERC4626::nameCall {}.abi_encode());
@@ -169,16 +170,23 @@ impl VaultConnector {
         let decimals_tx = alloy_rpc_types_eth::TransactionRequest::default()
             .with_to(vault)
             .with_input(IERC4626::decimalsCall {}.abi_encode());
+        let asset_tx = alloy_rpc_types_eth::TransactionRequest::default()
+            .with_to(vault)
+            .with_input(IERC4626::assetCall {}.abi_encode());
 
-        let name_res = provider.call(chain_id, &name_tx).await?;
-        let symbol_res = provider.call(chain_id, &symbol_tx).await?;
-        let decimals_res = provider.call(chain_id, &decimals_tx).await?;
+        let (name_res, symbol_res, decimals_res, asset_res) = tokio::join!(
+            provider.call(chain_id, &name_tx),
+            provider.call(chain_id, &symbol_tx),
+            provider.call(chain_id, &decimals_tx),
+            provider.call(chain_id, &asset_tx),
+        );
 
-        let name = IERC4626::nameCall::abi_decode_returns(&name_res)?;
-        let symbol = IERC4626::symbolCall::abi_decode_returns(&symbol_res)?;
-        let decimals = IERC4626::decimalsCall::abi_decode_returns(&decimals_res)?;
+        let name = IERC4626::nameCall::abi_decode_returns(&name_res?)?;
+        let symbol = IERC4626::symbolCall::abi_decode_returns(&symbol_res?)?;
+        let decimals = IERC4626::decimalsCall::abi_decode_returns(&decimals_res?)?;
+        let asset_token = IERC4626::assetCall::abi_decode_returns(&asset_res?).ok();
 
-        Ok((name, symbol, decimals))
+        Ok((name, symbol, decimals, asset_token))
     }
 }
 
@@ -188,41 +196,24 @@ impl Default for VaultConnector {
     }
 }
 
-/// Format wei amount to human-readable string with decimal places.
-fn format_wei(wei: U256, decimals: u8) -> String {
-    if wei.is_zero() {
-        return "0".into();
-    }
-    let divisor = U256::from(10u64).pow(U256::from(decimals));
-    let whole = wei / divisor;
-    let remainder = wei % divisor;
-    if remainder.is_zero() {
-        return whole.to_string();
-    }
-    let remainder_str = format!("{:0>width$}", remainder, width = decimals as usize);
-    let trimmed = remainder_str.trim_end_matches('0');
-    let display_decimals = trimmed.len().min(6);
-    format!("{}.{}", whole, &trimmed[..display_decimals])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn format_wei_zero() {
-        assert_eq!(format_wei(U256::ZERO, 18), "0");
+    fn format_u256_zero() {
+        assert_eq!(format_u256(U256::ZERO, 18), "0");
     }
 
     #[test]
-    fn format_wei_one() {
+    fn format_u256_one() {
         let one = U256::from(1_000_000_000_000_000_000u64);
-        assert_eq!(format_wei(one, 18), "1");
+        assert_eq!(format_u256(one, 18), "1");
     }
 
     #[test]
-    fn format_wei_fractional() {
+    fn format_u256_fractional() {
         let val = U256::from(1_500_000_000_000_000_000u64);
-        assert_eq!(format_wei(val, 18), "1.5");
+        assert_eq!(format_u256(val, 18), "1.5");
     }
 }

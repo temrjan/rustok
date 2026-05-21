@@ -133,8 +133,6 @@ pub struct AgentWalletService {
         Mutex<std::collections::HashMap<uuid::Uuid, (std::time::Instant, CachedPreview)>>,
     /// DeFi position tracker (Aave, vaults).
     tracker: PositionTracker,
-    /// TTL cache for positions (60 sec).
-    positions_cache: Mutex<Option<(std::time::Instant, Vec<rustok_agent_dapps::types::Position>)>>,
 }
 
 impl AgentWalletService {
@@ -165,7 +163,6 @@ impl AgentWalletService {
         let context_cache = Mutex::new(None);
         let preview_cache = Mutex::new(std::collections::HashMap::new());
         let tracker = PositionTracker::new();
-        let positions_cache = Mutex::new(None);
 
         Ok(Self {
             wallet,
@@ -177,7 +174,6 @@ impl AgentWalletService {
             context_cache,
             preview_cache,
             tracker,
-            positions_cache,
         })
     }
 
@@ -302,44 +298,23 @@ impl AgentWalletService {
         }
         let gas_oracle = context::GasSnapshot { chains };
 
-        // 4. Positions (separate TTL cache, 60 sec)
-        let positions = {
-            let cache = self.positions_cache.lock().await;
-            if let Some((instant, positions)) = cache.as_ref() {
-                if instant.elapsed() < std::time::Duration::from_secs(60) {
-                    positions.clone()
+        // 4. Positions (fetched inline; cached as part of WalletContext TTL)
+        let positions = match self.wallet.current_address().await {
+            Some(addr) => {
+                if let Ok(addr) = addr.parse::<alloy_primitives::Address>() {
+                    match self.tracker.track(&self.provider, addr).await {
+                        Ok(positions) => positions,
+                        Err(e) => {
+                            tracing::warn!(%e, "position tracking failed");
+                            Vec::new()
+                        }
+                    }
                 } else {
+                    tracing::warn!("failed to parse wallet address for position tracking");
                     Vec::new()
                 }
-            } else {
-                Vec::new()
             }
-        };
-
-        let positions = if positions.is_empty() {
-            match self.wallet.current_address().await {
-                Some(addr) => {
-                    if let Ok(addr) = addr.parse::<alloy_primitives::Address>() {
-                        match self.tracker.track(&self.provider, addr).await {
-                            Ok(positions) => {
-                                *self.positions_cache.lock().await =
-                                    Some((std::time::Instant::now(), positions.clone()));
-                                positions
-                            }
-                            Err(e) => {
-                                tracing::warn!(%e, "position tracking failed");
-                                Vec::new()
-                            }
-                        }
-                    } else {
-                        tracing::warn!("failed to parse wallet address for position tracking");
-                        Vec::new()
-                    }
-                }
-                None => Vec::new(),
-            }
-        } else {
-            positions
+            None => Vec::new(),
         };
 
         let ctx = context::WalletContext {
