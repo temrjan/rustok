@@ -27,5 +27,5 @@ tracing-subscriber = { workspace = true }
 alloy-primitives = { workspace = true }
 uuid = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-dirs = "5.0"
-zeroize = "1.7"
+dirs = { workspace = true }
+zeroize = { workspace = true }

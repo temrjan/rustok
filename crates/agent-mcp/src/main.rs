@@ -37,12 +37,19 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+    if let Err(e) = run().await {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     let cli = Cli::parse();
 
     // Resolve data_dir (expand ~).
     let data_dir = if cli.data_dir.starts_with("~") {
-        let home = dirs::home_dir().expect("home directory not found");
+        let home = dirs::home_dir().ok_or("home directory not found")?;
         home.join(cli.data_dir.strip_prefix("~").unwrap())
     } else {
         cli.data_dir
@@ -51,8 +58,10 @@ async fn main() {
     // Load policy.
     let policy = match &cli.policy_config {
         Some(path) => {
-            let raw = std::fs::read_to_string(path).expect("failed to read policy config");
-            serde_json::from_str(&raw).expect("invalid policy JSON")
+            let raw = std::fs::read_to_string(path)
+                .map_err(|e| format!("failed to read policy config '{}': {e}", path.display()))?;
+            serde_json::from_str(&raw)
+                .map_err(|e| format!("invalid policy JSON in '{}': {e}", path.display()))?
         }
         None => AgentPolicy::default(),
     };
@@ -68,24 +77,15 @@ async fn main() {
 
     // Create service.
     let service = AgentWalletService::new(&data_dir, policy, unlock.clone())
-        .expect("failed to create agent wallet service");
+        .map_err(|e| format!("failed to create agent wallet service: {e}"))?;
 
     // Create wallet if requested and none exists.
     if cli.create_wallet {
-        if !service.has_wallet().await.expect("has_wallet failed") {
-            let pwd = match unlock.password() {
-                Some(p) => p,
-                None => {
-                    eprintln!(
-                        "error: --create-wallet requires a password (--unlock-password or --unlock-env)"
-                    );
-                    std::process::exit(1);
-                }
-            };
-            let addr = service
-                .create_wallet(pwd)
-                .await
-                .expect("failed to create wallet");
+        if !service.has_wallet().await? {
+            let pwd = unlock.password().ok_or(
+                "--create-wallet requires a password (--unlock-password or RUSTOK_AGENT_PASSWORD env var)",
+            )?;
+            let addr = service.create_wallet(pwd).await?;
             info!(%addr, "created new agent wallet");
         } else {
             info!("agent wallet already exists, skipping --create-wallet");
@@ -97,8 +97,7 @@ async fn main() {
         match service.auto_unlock().await {
             Ok(addr) => info!(%addr, "auto-unlocked agent wallet"),
             Err(e) => {
-                eprintln!("error: failed to unlock wallet: {e}");
-                std::process::exit(1);
+                return Err(format!("failed to unlock wallet: {e}").into());
             }
         }
     }
@@ -106,8 +105,6 @@ async fn main() {
     // Start server.
     let server = McpServer::new(Arc::new(service));
     info!(port = cli.port, "starting MCP server");
-    if let Err(e) = server.run(cli.port).await {
-        eprintln!("error: server crashed: {e}");
-        std::process::exit(1);
-    }
+    server.run(cli.port).await?;
+    Ok(())
 }
