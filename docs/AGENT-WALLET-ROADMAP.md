@@ -107,7 +107,7 @@ impl AgentWalletService {
 - [x] `cargo test --workspace` проходит (161 тест)
 - [x] `cargo fmt`, `cargo clippy --workspace --all-targets` clean
 
-## Phase 4: OpenClaw Skill ✅
+## Phase 4: OpenClaw Skill 🔄
 
 **Goal:** Publish `rustok-wallet` skill on clawhub.ai.
 

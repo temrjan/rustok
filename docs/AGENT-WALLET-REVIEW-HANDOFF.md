@@ -176,7 +176,7 @@ crates/agent-mcp/
 | Phase | Что планируется | Когда ревьюить |
 |---|---|---|
 | **Phase 3** | `PositionTracker` (Aave, ERC-4626 vaults) | ✅ DONE, замержено в `feat/agent-wallet-pivot` |
-| **Phase 4** | `OpenClaw Skill` (publish на clawhub.ai) | 🔄 IN PROGRESS — ожидает diff от Инженера |
+| **Phase 4** | `OpenClaw Skill` (publish на clawhub.ai) | 🔄 IN PROGRESS — E2E тестирование, доработка до 100%. Phase 5 отложена. |
 | **Phase 5** | `TransactionTemplate` (reusable strategies, cron) | В бэклоге |
 | **Phase 5** | `StrategyEngine` — **НЕ ДЕЛАЕМ** (architectural anti-pattern) | — |
 
