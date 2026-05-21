@@ -31,7 +31,7 @@ This wallet is **separate** from the user's main wallet. All spending limits, ad
 ### 1. Check wallet context
 
 ```bash
-curl -fsS http://rustok-agent-mcp:3000/context | jq
+curl -fsS -X POST http://rustok-agent-mcp:3000/context | jq
 ```
 
 ### 2. Preview a transaction (always preview before execute)
@@ -52,12 +52,12 @@ curl -fsS -X POST http://rustok-agent-mcp:3000/execute \
 
 ## API Reference
 
-### GET /context — Wallet state
+### POST /context — Wallet state
 
 Returns: address, cross-chain balances, policy limits, gas estimates, DeFi positions.
 
 ```bash
-curl -fsS http://rustok-agent-mcp:3000/context | jq
+curl -fsS -X POST http://rustok-agent-mcp:3000/context | jq
 ```
 
 ### POST /positions — DeFi positions
