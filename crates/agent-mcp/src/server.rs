@@ -32,7 +32,7 @@ impl McpServer {
     ///
     /// Returns `std::io::Error` if the TCP listener cannot be bound or the
     /// server encounters an I/O error.
-    pub async fn run(self, port: u16) -> Result<(), std::io::Error> {
+    pub async fn run(self, host: &str, port: u16) -> Result<(), std::io::Error> {
         let app = Router::new()
             .route("/health", get(health_check))
             .route("/context", post(get_context_handler))
@@ -41,7 +41,7 @@ impl McpServer {
             .route("/positions", post(get_positions_handler))
             .with_state(self.wallet);
 
-        let addr = format!("127.0.0.1:{port}");
+        let addr = format!("{host}:{port}");
         let listener = tokio::net::TcpListener::bind(&addr).await?;
         tracing::info!(%addr, "MCP server listening");
 

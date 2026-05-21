@@ -87,7 +87,7 @@ jobs:
       - name: Validate SKILL.md YAML frontmatter
         run: |
           python3 -c "
-          import yaml, sys
+          import yaml, sys, json
           with open('skills/rustok-wallet/SKILL.md') as f:
               content = f.read()
           parts = content.split('---')
@@ -95,11 +95,28 @@ jobs:
               print('ERROR: Missing YAML frontmatter')
               sys.exit(1)
           frontmatter = yaml.safe_load(parts[1])
-          required = ['name', 'version', 'author', 'description', 'permissions', 'tags']
+
+          # OpenClaw spec: name + description are required
+          required = ['name', 'description']
           for key in required:
               if key not in frontmatter:
                   print(f'ERROR: Missing required key: {key}')
                   sys.exit(1)
+
+          # metadata.openclaw is optional but must be valid JSON if present
+          metadata = frontmatter.get('metadata')
+          if metadata:
+              if not isinstance(metadata, dict):
+                  print('ERROR: metadata must be a dict')
+                  sys.exit(1)
+              openclaw = metadata.get('openclaw')
+              if openclaw:
+                  requires = openclaw.get('requires', {})
+                  if 'bins' in requires:
+                      print(f'  requires.bins: {requires[\"bins\"]}')
+                  if 'env' in requires:
+                      print(f'  requires.env: {requires[\"env\"]}')
+
           print('SKILL.md YAML frontmatter: OK')
           "
       - name: Validate claw.json

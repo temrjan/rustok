@@ -10,6 +10,10 @@ use tracing::info;
 #[derive(Parser, Debug)]
 #[command(name = "rustok-agent-mcp")]
 struct Cli {
+    /// Host to bind to.
+    #[arg(long, default_value = "127.0.0.1")]
+    host: String,
+
     /// Port to listen on.
     #[arg(long, default_value = "3000")]
     port: u16,
@@ -105,6 +109,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Start server.
     let server = McpServer::new(Arc::new(service));
     info!(port = cli.port, "starting MCP server");
-    server.run(cli.port).await?;
+    server.run(&cli.host, cli.port).await?;
     Ok(())
 }

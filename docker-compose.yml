@@ -1,0 +1,31 @@
+services:
+  rustok-agent-mcp:
+    build:
+      context: .
+      dockerfile: crates/agent-mcp/Dockerfile
+    image: ghcr.io/temrjan/rustok-agent-mcp:latest
+    environment:
+      - RUSTOK_AGENT_PASSWORD=${RUSTOK_AGENT_PASSWORD}
+    volumes:
+      - rustok-agent-data:/root/.rustok/agent
+    networks:
+      - openclaw_default
+    command: >
+      --host 0.0.0.0
+      --port 3000
+      --data-dir /root/.rustok/agent
+      --unlock-env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  rustok-agent-data:
+
+networks:
+  openclaw_default:
+    external: true
