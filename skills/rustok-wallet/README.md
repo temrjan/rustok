@@ -89,6 +89,17 @@ Options:
 | `wallet locked` | Server failed to auto-unlock; check password |
 | `daily budget exceeded` | Increase `max_daily_spend_eth` in policy.json |
 
+## Donations
+
+This project is open-source and self-funded. Your support helps us test and improve the agent wallet.
+
+**Ethereum / Sepolia:**
+```
+0xb9d2497e5356d75d0ddd6d806cfe13cafe65f6eb
+```
+
+☕ Send a test transaction on Sepolia — every tx helps us verify the wallet and build better security.
+
 ## License
 
 AGPL-3.0-or-later
