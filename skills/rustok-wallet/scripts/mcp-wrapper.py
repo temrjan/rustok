@@ -45,9 +45,17 @@ def main():
             elif name == "wallet_positions":
                 result = call("POST", "/positions", {"address": args.get("address")})
             elif name == "preview_transaction":
-                result = call("POST", "/preview", {"to": args["to"], "amount_wei": args["amount_wei"], "chain_id": args["chain_id"]})
+                missing = [f for f in ("to", "amount_wei", "chain_id") if not args.get(f)]
+                if missing:
+                    result = {"error": f"missing required fields: {', '.join(missing)}"}
+                else:
+                    result = call("POST", "/preview", {"to": args["to"], "amount_wei": args["amount_wei"], "chain_id": args["chain_id"]})
             elif name == "execute_transaction":
-                result = call("POST", "/execute", {"to": args["to"], "amount_wei": args["amount_wei"], "chain_id": args["chain_id"], "preview_id": args["preview_id"]})
+                missing = [f for f in ("to", "amount_wei", "chain_id", "preview_id") if not args.get(f)]
+                if missing:
+                    result = {"error": f"missing required fields: {', '.join(missing)}"}
+                else:
+                    result = call("POST", "/execute", {"to": args["to"], "amount_wei": args["amount_wei"], "chain_id": args["chain_id"], "preview_id": args["preview_id"]})
             else:
                 result = {"error": "unknown tool"}
             content = [{"type": "text", "text": json.dumps(result, indent=2)}]

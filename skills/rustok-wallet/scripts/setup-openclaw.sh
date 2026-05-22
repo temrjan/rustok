@@ -4,6 +4,13 @@
 
 set -euo pipefail
 
+# Cleanup orphaned background processes on exit or error.
+cleanup() {
+    [ -n "${RUSTOK_PID:-}" ] && kill "$RUSTOK_PID" 2>/dev/null || true
+    [ -n "${GATEWAY_PID:-}" ] && kill "$GATEWAY_PID" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 echo "==================================="
 echo "OpenClaw + rustok-wallet Setup"
 echo "==================================="
@@ -110,6 +117,7 @@ cat > "$HOME/.openclaw/openclaw.json" <<EOF
 }
 EOF
 
+chmod 600 "$HOME/.openclaw/openclaw.json"
 echo "✅ Config written to ~/.openclaw/openclaw.json"
 
 # --- Add Telegram channel ---
@@ -133,29 +141,29 @@ echo "==================================="
 
 export RUSTOK_AGENT_PASSWORD="$RUSTOK_PASSWORD"
 
+# Resolve rustok-agent-mcp binary (repo build or PATH fallback).
+RUSTOK_MCP_BIN="$(dirname "$0")/../../../target/release/rustok-agent-mcp"
+if [ ! -f "$RUSTOK_MCP_BIN" ]; then
+    RUSTOK_MCP_BIN="$(command -v rustok-agent-mcp || true)"
+fi
+if [ -z "$RUSTOK_MCP_BIN" ] || [ ! -f "$RUSTOK_MCP_BIN" ]; then
+    echo "❌ rustok-agent-mcp binary not found."
+    echo "   Build it first: cargo build --release -p rustok-agent-mcp"
+    echo "   Or install to PATH."
+    exit 1
+fi
+
 # Check if wallet exists
 if [ ! -d "$RUSTOK_DATA_DIR/agent_wallet" ]; then
     echo "⚠️ No wallet found. Creating one..."
-    if [ -f "$(dirname "$0")/../../../target/release/rustok-agent-mcp" ]; then
-        "$(dirname "$0")/../../../target/release/rustok-agent-mcp" \
-            --data-dir "$RUSTOK_DATA_DIR" \
-            --create-wallet \
-            --port 3000 &
-    else
-        echo "❌ rustok-agent-mcp binary not found."
-        echo "   Build it first: cargo build --release -p rustok-agent-mcp"
-        exit 1
-    fi
+    "$RUSTOK_MCP_BIN" \
+        --data-dir "$RUSTOK_DATA_DIR" \
+        --create-wallet \
+        --port 3000 &
 else
-    if [ -f "$(dirname "$0")/../../../target/release/rustok-agent-mcp" ]; then
-        "$(dirname "$0")/../../../target/release/rustok-agent-mcp" \
-            --data-dir "$RUSTOK_DATA_DIR" \
-            --port 3000 &
-    else
-        echo "❌ rustok-agent-mcp binary not found."
-        echo "   Build it first: cargo build --release -p rustok-agent-mcp"
-        exit 1
-    fi
+    "$RUSTOK_MCP_BIN" \
+        --data-dir "$RUSTOK_DATA_DIR" \
+        --port 3000 &
 fi
 
 RUSTOK_PID=$!
