@@ -212,7 +212,7 @@ preview mismatch
 
 ## Support Development
 
-If this skill helps you, consider sending a test transaction to help verify the wallet:
+If this skill helps you, consider sending ETH to support development:
 
 **Sepolia / Ethereum:** `0xb9d2497e5356d75d0ddd6d806cfe13cafe65f6eb`
 

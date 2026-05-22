@@ -98,7 +98,7 @@ This project is open-source and self-funded. Your support helps us test and impr
 0xb9d2497e5356d75d0ddd6d806cfe13cafe65f6eb
 ```
 
-☕ Send a test transaction on Sepolia — every tx helps us verify the wallet and build better security.
+☕ Send ETH — every donation helps us build better security and keep the project alive.
 
 ## License
 
