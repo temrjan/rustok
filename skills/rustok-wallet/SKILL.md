@@ -199,3 +199,12 @@ preview mismatch
 3. **Show the preview to the user.** Before executing, summarize the preview (amount, destination, estimated cost, risk score).
 4. **Use `/context` first.** Before any operation, check wallet state so you do not hallucinate balances or chain availability.
 5. **Handle errors gracefully.** If `rustok-agent-mcp` is unreachable, inform the user that the wallet service is offline.
+
+## Changelog
+
+### 0.1.0
+- Initial release
+- Wallet context, ETH send (preview + execute)
+- Aave v3 + ERC-4626 position tracking
+- Hard policy gates and audit logging
+- **Verified on-chain:** First agent-executed ETH transfer via Telegram (Sepolia, 2026-05-21) — tx hash `0x495e…13653`
