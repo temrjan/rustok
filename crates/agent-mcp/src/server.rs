@@ -23,6 +23,8 @@ pub struct AppState {
     pub wallet: Arc<AgentWalletService>,
     /// Bearer token required on all protected routes.
     pub api_key: Arc<str>,
+    /// Pre-formatted "Bearer <api_key>" for constant-time comparison.
+    bearer_key: Arc<str>,
     /// Rate limiter for protected routes.
     rate_limiter: RateLimitState,
 }
@@ -38,10 +40,12 @@ pub struct McpServer {
 impl McpServer {
     /// Create a new server around the given wallet service and API key.
     pub fn new(wallet: Arc<AgentWalletService>, api_key: Arc<str>) -> Self {
+        let bearer_key: Arc<str> = format!("Bearer {}", api_key).into();
         Self {
             state: AppState {
                 wallet,
                 api_key,
+                bearer_key,
                 rate_limiter: RateLimitState::new(100, Duration::from_secs(60)),
             },
         }
@@ -100,8 +104,7 @@ async fn auth_middleware(
     let valid = headers
         .get("authorization")
         .map(|value| {
-            let expected = format!("Bearer {}", state.api_key);
-            subtle::ConstantTimeEq::ct_eq(value.as_bytes(), expected.as_bytes()).into()
+            subtle::ConstantTimeEq::ct_eq(value.as_bytes(), state.bearer_key.as_bytes()).into()
         })
         .unwrap_or(false);
 
@@ -115,7 +118,7 @@ async fn auth_middleware(
 /// Simple per-server rate limiter (fixed window).
 #[derive(Clone)]
 struct RateLimitState {
-    inner: Arc<tokio::sync::Mutex<RateLimitInner>>,
+    inner: Arc<std::sync::Mutex<RateLimitInner>>,
 }
 
 struct RateLimitInner {
@@ -128,7 +131,7 @@ struct RateLimitInner {
 impl RateLimitState {
     fn new(max_requests: u64, window: Duration) -> Self {
         Self {
-            inner: Arc::new(tokio::sync::Mutex::new(RateLimitInner {
+            inner: Arc::new(std::sync::Mutex::new(RateLimitInner {
                 window,
                 max_requests,
                 reset_at: Instant::now(),
@@ -137,8 +140,8 @@ impl RateLimitState {
         }
     }
 
-    async fn check(&self) -> bool {
-        let mut guard = self.inner.lock().await;
+    fn check(&self) -> bool {
+        let mut guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
         if now.duration_since(guard.reset_at) >= guard.window {
             guard.reset_at = now;
@@ -158,7 +161,7 @@ async fn rate_limit_middleware(
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if state.rate_limiter.check().await {
+    if state.rate_limiter.check() {
         Ok(next.run(request).await)
     } else {
         Err(StatusCode::TOO_MANY_REQUESTS)

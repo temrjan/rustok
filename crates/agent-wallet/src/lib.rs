@@ -460,6 +460,9 @@ impl AgentWalletService {
         }
 
         // Serialize all spend operations to prevent TOCTOU race in budget check.
+        // NOTE: this lock is held across the network call (execute_send + receipt
+        // wait) which serialises all sends. This is intentional — correctness over
+        // throughput for a wallet hot path.
         let _budget_guard = self.budget_lock.lock().await;
 
         // Atomic budget check
@@ -467,7 +470,7 @@ impl AgentWalletService {
             let audit_guard = self.audit.lock().await;
             if !self.budget.can_spend(&audit_guard, amount_eth)? {
                 let spent = self.budget.spent_today(&audit_guard)?;
-                let _ = audit_guard.append(&AuditEntry {
+                if let Err(e) = audit_guard.append(&AuditEntry {
                     id: 0,
                     timestamp: chrono::Utc::now(),
                     action: AgentAction::PolicyReject,
@@ -486,7 +489,9 @@ impl AgentWalletService {
                         )
                         .into(),
                     ),
-                });
+                }) {
+                    tracing::error!(error = %e, "audit append failed during budget rejection");
+                }
                 return Err(AgentWalletError::BudgetExceeded {
                     spent,
                     limit: self.policy.max_daily_spend_eth,

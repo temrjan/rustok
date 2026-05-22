@@ -108,7 +108,7 @@ impl AgentPolicy {
         }
 
         // Blocklist (case-insensitive)
-        let to_str = format!("{to:#x}");
+        let to_str = format!("{to:#x}").to_lowercase();
         if self
             .blocked_addresses
             .iter()

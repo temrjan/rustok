@@ -93,7 +93,7 @@ Options:
 
 This project is open-source and self-funded. Your support helps us test and improve the agent wallet.
 
-**Ethereum / Sepolia:**
+**Ethereum:**
 ```
 0xb9d2497e5356d75d0ddd6d806cfe13cafe65f6eb
 ```
