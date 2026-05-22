@@ -1,4 +1,4 @@
-name: Deploy rustok-agent-mcp
+name: Build and push rustok-agent-mcp
 
 on:
   push:
@@ -9,7 +9,9 @@ on:
       - "crates/agent-dapps/**"
       - "crates/core/**"
       - "docker-compose.yml"
+      - "Dockerfile"
       - ".github/workflows/deploy-agent-mcp.yml"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -55,40 +57,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  deploy:
-    name: Deploy to 7demo
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          port: ${{ secrets.DEPLOY_PORT }}
-          script: |
-            set -e
-            cd /root/rustok
-            git pull origin main
-
-            # Tag current image for quick rollback
-            docker tag ghcr.io/temrjan/rustok-agent-mcp:latest ghcr.io/temrjan/rustok-agent-mcp:backup || true
-
-            docker compose pull rustok-agent-mcp
-            docker compose up -d rustok-agent-mcp
-            sleep 5
-
-            # Health check using TCP probe (curl is not present in the runtime image)
-            if docker compose exec -T rustok-agent-mcp bash -c 'echo > /dev/tcp/localhost/3000'; then
-              echo "Deployment successful"
-              docker compose ps rustok-agent-mcp
-            else
-              echo "Health check failed — rolling back to backup image"
-              docker tag ghcr.io/temrjan/rustok-agent-mcp:backup ghcr.io/temrjan/rustok-agent-mcp:latest
-              docker compose up -d rustok-agent-mcp
-              exit 1
-            fi

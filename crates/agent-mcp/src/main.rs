@@ -70,10 +70,56 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // Unlock strategy: always read from RUSTOK_AGENT_PASSWORD env var.
     let unlock = UnlockStrategy::EnvVar;
 
-    // API key for MCP authentication.
-    let api_key: Arc<str> = std::env::var("MCP_API_KEY")
-        .map_err(|_| "MCP_API_KEY environment variable must be set")?
-        .into();
+    // Optional API key for Bearer auth (empty = disabled).
+    let api_key: Option<Arc<str>> = match std::env::var("MCP_API_KEY") {
+        Ok(k) if !k.trim().is_empty() => Some(Arc::from(k.into_boxed_str())),
+        _ => None,
+    };
+
+    // Allowed chain IDs from env (fallback: Arbitrum Sepolia testnet).
+    let allowed_chain_ids: Vec<u64> = match std::env::var("MCP_CHAIN_IDS") {
+        Ok(s) => {
+            let ids: Vec<u64> = s
+                .split(',')
+                .filter_map(|part| {
+                    let trimmed = part.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        match trimmed.parse() {
+                            Ok(id) => Some(id),
+                            Err(_) => {
+                                tracing::warn!(
+                                    "ignoring invalid chain id '{}' in MCP_CHAIN_IDS",
+                                    trimmed
+                                );
+                                None
+                            }
+                        }
+                    }
+                })
+                .collect();
+            if ids.is_empty() {
+                tracing::warn!("MCP_CHAIN_IDS empty or invalid, falling back to 421614");
+                vec![421614]
+            } else {
+                ids
+            }
+        }
+        Err(_) => vec![421614],
+    };
+
+    // Rate limit in req/min from env (fallback: 100, 0 = disabled).
+    let rate_limit: Option<u64> = match std::env::var("MCP_RATE_LIMIT") {
+        Ok(s) => {
+            let v = s
+                .trim()
+                .parse()
+                .map_err(|_| "MCP_RATE_LIMIT must be a non-negative integer")?;
+            Some(v)
+        }
+        Err(_) => None,
+    };
 
     // Create service.
     let service = AgentWalletService::new(&data_dir, policy, unlock.clone())
@@ -103,7 +149,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Start server.
-    let server = McpServer::new(Arc::new(service), api_key);
+    let server = McpServer::new(Arc::new(service), api_key, allowed_chain_ids, rate_limit);
     info!(host = cli.host, port = cli.port, "starting MCP server");
     server.run(&cli.host, cli.port).await?;
     Ok(())

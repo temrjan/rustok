@@ -13,8 +13,6 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 /// JSON-RPC 2.0 request.
 #[derive(Debug, Deserialize)]
 struct Request {
-    /// Required by JSON-RPC 2.0 spec; present for strict parsing.
-    #[allow(dead_code)]
     jsonrpc: String,
     id: Option<Value>,
     method: String,
@@ -148,6 +146,9 @@ async fn write_response(stdout: &mut tokio::io::Stdout, payload: &str) -> std::i
 }
 
 async fn handle_request(backend: &BackendClient, req: Request) -> Response {
+    if req.jsonrpc != "2.0" {
+        return error_response(req.id, -32_600, "invalid request: jsonrpc must be 2.0");
+    }
     match req.method.as_str() {
         "initialize" => handle_initialize(req.id),
         "tools/list" => handle_tools_list(req.id),

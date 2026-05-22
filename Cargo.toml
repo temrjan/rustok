@@ -82,6 +82,12 @@ uuid = "1"
 # Secret zeroing
 zeroize = "1"
 
+# SQLite
+rusqlite = { version = "0.32", features = ["bundled"] }
+
+# Constant-time comparison
+subtle = "2"
+
 # ─── Build profiles ────────────────────────────────────────────────
 # Optimize crypto crates in dev for tolerable Argon2id unlock times.
 # Without this, password hashing takes ~1-2min in debug builds.

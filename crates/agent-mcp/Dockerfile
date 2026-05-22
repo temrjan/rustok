@@ -2,7 +2,7 @@
 # Builder: compile the Rust binary
 # Runtime: minimal Debian image with CA certificates
 
-FROM rust:1.95-slim-bookworm AS builder
+FROM rust:1.85-slim-bookworm AS builder
 
 WORKDIR /build
 
@@ -36,4 +36,9 @@ COPY --from=builder --chown=rustok:rustok /build/target/release/rustok-agent-mcp
 
 USER rustok
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD bash -c 'printf "GET /health HTTP/1.1\r\nHost: localhost\r\n\r\n" > /dev/tcp/localhost/3000' || exit 1
+
 ENTRYPOINT ["/usr/local/bin/rustok-agent-mcp"]
+CMD ["--host", "0.0.0.0", "--port", "3000"]

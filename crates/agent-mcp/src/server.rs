@@ -13,6 +13,7 @@ use axum::{
     routing::{get, post},
 };
 use rustok_agent_wallet::{AgentWalletError, AgentWalletService};
+use subtle::ConstantTimeEq;
 
 use crate::types::{ExecuteRequest, PositionsRequest, PreviewRequest, PreviewResponse};
 
@@ -24,12 +25,12 @@ const MAX_BODY_BYTES: usize = 16 * 1024;
 pub struct AppState {
     /// The agent wallet service.
     pub wallet: Arc<AgentWalletService>,
-    /// Bearer token required on all protected routes.
-    pub api_key: Arc<str>,
-    /// Pre-formatted "Bearer <api_key>" for constant-time comparison.
-    bearer_key: Arc<str>,
-    /// Rate limiter for protected routes.
-    rate_limiter: RateLimitState,
+    /// Optional Bearer token for auth (RFC 6757).
+    api_key: Option<Arc<str>>,
+    /// Allowed chain IDs (testnet-only in MVP).
+    pub allowed_chain_ids: Vec<u64>,
+    /// Rate limiter for protected routes (`None` = disabled).
+    rate_limiter: Option<RateLimitState>,
 }
 
 /// Simple MCP-over-HTTP server.
@@ -41,15 +42,30 @@ pub struct McpServer {
 }
 
 impl McpServer {
-    /// Create a new server around the given wallet service and API key.
-    pub fn new(wallet: Arc<AgentWalletService>, api_key: Arc<str>) -> Self {
-        let bearer_key: Arc<str> = format!("Bearer {}", api_key).into();
+    /// Create a new server around the given wallet service.
+    ///
+    /// `api_key` is optional. When `Some`, every protected route requires a
+    /// matching `Authorization: Bearer <key>` header.  When `None` the server
+    /// accepts all requests (safe only on localhost / trusted networks).
+    ///
+    /// `rate_limit` is optional requests-per-minute. `None` or `0` disables
+    /// rate limiting entirely.
+    pub fn new(
+        wallet: Arc<AgentWalletService>,
+        api_key: Option<Arc<str>>,
+        allowed_chain_ids: Vec<u64>,
+        rate_limit: Option<u64>,
+    ) -> Self {
+        let rate_limiter = match rate_limit {
+            Some(0) | None => None,
+            Some(limit) => Some(RateLimitState::new(limit, Duration::from_secs(60))),
+        };
         Self {
             state: AppState {
                 wallet,
                 api_key,
-                bearer_key,
-                rate_limiter: RateLimitState::new(100, Duration::from_secs(60)),
+                allowed_chain_ids,
+                rate_limiter,
             },
         }
     }
@@ -104,17 +120,21 @@ async fn auth_middleware(
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let valid = headers
+    let raw_key = headers
         .get("authorization")
-        .map(|value| {
-            subtle::ConstantTimeEq::ct_eq(value.as_bytes(), state.bearer_key.as_bytes()).into()
-        })
-        .unwrap_or(false);
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.strip_prefix("Bearer "))
+        .unwrap_or("");
 
-    if valid {
-        Ok(next.run(request).await)
-    } else {
-        Err(StatusCode::UNAUTHORIZED)
+    match state.api_key {
+        Some(ref expected) => {
+            if raw_key.as_bytes().ct_eq(expected.as_bytes()).into() {
+                Ok(next.run(request).await)
+            } else {
+                Err(StatusCode::UNAUTHORIZED)
+            }
+        }
+        None => Ok(next.run(request).await),
     }
 }
 
@@ -164,11 +184,12 @@ async fn rate_limit_middleware(
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if state.rate_limiter.check() {
-        Ok(next.run(request).await)
-    } else {
-        Err(StatusCode::TOO_MANY_REQUESTS)
+    if let Some(ref rl) = state.rate_limiter {
+        if !rl.check() {
+            return Err(StatusCode::TOO_MANY_REQUESTS);
+        }
     }
+    Ok(next.run(request).await)
 }
 
 async fn get_context_handler(
@@ -186,6 +207,12 @@ async fn preview_send_handler(
     State(state): State<AppState>,
     Json(req): Json<PreviewRequest>,
 ) -> Result<Json<PreviewResponse>, (StatusCode, String)> {
+    if !state.allowed_chain_ids.contains(&req.chain_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("chain {} not allowed", req.chain_id),
+        ));
+    }
     let to = parse_address(&req.to).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let amount_wei = parse_u256(&req.amount_wei).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 
@@ -206,6 +233,12 @@ async fn execute_send_handler(
     State(state): State<AppState>,
     Json(req): Json<ExecuteRequest>,
 ) -> Result<Json<rustok_core::send::SendResult>, (StatusCode, String)> {
+    if !state.allowed_chain_ids.contains(&req.chain_id) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            format!("chain {} not allowed", req.chain_id),
+        ));
+    }
     let to = parse_address(&req.to).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
     let amount_wei = parse_u256(&req.amount_wei).map_err(|e| (StatusCode::BAD_REQUEST, e))?;
 

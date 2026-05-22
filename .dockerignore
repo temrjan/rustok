@@ -4,6 +4,7 @@
 
 # Rust build artifacts
 target/
+crates/**/target/
 
 # Node.js
 node_modules/

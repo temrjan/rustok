@@ -25,8 +25,7 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 alloy-primitives = { workspace = true }
-subtle = "2"
 uuid = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 dirs = { workspace = true }
-zeroize = { workspace = true }
+subtle = { workspace = true }

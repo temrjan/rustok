@@ -6,7 +6,7 @@ services:
     image: ghcr.io/temrjan/rustok-agent-mcp:latest
     environment:
       - RUSTOK_AGENT_PASSWORD=${RUSTOK_AGENT_PASSWORD}
-      - MCP_API_KEY=${MCP_API_KEY}
+      - MCP_CHAIN_IDS=${MCP_CHAIN_IDS:-421614}
     volumes:
       - rustok-agent-data:/home/rustok/.rustok/agent
     networks:
@@ -18,7 +18,7 @@ services:
       --unlock-env
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/3000'"]
+      test: ["CMD-SHELL", "bash -c 'printf \"GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n\" > /dev/tcp/localhost/3000' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
