@@ -566,7 +566,7 @@ mod tests {
     #[test]
     fn multi_provider_creates_with_default() {
         let provider = MultiProvider::default_chains();
-        assert_eq!(provider.chains().len(), 6); // 5 mainnets + 1 testnet
+        assert_eq!(provider.chains().len(), 7); // 5 mainnets + 2 testnets
     }
 
     #[test]

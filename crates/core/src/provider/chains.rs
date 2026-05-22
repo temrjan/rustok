@@ -106,6 +106,19 @@ pub fn default_chains() -> Vec<Chain> {
             testnet: true,
             slug: "sepolia",
         },
+        Chain {
+            id: 421614,
+            name: "Arbitrum Sepolia".into(),
+            rpc_urls: vec![
+                "https://arbitrum-sepolia-rpc.publicnode.com".into(),
+                "https://sepolia-rollup.arbitrum.io/rpc".into(),
+            ],
+            explorer_url: "https://sepolia.arbiscan.io".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: true,
+            slug: "arbitrum-sepolia",
+        },
     ]
 }
 

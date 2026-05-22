@@ -67,7 +67,8 @@ fn default_allowed_chains() -> Vec<u64> {
     vec![
         1,        // Ethereum
         10,       // Optimism
-        42161,    // Arbitrum
+        42161,    // Arbitrum One
+        421614,   // Arbitrum Sepolia (testnet)
         8453,     // Base
         324,      // zkSync
         11155111, // Sepolia
