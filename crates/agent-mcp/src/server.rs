@@ -16,6 +16,9 @@ use rustok_agent_wallet::{AgentWalletError, AgentWalletService};
 
 use crate::types::{ExecuteRequest, PositionsRequest, PreviewRequest, PreviewResponse};
 
+/// Maximum request body size (16 KiB).
+const MAX_BODY_BYTES: usize = 16 * 1024;
+
 /// Application state shared across handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -77,7 +80,7 @@ impl McpServer {
             .route("/health", get(health_check))
             .merge(protected)
             .fallback(|| async { (StatusCode::NOT_FOUND, "not found") })
-            .layer(DefaultBodyLimit::max(16_384))
+            .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
             .with_state(self.state);
 
         let addr = format!("{host}:{port}");

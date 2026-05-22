@@ -17,6 +17,10 @@ def call(method, path, body=None):
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         return {"error": e.read().decode(), "status": e.code}
+    except urllib.error.URLError as e:
+        return {"error": str(e.reason)}
+    except TimeoutError:
+        return {"error": "request timeout"}
     except Exception as e:
         return {"error": str(e)}
 

@@ -604,7 +604,7 @@ impl AgentWalletService {
         chain_id: u64,
     ) {
         warn!(%reason, amount, "agent operation blocked by policy");
-        let _ = self.audit.lock().await.append(&AuditEntry {
+        if let Err(e) = self.audit.lock().await.append(&AuditEntry {
             id: 0,
             timestamp: chrono::Utc::now(),
             action: AgentAction::PolicyReject,
@@ -617,7 +617,9 @@ impl AgentWalletService {
             txguard_risk_score: 0,
             success: false,
             error: Some(reason.into()),
-        });
+        }) {
+            tracing::error!(error = %e, "audit append failed during policy rejection");
+        }
     }
 }
 

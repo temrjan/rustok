@@ -179,10 +179,24 @@ pub async fn execute_send(
     let tx_hash: alloy_primitives::B256 = *pending.tx_hash();
 
     // 7. Wait for at least one confirmation with timeout.
-    let receipt = timeout(Duration::from_secs(120), pending.get_receipt())
-        .await
-        .map_err(|_| SendError::Transaction("timeout waiting for confirmation".into()))?
-        .map_err(|e| SendError::Transaction(format!("receipt: {e}")))?;
+    let receipt = match timeout(Duration::from_secs(120), pending.get_receipt()).await {
+        Ok(Ok(r)) => r,
+        Ok(Err(e)) => {
+            return Err(SendError::Transaction(format!("receipt: {e}")));
+        }
+        Err(_) => {
+            tracing::warn!(%tx_hash, "receipt timeout — transaction still pending");
+            return Ok(SendResult {
+                tx_hash,
+                chain_id: route.chain_id,
+                chain_name: route.chain_name.clone(),
+                from,
+                to,
+                amount_wei,
+                estimated_gas_cost: route.estimated_cost,
+            });
+        }
+    };
 
     if !receipt.status() {
         return Err(SendError::Transaction("transaction reverted".into()));
