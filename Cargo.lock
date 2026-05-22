@@ -6290,6 +6290,7 @@ dependencies = [
  "rustok-core",
  "serde",
  "serde_json",
+ "subtle",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.23",

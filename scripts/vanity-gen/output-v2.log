@@ -1,0 +1,81 @@
+🎯 Searching for 10 vanity word(s): ["cafe", "babe", "face", "fade", "feed", "aced", "beef", "deed", "abba", "dace"]
+   Duration: 300 seconds | Threads: 16
+
+
+🎉 FOUND 'aced': 0x5d0b43f2e1570f8f03770aced360893a6cc2c279
+
+🎉 FOUND 'face': 0xb1c946b6ef46075c7330a0face48744b1ee441b3
+
+🎉 FOUND 'dace': 0x97a68d6546ede3ca695b89046134cf53dacec9f7
+
+🎉 FOUND 'deed': 0x0abc6deed50ae044337ab9e2dbaa8b2e99041999
+
+🎉 FOUND 'beef': 0x828cd54f5c0e78856d4d86beefaf4a60241ab3c9
+
+🎉 FOUND 'abba': 0x27df803b8b5c9adbf46f5aabbaae00203ac7402f
+
+🎉 FOUND 'cafe': 0x4b156bf5cafeb06fe9eb0b048b114549097c8044
+
+🎉 FOUND 'feed': 0x22ac4c39c3451d3fff16feeddc5449612fdccd95
+
+🎉 FOUND 'babe': 0x70b4734caa0fa37ab277ae748796ce0cadfbabe2
+
+🎉 FOUND 'fade': 0x2620eb7e3a6367ffc8c9667b4ffade86de529604
+
+
+========================================
+🏁 Search complete! Found 10 address(es):
+========================================
+
+[1] Thread 8
+Address:     0x5d0b43f2e1570f8f03770aced360893a6cc2c279
+Mnemonic:    lawn vapor wife aisle upon blame matrix toward argue quiz distance fiber
+Private Key: 0xc3098ddf87e66bd73dab3250e4ce41592a91b8ae8c018c9c103807600529a6a3
+
+[2] Thread 11
+Address:     0xb1c946b6ef46075c7330a0face48744b1ee441b3
+Mnemonic:    give seminar shrug rely pink upon lounge web equal help amateur toe
+Private Key: 0x6265356a775eacfa8c287b1a5aaf2395cc43af48f40a8f6db6c5b2ed51e6ccab
+
+[3] Thread 1
+Address:     0x97a68d6546ede3ca695b89046134cf53dacec9f7
+Mnemonic:    morning renew mimic enrich ethics rabbit become total domain rabbit evoke fault
+Private Key: 0xe66b10ccd9733ec380e244ed0058f119cdc060740cab8f8c6d194b90c553a5c8
+
+[4] Thread 1
+Address:     0x0abc6deed50ae044337ab9e2dbaa8b2e99041999
+Mnemonic:    sunny mercy blood hamster dizzy mass diary impulse salon medal helmet gain
+Private Key: 0xf1e0559bfa036d0ace8699ade3706965bc5a98538d469a7c676fbc1853130d36
+
+[5] Thread 0
+Address:     0x828cd54f5c0e78856d4d86beefaf4a60241ab3c9
+Mnemonic:    maid common royal antique miracle attack swamp pyramid buyer rude deputy nation
+Private Key: 0xd6bd49427867e62ce6eaf262e516c2ed6797e9838f885b02bd44ca482b478832
+
+[6] Thread 11
+Address:     0x27df803b8b5c9adbf46f5aabbaae00203ac7402f
+Mnemonic:    initial canvas modify radar wall priority crowd cry crazy foot lumber paper
+Private Key: 0xa97f16ab7fbd4ce208800934e0f95c9c20912433fc67e27a9e05924831b6a20c
+
+[7] Thread 9
+Address:     0x4b156bf5cafeb06fe9eb0b048b114549097c8044
+Mnemonic:    shiver throw mutual boring thrive they funny fatigue either decorate room tiger
+Private Key: 0x8ef0535583fc226697559799dee231f6e225bc0809577f8243a5ef0c96302bdf
+
+[8] Thread 2
+Address:     0x22ac4c39c3451d3fff16feeddc5449612fdccd95
+Mnemonic:    adjust volume discover position thought double demise quiz promote entry leg again
+Private Key: 0x2b30185f54accd69b4d0378cf1e69a63a5a653abe5a2be36551437108ac752d7
+
+[9] Thread 6
+Address:     0x70b4734caa0fa37ab277ae748796ce0cadfbabe2
+Mnemonic:    system shine gesture arm method rail display feature right drip rude math
+Private Key: 0x2c1c8d1a9da2e2f8643cdf36c1f246090e8d559aee7b9cda5fdbc18ad44f04ab
+
+[10] Thread 12
+Address:     0x2620eb7e3a6367ffc8c9667b4ffade86de529604
+Mnemonic:    push rely render build guide flush sleep awesome evil bounce stock fault
+Private Key: 0x5a5d68b7d88a61448689e2dd9245c32bc04f15949ed6a4fcebad5c997d4b5036
+
+⚠️  WRITE DOWN THE MNEMONIC ON PAPER NOW!
+   Never share the private key or mnemonic.

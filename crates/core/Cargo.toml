@@ -40,7 +40,7 @@ webpki-roots = "1"
 
 # Async — `sync` feature additive over workspace base (rt-multi-thread, macros)
 # for `tokio::sync::Mutex` used by the wallet service.
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "time"] }
 futures = { workspace = true }
 
 # QR rendering for wallet receive screen (EIP-681 URI → SVG).

@@ -1,0 +1,19 @@
+   Compiling vanity-gen v0.1.0 (/home/temrjan/Dev/projects/rustok/scripts/vanity-gen)
+warning: unused import: `AtomicU64`
+ --> src/main.rs:7:37
+  |
+7 | use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+  |                                     ^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `vanity-gen` (bin "vanity-gen") generated 1 warning (run `cargo fix --bin "vanity-gen" -p vanity-gen` to apply 1 suggestion)
+    Finished `release` profile [optimized] target(s) in 0.66s
+     Running `target/release/vanity-gen`
+⚡ Benchmarking full path speed (10 seconds, 1 thread)...
+   Speed: 620 attempts/sec (6205 total in 10s)
+   Expected time for 'rustok': ~27060 sec = ~451 min = ~7 hours
+
+🔍 Searching for vanity address containing: rustok
+   Threads: 16
+................

@@ -107,9 +107,13 @@ impl AgentPolicy {
             };
         }
 
-        // Blocklist
+        // Blocklist (case-insensitive)
         let to_str = format!("{to:#x}");
-        if self.blocked_addresses.contains(&to_str) {
+        if self
+            .blocked_addresses
+            .iter()
+            .any(|addr| addr.to_lowercase() == to_str)
+        {
             return PolicyResult::Block {
                 reason: format!("recipient {to_str} is in blocklist"),
             };
@@ -137,9 +141,12 @@ impl AgentPolicy {
     #[must_use]
     #[allow(dead_code)]
     pub fn check_approval(&self, amount: &alloy_primitives::U256) -> PolicyResult {
-        if self.block_unlimited_approvals && *amount == alloy_primitives::U256::MAX {
+        let huge = alloy_primitives::U256::from(u128::MAX);
+        if self.block_unlimited_approvals
+            && (*amount == alloy_primitives::U256::MAX || *amount > huge)
+        {
             return PolicyResult::Block {
-                reason: "unlimited approval blocked by policy".into(),
+                reason: "unlimited or excessive approval blocked by policy".into(),
             };
         }
         PolicyResult::Allow
@@ -195,6 +202,28 @@ mod tests {
             0.01,
             1,
         );
+        assert!(matches!(result, PolicyResult::Block { .. }));
+    }
+
+    #[test]
+    fn policy_blocks_blacklisted_address_mixed_case() {
+        let mut policy = AgentPolicy::default();
+        policy
+            .blocked_addresses
+            .insert("0xDeAd000000000000000000000000000000000000".into());
+        let result = policy.check_send(
+            &address!("0xdead000000000000000000000000000000000000"),
+            0.01,
+            1,
+        );
+        assert!(matches!(result, PolicyResult::Block { .. }));
+    }
+
+    #[test]
+    fn policy_blocks_excessive_approval() {
+        let policy = AgentPolicy::default();
+        let huge = alloy_primitives::U256::from(u128::MAX) + alloy_primitives::U256::from(1);
+        let result = policy.check_approval(&huge);
         assert!(matches!(result, PolicyResult::Block { .. }));
     }
 

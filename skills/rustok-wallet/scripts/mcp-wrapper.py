@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """MCP stdio wrapper for rustok-agent-mcp HTTP API."""
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
-BASE = "http://127.0.0.1:3000"
+BASE = os.environ.get("RUSTOK_MCP_URL", "http://127.0.0.1:3000")
 
 def call(method, path, body=None):
     url = BASE + path
     data = json.dumps(body).encode() if body else None
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method=method)
+    headers = {"Content-Type": "application/json"}
+    api_key = os.environ.get("MCP_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode())
@@ -21,7 +25,14 @@ def main():
         line = line.strip()
         if not line:
             continue
-        msg = json.loads(line)
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError as e:
+            print(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": f"Parse error: {e}"}}), flush=True)
+            continue
+        if not isinstance(msg, dict):
+            print(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid Request: expected object"}}), flush=True)
+            continue
         if msg.get("method") == "initialize":
             print(json.dumps({"jsonrpc": "2.0", "id": msg.get("id"), "result": {
                 "protocolVersion": "2024-11-05",

@@ -1,11 +1,12 @@
 //! Axum HTTP server exposing agent wallet tools.
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use axum::{
     Json, Router,
     body::Body,
-    extract::State,
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, Request, StatusCode},
     middleware::{self, Next},
     response::Response,
@@ -22,6 +23,8 @@ pub struct AppState {
     pub wallet: Arc<AgentWalletService>,
     /// Bearer token required on all protected routes.
     pub api_key: Arc<str>,
+    /// Rate limiter for protected routes.
+    rate_limiter: RateLimitState,
 }
 
 /// Simple MCP-over-HTTP server.
@@ -34,9 +37,13 @@ pub struct McpServer {
 
 impl McpServer {
     /// Create a new server around the given wallet service and API key.
-    pub const fn new(wallet: Arc<AgentWalletService>, api_key: Arc<str>) -> Self {
+    pub fn new(wallet: Arc<AgentWalletService>, api_key: Arc<str>) -> Self {
         Self {
-            state: AppState { wallet, api_key },
+            state: AppState {
+                wallet,
+                api_key,
+                rate_limiter: RateLimitState::new(100, Duration::from_secs(60)),
+            },
         }
     }
 
@@ -56,12 +63,17 @@ impl McpServer {
                 self.state.clone(),
                 auth_middleware,
             ))
+            .layer(middleware::from_fn_with_state(
+                self.state.clone(),
+                rate_limit_middleware,
+            ))
             .with_state(self.state.clone());
 
         let app = Router::new()
             .route("/health", get(health_check))
             .merge(protected)
             .fallback(|| async { (StatusCode::NOT_FOUND, "not found") })
+            .layer(DefaultBodyLimit::max(16_384))
             .with_state(self.state);
 
         let addr = format!("{host}:{port}");
@@ -85,16 +97,71 @@ async fn auth_middleware(
     request: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    match headers.get("authorization") {
-        Some(value) => {
+    let valid = headers
+        .get("authorization")
+        .map(|value| {
             let expected = format!("Bearer {}", state.api_key);
-            if value.as_bytes() == expected.as_bytes() {
-                Ok(next.run(request).await)
-            } else {
-                Err(StatusCode::UNAUTHORIZED)
-            }
+            subtle::ConstantTimeEq::ct_eq(value.as_bytes(), expected.as_bytes()).into()
+        })
+        .unwrap_or(false);
+
+    if valid {
+        Ok(next.run(request).await)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
+    }
+}
+
+/// Simple per-server rate limiter (fixed window).
+#[derive(Clone)]
+struct RateLimitState {
+    inner: Arc<tokio::sync::Mutex<RateLimitInner>>,
+}
+
+struct RateLimitInner {
+    window: Duration,
+    max_requests: u64,
+    reset_at: Instant,
+    count: u64,
+}
+
+impl RateLimitState {
+    fn new(max_requests: u64, window: Duration) -> Self {
+        Self {
+            inner: Arc::new(tokio::sync::Mutex::new(RateLimitInner {
+                window,
+                max_requests,
+                reset_at: Instant::now(),
+                count: 0,
+            })),
         }
-        None => Err(StatusCode::UNAUTHORIZED),
+    }
+
+    async fn check(&self) -> bool {
+        let mut guard = self.inner.lock().await;
+        let now = Instant::now();
+        if now.duration_since(guard.reset_at) >= guard.window {
+            guard.reset_at = now;
+            guard.count = 1;
+            true
+        } else if guard.count < guard.max_requests {
+            guard.count += 1;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+async fn rate_limit_middleware(
+    State(state): State<AppState>,
+    request: Request<Body>,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    if state.rate_limiter.check().await {
+        Ok(next.run(request).await)
+    } else {
+        Err(StatusCode::TOO_MANY_REQUESTS)
     }
 }
 

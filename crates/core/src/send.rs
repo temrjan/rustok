@@ -7,7 +7,9 @@ use alloy_network::TransactionBuilder;
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_provider::Provider;
 use alloy_signer_local::PrivateKeySigner;
+use std::time::Duration;
 use thiserror::Error;
+use tokio::time::timeout;
 use txguard::parser::{ParsedTransaction, TransactionAction};
 use txguard::types::{Action, Verdict};
 
@@ -173,7 +175,18 @@ pub async fn execute_send(
         .await
         .map_err(|e| SendError::Transaction(format!("{e}")))?;
 
+    // 6. Capture tx_hash before consuming `pending`.
     let tx_hash: alloy_primitives::B256 = *pending.tx_hash();
+
+    // 7. Wait for at least one confirmation with timeout.
+    let receipt = timeout(Duration::from_secs(120), pending.get_receipt())
+        .await
+        .map_err(|_| SendError::Transaction("timeout waiting for confirmation".into()))?
+        .map_err(|e| SendError::Transaction(format!("receipt: {e}")))?;
+
+    if !receipt.status() {
+        return Err(SendError::Transaction("transaction reverted".into()));
+    }
 
     Ok(SendResult {
         tx_hash,

@@ -124,6 +124,8 @@ pub struct AgentWalletService {
     audit: Mutex<AuditLog>,
     /// Daily spend tracker.
     budget: BudgetTracker,
+    /// Serialize all spend operations to prevent TOCTOU race in budget check.
+    budget_lock: Mutex<()>,
     /// How the wallet is unlocked headlessly.
     unlock: UnlockStrategy,
     /// TTL cache for [`WalletContext`].
@@ -160,6 +162,7 @@ impl AgentWalletService {
         let audit_path = wallet_dir.join("audit.db");
         let audit = Mutex::new(AuditLog::open(audit_path)?);
         let budget = BudgetTracker::new(policy.max_daily_spend_eth);
+        let budget_lock = Mutex::new(());
         let context_cache = Mutex::new(None);
         let preview_cache = Mutex::new(std::collections::HashMap::new());
         let tracker = PositionTracker::new();
@@ -170,6 +173,7 @@ impl AgentWalletService {
             policy,
             audit,
             budget,
+            budget_lock,
             unlock,
             context_cache,
             preview_cache,
@@ -455,26 +459,40 @@ impl AgentWalletService {
             }
         }
 
-        let audit_guard = self.audit.lock().await;
-        if !self.budget.can_spend(&audit_guard, amount_eth)? {
-            let spent = self.budget.spent_today(&audit_guard)?;
-            drop(audit_guard);
-            self.log_policy_reject(
-                AgentAction::Send,
-                amount_eth,
-                &format!(
-                    "daily budget exceeded: {spent:.6} / {} ETH",
-                    self.policy.max_daily_spend_eth
-                ),
-                chain_id,
-            )
-            .await;
-            return Err(AgentWalletError::BudgetExceeded {
-                spent,
-                limit: self.policy.max_daily_spend_eth,
-            });
-        }
-        drop(audit_guard);
+        // Serialize all spend operations to prevent TOCTOU race in budget check.
+        let _budget_guard = self.budget_lock.lock().await;
+
+        // Atomic budget check
+        {
+            let audit_guard = self.audit.lock().await;
+            if !self.budget.can_spend(&audit_guard, amount_eth)? {
+                let spent = self.budget.spent_today(&audit_guard)?;
+                let _ = audit_guard.append(&AuditEntry {
+                    id: 0,
+                    timestamp: chrono::Utc::now(),
+                    action: AgentAction::PolicyReject,
+                    protocol: None,
+                    target_address: None,
+                    tx_hash: None,
+                    chain_id: Some(chain_id),
+                    amount_eth,
+                    gas_cost_eth: 0.0,
+                    txguard_risk_score: 0,
+                    success: false,
+                    error: Some(
+                        format!(
+                            "daily budget exceeded: {spent:.6} / {} ETH",
+                            self.policy.max_daily_spend_eth
+                        )
+                        .into(),
+                    ),
+                });
+                return Err(AgentWalletError::BudgetExceeded {
+                    spent,
+                    limit: self.policy.max_daily_spend_eth,
+                });
+            }
+        } // audit released, budget_lock still held
 
         // Broadcast
         let signer = self
@@ -482,55 +500,60 @@ impl AgentWalletService {
             .current_signer()
             .await
             .ok_or(AgentWalletError::WalletLocked)?;
-        match rustok_core::send::execute_send(
+        let broadcast_result = rustok_core::send::execute_send(
             &self.provider,
             signer,
             to,
             amount_wei,
             &cached.preview.route,
         )
-        .await
+        .await;
+
+        // Record in audit (budget_lock still held, so no other spend can interleave)
         {
-            Ok(result) => {
-                info!(tx_hash = %result.tx_hash, "agent send executed");
-                self.audit.lock().await.append(&AuditEntry {
-                    id: 0,
-                    timestamp: chrono::Utc::now(),
-                    action: AgentAction::Send,
-                    protocol: None,
-                    target_address: Some(format!("{to:#x}")),
-                    tx_hash: Some(result.tx_hash.to_string()),
-                    chain_id: Some(chain_id),
-                    amount_eth,
-                    // TODO(#42): fetch receipt and compute actual gas cost
-                    gas_cost_eth: 0.0,
-                    txguard_risk_score: cached.preview.verdict.risk_score,
-                    success: true,
-                    error: None,
-                })?;
-                Ok(result)
-            }
-            Err(e) => {
-                let err_str = e.to_string();
-                warn!(%err_str, "agent send failed");
-                self.audit.lock().await.append(&AuditEntry {
-                    id: 0,
-                    timestamp: chrono::Utc::now(),
-                    action: AgentAction::Send,
-                    protocol: None,
-                    target_address: Some(format!("{to:#x}")),
-                    tx_hash: None,
-                    chain_id: Some(chain_id),
-                    amount_eth,
-                    // TODO(#42): fetch receipt and compute actual gas cost
-                    gas_cost_eth: 0.0,
-                    txguard_risk_score: cached.preview.verdict.risk_score,
-                    success: false,
-                    error: Some(err_str.clone()),
-                })?;
-                Err(AgentWalletError::Wallet(err_str))
+            let audit_guard = self.audit.lock().await;
+            match &broadcast_result {
+                Ok(result) => {
+                    info!(tx_hash = %result.tx_hash, "agent send executed");
+                    audit_guard.append(&AuditEntry {
+                        id: 0,
+                        timestamp: chrono::Utc::now(),
+                        action: AgentAction::Send,
+                        protocol: None,
+                        target_address: Some(format!("{to:#x}")),
+                        tx_hash: Some(result.tx_hash.to_string()),
+                        chain_id: Some(chain_id),
+                        amount_eth,
+                        // TODO(#42): fetch receipt and compute actual gas cost
+                        gas_cost_eth: 0.0,
+                        txguard_risk_score: cached.preview.verdict.risk_score,
+                        success: true,
+                        error: None,
+                    })?;
+                }
+                Err(e) => {
+                    let err_str = e.to_string();
+                    warn!(%err_str, "agent send failed");
+                    audit_guard.append(&AuditEntry {
+                        id: 0,
+                        timestamp: chrono::Utc::now(),
+                        action: AgentAction::Send,
+                        protocol: None,
+                        target_address: Some(format!("{to:#x}")),
+                        tx_hash: None,
+                        chain_id: Some(chain_id),
+                        amount_eth,
+                        // TODO(#42): fetch receipt and compute actual gas cost
+                        gas_cost_eth: 0.0,
+                        txguard_risk_score: cached.preview.verdict.risk_score,
+                        success: false,
+                        error: Some(err_str.clone()),
+                    })?;
+                }
             }
         }
+
+        broadcast_result.map_err(|e| AgentWalletError::Wallet(e.to_string()))
     }
 
     /// Query the audit log.
