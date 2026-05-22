@@ -482,13 +482,10 @@ impl AgentWalletService {
                     gas_cost_eth: 0.0,
                     txguard_risk_score: 0,
                     success: false,
-                    error: Some(
-                        format!(
-                            "daily budget exceeded: {spent:.6} / {} ETH",
-                            self.policy.max_daily_spend_eth
-                        )
-                        .into(),
-                    ),
+                    error: Some(format!(
+                        "daily budget exceeded: {spent:.6} / {} ETH",
+                        self.policy.max_daily_spend_eth
+                    )),
                 }) {
                     tracing::error!(error = %e, "audit append failed during budget rejection");
                 }
