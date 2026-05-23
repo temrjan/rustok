@@ -33,6 +33,21 @@ pub struct AppState {
     rate_limiter: Option<RateLimitState>,
 }
 
+impl AppState {
+    /// Create a new app state for stdio transport.
+    ///
+    /// Auth and rate limiting are disabled; the process is assumed to be
+    /// running under the user's direct control.
+    pub const fn new(wallet: Arc<AgentWalletService>, allowed_chain_ids: Vec<u64>) -> Self {
+        Self {
+            wallet,
+            api_key: None,
+            allowed_chain_ids,
+            rate_limiter: None,
+        }
+    }
+}
+
 /// Simple MCP-over-HTTP server.
 ///
 /// Wraps an [`AgentWalletService`] in an Axum router.  Each route maps to a

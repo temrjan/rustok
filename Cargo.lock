@@ -6394,19 +6394,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustok-mcp-stdio"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "reqwest 0.12.28",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.23",
-]
-
-[[package]]
 name = "rustok-mobile-bindings"
 version = "0.1.0"
 dependencies = [

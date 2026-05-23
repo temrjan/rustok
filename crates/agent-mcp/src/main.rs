@@ -10,11 +10,15 @@ use tracing::info;
 #[derive(Parser, Debug)]
 #[command(name = "rustok-agent-mcp")]
 struct Cli {
-    /// Host to bind to.
+    /// Transport protocol: `http` for Axum server, `stdio` for JSON-RPC over stdin/stdout.
+    #[arg(long, default_value = "http")]
+    transport: String,
+
+    /// Host to bind to (http mode only).
     #[arg(long, default_value = "127.0.0.1")]
     host: String,
 
-    /// Port to listen on.
+    /// Port to listen on (http mode only).
     #[arg(long, default_value = "3000")]
     port: u16,
 
@@ -26,11 +30,8 @@ struct Cli {
     #[arg(long)]
     policy_config: Option<PathBuf>,
 
-    /// Unlock via env var `RUSTOK_AGENT_PASSWORD`.
-    #[arg(long)]
-    unlock_env: bool,
-
     /// Create a new agent wallet if none exists.
+    /// In stdio mode the wallet is always created automatically when missing.
     #[arg(long)]
     create_wallet: bool,
 }
@@ -56,7 +57,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Load policy.
-    let policy = match &cli.policy_config {
+    let mut policy = match &cli.policy_config {
         Some(path) => {
             let raw = tokio::fs::read_to_string(path)
                 .await
@@ -66,6 +67,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
         None => AgentPolicy::default(),
     };
+
+    // In stdio mode the user controls the wallet directly; remove restrictive
+    // defaults unless an explicit policy file is provided.
+    if cli.transport == "stdio" && cli.policy_config.is_none() {
+        policy.max_single_tx_eth = 1_000_000_000.0;
+        policy.max_daily_spend_eth = 1_000_000_000.0;
+        policy.max_gas_fee_gwei = 10_000;
+    }
 
     // Unlock strategy: always read from RUSTOK_AGENT_PASSWORD env var.
     let unlock = UnlockStrategy::EnvVar;
@@ -125,19 +134,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let service = AgentWalletService::new(&data_dir, policy, unlock.clone())
         .map_err(|e| format!("failed to create agent wallet service: {e}"))?;
 
-    // Create wallet if requested and none exists.
-    if cli.create_wallet {
-        if !service.has_wallet().await? {
-            let pwd = unlock
-                .password()
-                .ok_or("--create-wallet requires RUSTOK_AGENT_PASSWORD environment variable")?;
-            let addr = service.create_wallet(pwd).await?;
-            info!(%addr, "created new agent wallet");
-        } else {
-            info!("agent wallet already exists, skipping --create-wallet");
-        }
-    }
-
     // Ensure wallet is unlocked.
     if !service.is_unlocked().await {
         match service.auto_unlock().await {
@@ -148,9 +144,65 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Start server.
-    let server = McpServer::new(Arc::new(service), api_key, allowed_chain_ids, rate_limit);
-    info!(host = cli.host, port = cli.port, "starting MCP server");
-    server.run(&cli.host, cli.port).await?;
+    match cli.transport.as_str() {
+        "http" => {
+            // Create wallet if requested and none exists.
+            if cli.create_wallet {
+                if !service.has_wallet().await? {
+                    let pwd = unlock.password().ok_or(
+                        "--create-wallet requires RUSTOK_AGENT_PASSWORD environment variable",
+                    )?;
+                    let addr = service.create_wallet(pwd).await?;
+                    info!(%addr, "created new agent wallet");
+                } else {
+                    info!("agent wallet already exists, skipping --create-wallet");
+                }
+            }
+
+            let server = McpServer::new(Arc::new(service), api_key, allowed_chain_ids, rate_limit);
+            info!(host = cli.host, port = cli.port, "starting MCP HTTP server");
+            server.run(&cli.host, cli.port).await?;
+        }
+        "stdio" => {
+            // Auto-create wallet on first run if missing.
+            if !service.has_wallet().await? {
+                let pwd = unlock.password().ok_or(
+                    "RUSTOK_AGENT_PASSWORD environment variable is required to create a wallet",
+                )?;
+                let addr = service.create_wallet(pwd).await?;
+                info!(%addr, "auto-created agent wallet for stdio transport");
+            }
+
+            // Print startup banner to stderr (never stdout — that's the JSON-RPC pipe).
+            match service.context().await {
+                Ok(ctx) => {
+                    let chain_name = match ctx.allowed_chains.first() {
+                        Some(421614) => "Arbitrum Sepolia",
+                        Some(1) => "Ethereum Mainnet",
+                        Some(id) => &id.to_string(),
+                        None => "unknown",
+                    };
+                    eprintln!("Rustok Agent Wallet — stdio mode");
+                    eprintln!("  Address: {}", ctx.address);
+                    eprintln!("  Network: {}", chain_name);
+                }
+                Err(e) => {
+                    tracing::warn!("failed to fetch wallet context for banner: {e}");
+                }
+            }
+
+            // Auth and rate limit are not meaningful for a local stdio process.
+            let state =
+                rustok_agent_mcp::server::AppState::new(Arc::new(service), allowed_chain_ids);
+            info!("starting MCP stdio transport");
+            rustok_agent_mcp::stdio::run(state).await?;
+        }
+        other => {
+            return Err(
+                format!("unknown transport '{}', expected 'http' or 'stdio'", other).into(),
+            );
+        }
+    }
+
     Ok(())
 }

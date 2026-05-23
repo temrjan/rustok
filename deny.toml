@@ -26,12 +26,9 @@ ignore = [
     { id = "RUSTSEC-2025-0081", reason = "Tauri transitive dep (pango-sys)" },
     { id = "RUSTSEC-2025-0098", reason = "Tauri transitive dep (gobject-sys)" },
     { id = "RUSTSEC-2025-0100", reason = "Tauri transitive dep (glib-sys)" },
+    # rand 0.8 unsoundness — requires custom logger + thread_rng; we use neither.
+    # Still triggered by fresh cargo-deny advisory DB even if not in local lockfile.
     { id = "RUSTSEC-2026-0097", reason = "rand 0.8 unsoundness requires custom logger + thread_rng — we use neither" },
-    # uniffi_macros 0.28.x transitively depends on bincode 1.3.3.
-    # bincode is "complete" per upstream — final stable version, no further releases planned
-    # (decision was social, not technical: team archived after doxxing incident).
-    # Not a security vulnerability. No safe upgrade exists.
-    { id = "RUSTSEC-2025-0141", reason = "bincode 1.3.3 unmaintained — uniffi_macros transitive dep" },
 ]
 
 [licenses]
