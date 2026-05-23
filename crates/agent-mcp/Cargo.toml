@@ -1,6 +1,6 @@
 [package]
 name = "rustok-agent-mcp"
-description = "MCP server scaffold for rustok agent wallet — HTTP SSE over Axum"
+description = "MCP server for rustok agent wallet — HTTP and stdio transports"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -19,7 +19,7 @@ rustok-agent-dapps = { path = "../agent-dapps" }
 rustok-core = { path = "../core" }
 
 axum = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "signal", "fs"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "fs", "io-std", "io-util"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }

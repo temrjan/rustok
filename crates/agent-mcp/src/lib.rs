@@ -16,6 +16,7 @@
 //! Future iterations will migrate to full MCP SSE transport.
 
 pub mod server;
+pub mod stdio;
 pub mod types;
 
 pub use server::McpServer;
