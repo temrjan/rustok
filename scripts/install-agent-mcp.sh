@@ -33,13 +33,14 @@ case "$ARCH" in
         ;;
 esac
 
-# Apple Silicon Macs can run x86_64 binaries via Rosetta, but prefer native
+# macOS: only Apple Silicon prebuilt; Intel Macs build from source
 if [ "$PLATFORM" = "darwin" ] && [ "$ARCH_TARGET" = "aarch64" ]; then
     ARTIFACT="${BINARY}-aarch64-darwin"
     EXT="tar.gz"
 elif [ "$PLATFORM" = "darwin" ] && [ "$ARCH_TARGET" = "x86_64" ]; then
-    ARTIFACT="${BINARY}-x86_64-darwin"
-    EXT="tar.gz"
+    echo "No prebuilt binary for Intel Macs (x86_64-darwin)."
+    echo "Build from source: cargo build --release -p rustok-agent-mcp"
+    exit 1
 elif [ "$PLATFORM" = "linux" ] && [ "$ARCH_TARGET" = "x86_64" ]; then
     ARTIFACT="${BINARY}-x86_64-linux"
     EXT="tar.gz"
