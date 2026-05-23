@@ -45,7 +45,9 @@ async fn main() {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .init();
     let cli = Cli::parse();
 
     // Resolve data_dir (expand ~).
@@ -134,6 +136,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let service = AgentWalletService::new(&data_dir, policy, unlock.clone())
         .map_err(|e| format!("failed to create agent wallet service: {e}"))?;
 
+    // For stdio transport, auto-create wallet before attempting unlock.
+    if cli.transport == "stdio" && !service.has_wallet().await? {
+        let pwd = unlock
+            .password()
+            .ok_or("RUSTOK_AGENT_PASSWORD environment variable is required to create a wallet")?;
+        let addr = service.create_wallet(pwd).await?;
+        info!(%addr, "auto-created agent wallet for stdio transport");
+    }
+
     // Ensure wallet is unlocked.
     if !service.is_unlocked().await {
         match service.auto_unlock().await {
@@ -164,15 +175,6 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             server.run(&cli.host, cli.port).await?;
         }
         "stdio" => {
-            // Auto-create wallet on first run if missing.
-            if !service.has_wallet().await? {
-                let pwd = unlock.password().ok_or(
-                    "RUSTOK_AGENT_PASSWORD environment variable is required to create a wallet",
-                )?;
-                let addr = service.create_wallet(pwd).await?;
-                info!(%addr, "auto-created agent wallet for stdio transport");
-            }
-
             // Print startup banner to stderr (never stdout — that's the JSON-RPC pipe).
             match service.context().await {
                 Ok(ctx) => {
