@@ -29,13 +29,19 @@ This wallet is **separate** from the user's main wallet. All spending limits, ad
 
 ## Installation
 
-### Option A — Cargo (Rust toolchain required)
+### Option A — Download from GitHub Releases (recommended)
+
+One-line install (Linux, macOS, Windows with Git Bash):
 
 ```bash
-cargo install rustok-agent-mcp
+curl -fsSL https://raw.githubusercontent.com/temrjan/rustok/main/scripts/install-agent-mcp.sh | bash
 ```
 
+Or download manually from [GitHub Releases](https://github.com/temrjan/rustok/releases).
+
 ### Option B — Docker
+
+For server deployment or headless operation:
 
 ```bash
 docker run -p 127.0.0.1:3000:3000 \
@@ -46,11 +52,45 @@ docker run -p 127.0.0.1:3000:3000 \
 
 ### Option C — Build from source
 
+Requires Rust toolchain:
+
 ```bash
 git clone https://github.com/temrjan/rustok.git
 cd rustok
-cargo run --bin rustok-agent-mcp -- --create-wallet
+cargo build --release --bin rustok-agent-mcp
 ```
+
+## Desktop Installation (Claude Desktop / Cursor)
+
+For native MCP integration via stdio (no HTTP server needed):
+
+**1. Install the binary** (see Option A above).
+
+**2. Configure Claude Desktop:**
+
+Add to your Claude Desktop config:
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux:** `~/.config/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "rustok-wallet": {
+      "command": "rustok-agent-mcp",
+      "args": ["--transport", "stdio"],
+      "env": {
+        "RUSTOK_AGENT_PASSWORD": "your-strong-password"
+      }
+    }
+  }
+}
+```
+
+**3. Restart Claude Desktop.** The wallet tools will appear automatically.
+
+> **Note:** In stdio mode the wallet auto-creates on first run if missing, uses unlimited policy defaults, and disables rate limiting. You control your own funds.
 
 ## Quick Start
 
@@ -223,7 +263,9 @@ preview mismatch
 ### 0.2.0
 - Pivot to local-only self-custody model. No SaaS, no shared wallet.
 - Removed API key requirement; auth is optional via `MCP_API_KEY` env var.
-- Added one-command install paths: `cargo install` and Docker.
+- Added dual-mode transport: HTTP server (`--transport http`) and stdio (`--transport stdio`) for Claude Desktop / Cursor.
+- Added GitHub Releases with prebuilt binaries for Linux, macOS (Intel + Apple Silicon), and Windows.
+- Added one-command install script.
 - Testnet-only by default (chain_id 421614), configurable via `MCP_CHAIN_IDS` env var.
 
 ### 0.1.0

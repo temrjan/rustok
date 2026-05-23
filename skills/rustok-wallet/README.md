@@ -19,7 +19,26 @@ Self-custody Ethereum Agent Wallet for OpenClaw. Gives your AI agent programmati
 
 ## Installation
 
-### 1. Build the MCP server
+### Option 1 — Install from GitHub Releases (recommended)
+
+One-line install (Linux, macOS, Windows with Git Bash):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/temrjan/rustok/main/scripts/install-agent-mcp.sh | bash
+```
+
+Or download manually from [GitHub Releases](https://github.com/temrjan/rustok/releases).
+
+### Option 2 — Docker
+
+```bash
+docker run -p 127.0.0.1:3000:3000 \
+  -v ~/.rustok/agent:/data \
+  -e RUSTOK_AGENT_PASSWORD="your-password" \
+  ghcr.io/temrjan/rustok-agent-mcp:latest
+```
+
+### Option 3 — Build from source
 
 ```bash
 git clone https://github.com/temrjan/rustok
@@ -27,7 +46,7 @@ cd rustok
 cargo build --release -p rustok-agent-mcp
 ```
 
-### 2. Configure policy (optional)
+### Configure policy (optional)
 
 Copy the example and edit limits:
 
@@ -36,25 +55,33 @@ cp skills/rustok-wallet/examples/policy.json ~/.rustok/policy.json
 # Edit: max_single_tx_eth, max_daily_spend_eth, blocked_addresses, etc.
 ```
 
-### 3. Start the server
+### Claude Desktop / Cursor (stdio mode)
 
-**First run — create wallet:**
+For native MCP integration without running an HTTP server:
 
-```bash
-export RUSTOK_AGENT_PASSWORD="your_strong_password"
-./target/release/rustok-agent-mcp --create-wallet --policy-config ~/.rustok/policy.json
+Add to your Claude Desktop config:
+
+- **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Linux:** `~/.config/Claude/claude_desktop_config.json`
+- **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "rustok-wallet": {
+      "command": "rustok-agent-mcp",
+      "args": ["--transport", "stdio"],
+      "env": {
+        "RUSTOK_AGENT_PASSWORD": "your-strong-password"
+      }
+    }
+  }
+}
 ```
 
-**Subsequent runs:**
+Restart Claude Desktop. The wallet tools will appear automatically.
 
-```bash
-export RUSTOK_AGENT_PASSWORD="your_strong_password"
-./target/release/rustok-agent-mcp --policy-config ~/.rustok/policy.json
-```
-
-The server listens on `http://127.0.0.1:3000`.
-
-### 4. Install the skill in OpenClaw
+### OpenClaw
 
 ```bash
 clawhub skill publish ./skills/rustok-wallet
@@ -72,11 +99,14 @@ openclaw skills install ./skills/rustok-wallet
 rustok-agent-mcp [OPTIONS]
 
 Options:
+      --transport <TRANSPORT>    Transport mode [default: http] [possible values: http, stdio]
   -p, --port <PORT>              Port to listen on [default: 3000]
+      --host <HOST>              Host to bind on [default: 127.0.0.1]
   -d, --data-dir <DATA_DIR>      Data directory [default: ~/.rustok/agent]
       --policy-config <PATH>     JSON policy configuration file
       --unlock-password <PWD>    Fixed password (insecure, prefer env var)
       --create-wallet            Create a new wallet if none exists
+  -V, --version                  Print version
   -h, --help                     Print help
 ```
 
