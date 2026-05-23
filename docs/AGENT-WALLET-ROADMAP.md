@@ -149,6 +149,15 @@ skills/rustok-wallet/
 
 All policy limits are **code-level** — enforced in `AgentPolicy::check()` before every execution. The LLM cannot negotiate them away.
 
+**Phase 4.5: Stdio Dual-Mode ✅**
+
+- [x] `rustok-mcp-stdio` crate removed; stdio merged into `rustok-agent-mcp` via `--transport stdio`
+- [x] Docker image builds and runs correctly (verified locally)
+- [x] GitHub Releases workflow with 4 platform binaries (Linux x64, macOS Intel, macOS ARM, Windows x64)
+- [x] Install script (`scripts/install-agent-mcp.sh`) with OS/arch auto-detection and checksum verification
+- [x] `skills/rustok-wallet/SKILL.md` — updated install instructions + Claude Desktop stdio config
+- [x] `skills/rustok-wallet/README.md` — synced install instructions + stdio config
+
 **Definition of Done:**
 - [x] `rustok-agent-mcp` binary compiles and passes tests
 - [x] `skills/rustok-wallet/SKILL.md` — YAML frontmatter + 4 tool specs

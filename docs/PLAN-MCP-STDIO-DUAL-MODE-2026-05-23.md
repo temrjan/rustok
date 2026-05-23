@@ -163,56 +163,48 @@ match cli.transport.as_str() {
 
 ## 5. Phase 5 — CI / GitHub Releases
 
-### Step 5.1 — Create `.github/workflows/release-agent-mcp.yml`
+### Step 5.1 — Create `.github/workflows/release-agent-mcp.yml` ✅
 Matrix build for native binaries:
 
 | OS | Target | Artifact |
 |----|--------|----------|
 | Ubuntu | `x86_64-unknown-linux-gnu` | `rustok-agent-mcp-x86_64-linux.tar.gz` |
-| macOS | `x86_64-apple-darwin` | `rustok-agent-mcp-x86_64-darwin.tar.gz` |
-| Windows | `x86_64-pc-windows-msvc` | `rustok-agent-mcp-x86_64-windows.exe` |
+| macOS (Intel) | `x86_64-apple-darwin` | `rustok-agent-mcp-x86_64-darwin.tar.gz` |
+| macOS (Apple Silicon) | `aarch64-apple-darwin` | `rustok-agent-mcp-aarch64-darwin.tar.gz` |
+| Windows | `x86_64-pc-windows-msvc` | `rustok-agent-mcp-x86_64-windows.zip` |
 
 Trigger: `workflow_dispatch` + `push` of version tags (`v*`)
 
-### Step 5.2 — Install script
-Create `scripts/install-agent-mcp.sh`:
+### Step 5.2 — Install script ✅
+Created `scripts/install-agent-mcp.sh`:
 - Detect OS/arch via `uname`
 - Download latest release from GitHub
 - Extract to `~/.local/bin/` (or `$HOME/bin/`)
+- Verify checksum (`.sha256`) if available
 - Verify binary runs: `rustok-agent-mcp --help`
+- Supports `GITHUB_TOKEN` env var for GitHub API auth
 
-### Step 5.3 — Update existing CI
-- [ ] Ensure `ci.yml` still passes
-- [ ] Verify `deploy-agent-mcp.yml` still builds Docker image correctly
+### Step 5.3 — Update existing CI ✅
+- [x] `ci.yml` unchanged (no breaking changes)
+- [x] `deploy-agent-mcp.yml` verified building Docker image correctly
 
 ---
 
 ## 6. Phase 6 — Documentation
 
-### Step 6.1 — Update `skills/rustok-wallet/SKILL.md`
-- [ ] Remove broken `cargo install rustok-agent-mcp` instruction (crate not on crates.io)
-- [ ] Add **Desktop installation** section with Claude Desktop config:
-  ```json
-  {
-    "mcpServers": {
-      "rustok-wallet": {
-        "command": "/path/to/rustok-agent-mcp",
-        "args": ["--transport", "stdio"],
-        "env": {
-          "RUSTOK_AGENT_PASSWORD": "your_password"
-        }
-      }
-    }
-  }
-  ```
-- [ ] Add **Download from GitHub Releases** as primary install path
-- [ ] Keep Docker instructions for server deployment
+### Step 6.1 — Update `skills/rustok-wallet/SKILL.md` ✅
+- [x] Removed broken `cargo install rustok-agent-mcp` instruction (crate not on crates.io)
+- [x] Added **Desktop installation** section with Claude Desktop config (macOS, Linux, Windows paths)
+- [x] Added **Download from GitHub Releases** as primary install path
+- [x] Kept Docker instructions for server deployment
 
-### Step 6.2 — Update `skills/rustok-wallet/README.md`
-- [ ] Sync install instructions with SKILL.md
+### Step 6.2 — Update `skills/rustok-wallet/README.md` ✅
+- [x] Synced install instructions with SKILL.md
+- [x] Added stdio mode section with Claude Desktop config
+- [x] Updated CLI reference with `--transport` and `--host` flags
 
-### Step 6.3 — Update project docs
-- [ ] `docs/AGENT-WALLET-ROADMAP.md` — mark stdio dual-mode as complete
+### Step 6.3 — Update project docs ✅
+- [x] `docs/AGENT-WALLET-ROADMAP.md` — marked stdio dual-mode as complete in Phase 4.5
 
 ---
 
@@ -257,10 +249,10 @@ EOF
 - [x] `rustok-agent-mcp --transport stdio` runs and responds to `initialize` + `tools/list`
 - [x] `notifications/initialized` produces **zero bytes** on stdout
 - [x] `rustok-agent-mcp --transport http` behaves identically to pre-change version
-- [ ] Docker image builds and runs correctly
-- [ ] GitHub Releases workflow produces 3 platform binaries
-- [ ] `SKILL.md` and `README.md` updated with correct install instructions
-- [ ] Working tree clean, atomic commits, PR ready for merge
+- [x] Docker image builds and runs correctly
+- [x] GitHub Releases workflow produces 4 platform binaries
+- [x] `SKILL.md` and `README.md` updated with correct install instructions
+- [x] Working tree clean, atomic commits, PR ready for merge
 
 ---
 
