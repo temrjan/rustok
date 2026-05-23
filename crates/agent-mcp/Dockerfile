@@ -2,7 +2,7 @@
 # Builder: compile the Rust binary
 # Runtime: minimal Debian image with CA certificates
 
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:1.94-slim-bookworm AS builder
 
 WORKDIR /build
 
