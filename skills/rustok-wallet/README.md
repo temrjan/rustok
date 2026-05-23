@@ -1,5 +1,7 @@
 # rustok-wallet — OpenClaw Skill
 
+> **License note:** This OpenClaw skill package (`skills/rustok-wallet/`) is published under MIT-0 per ClawHub platform requirements. The Rustok project itself (`crates/`, `app/`, `mobile/`) remains under AGPL-3.0-or-later.
+
 Self-custody Ethereum Agent Wallet for OpenClaw. Gives your AI agent programmatic access to a bounded, policy-protected wallet with hard spending limits and immutable audit logging.
 
 ## Features
@@ -109,6 +111,22 @@ Options:
   -V, --version                  Print version
   -h, --help                     Print help
 ```
+
+## Testnet ETH (Arbitrum Sepolia)
+
+The wallet defaults to **Arbitrum Sepolia** testnet (`chain_id: 421614`). You need test ETH for gas fees.
+
+### Faucets (free test ETH)
+
+| Faucet | Amount | Requirements |
+|---|---|---|
+| [Alchemy Arbitrum Sepolia](https://www.alchemy.com/faucets/arbitrum-sepolia) | 0.1 ETH/day | Free Alchemy account |
+| [QuickNode Arbitrum Sepolia](https://faucet.quicknode.com/arbitrum/sepolia) | 0.1 ETH/day | Free QuickNode account |
+| [Chainstack Faucet](https://faucet.chainstack.com) | Varies | Free Chainstack account |
+
+**Note:** Most faucets require a small mainnet ETH balance (~0.001–0.5 ETH) in your wallet as Sybil protection. This mainnet ETH is **not spent** — it is only checked.
+
+**Alternative:** Bridge Sepolia ETH from Ethereum L1 to Arbitrum Sepolia via the [Arbitrum Bridge](https://bridge.arbitrum.io/).
 
 ## Troubleshooting
 

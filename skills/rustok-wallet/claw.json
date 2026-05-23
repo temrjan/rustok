@@ -1,9 +1,9 @@
 {
   "name": "rustok-wallet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Self-custody Ethereum Agent Wallet for OpenClaw — read balances, preview and execute ETH sends, track DeFi positions (Aave, vaults)",
   "author": "temrjan",
-  "license": "AGPL-3.0-or-later",
+  "license": "MIT-0",
   "permissions": ["network"],
   "entry": "SKILL.md",
   "tags": ["crypto", "ethereum", "wallet", "defi", "agent-wallet", "mcp"],

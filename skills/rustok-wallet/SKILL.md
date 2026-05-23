@@ -14,6 +14,8 @@ metadata:
 
 # rustok-wallet
 
+> **License note:** This OpenClaw skill package (`skills/rustok-wallet/`) is published under MIT-0 per ClawHub platform requirements. The Rustok project itself (`crates/`, `app/`, `mobile/`) remains under AGPL-3.0-or-later.
+
 You are connected to an isolated Ethereum Agent Wallet via the local `rustok-agent-mcp` service (`http://127.0.0.1:3000`).
 
 This wallet is **separate** from the user's main wallet. All spending limits, address blocklists, and daily budgets are enforced in **code** — you cannot negotiate them away. The wallet runs entirely on the user's machine; no private keys ever leave localhost.
@@ -264,7 +266,7 @@ preview mismatch
 - Pivot to local-only self-custody model. No SaaS, no shared wallet.
 - Removed API key requirement; auth is optional via `MCP_API_KEY` env var.
 - Added dual-mode transport: HTTP server (`--transport http`) and stdio (`--transport stdio`) for Claude Desktop / Cursor.
-- Added GitHub Releases with prebuilt binaries for Linux, macOS (Intel + Apple Silicon), and Windows.
+- Added GitHub Releases with prebuilt binaries for Linux, macOS (Apple Silicon), and Windows.
 - Added one-command install script.
 - Testnet-only by default (chain_id 421614), configurable via `MCP_CHAIN_IDS` env var.
 
@@ -276,6 +278,17 @@ preview mismatch
 - **Verified on-chain:** First agent-executed ETH transfer via Telegram (Sepolia, 2026-05-21) — tx hash `0x495e…13653`
 
 ---
+
+## Testnet ETH (Arbitrum Sepolia)
+
+The wallet operates on **Arbitrum Sepolia** testnet (`chain_id: 421614`). Users need test ETH to pay gas fees for transactions.
+
+**Faucets (free test ETH):**
+- [Alchemy Arbitrum Sepolia Faucet](https://www.alchemy.com/faucets/arbitrum-sepolia) — 0.1 ETH/day (requires Alchemy account)
+- [QuickNode Arbitrum Sepolia Faucet](https://faucet.quicknode.com/arbitrum/sepolia) — 0.1 ETH/day (requires QuickNode account)
+- [Chainstack Faucet](https://faucet.chainstack.com) — variable amount (requires Chainstack account)
+
+Most faucets require a small mainnet ETH balance (~0.001–0.5 ETH) as anti-bot protection. This balance is not spent.
 
 ## Support Development
 
