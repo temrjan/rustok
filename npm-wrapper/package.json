@@ -1,0 +1,22 @@
+{
+  "name": "@temrjan/rustok-agent-mcp",
+  "version": "0.2.1",
+  "description": "Self-custody Ethereum Agent Wallet MCP server. All chains enabled by default.",
+  "bin": {
+    "rustok-agent-mcp": "./bin/rustok-agent-mcp"
+  },
+  "scripts": {
+    "postinstall": "node install.js",
+    "preuninstall": "node uninstall.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/temrjan/rustok.git"
+  },
+  "keywords": ["mcp", "ethereum", "wallet", "agent-wallet", "crypto"],
+  "author": "temrjan",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=16"
+  }
+}
