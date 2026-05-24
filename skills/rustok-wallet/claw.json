@@ -1,7 +1,7 @@
 {
   "name": "rustok-wallet",
-  "version": "0.2.0",
-  "description": "Self-custody Ethereum Agent Wallet for OpenClaw — read balances, preview and execute ETH sends, track DeFi positions (Aave, vaults)",
+  "version": "0.2.1",
+  "description": "Self-custody Ethereum Agent Wallet — all supported chains enabled by default (Ethereum, Arbitrum, Base, Optimism, zkSync, Sepolia, Arbitrum Sepolia). User assumes all risks. Preview and execute ETH sends, track DeFi positions (Aave, vaults).",
   "author": "temrjan",
   "license": "MIT-0",
   "permissions": ["network"],

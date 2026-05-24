@@ -1,7 +1,7 @@
 ---
 name: rustok-wallet
-description: Self-custody Ethereum Agent Wallet. Runs locally on your machine. Read context, preview/execute ETH sends with hard policy limits, track DeFi positions (Aave v3, ERC-4626 vaults). All actions are append-only audit logged.
-version: 0.2.0
+description: Self-custody Ethereum Agent Wallet. All supported chains enabled by default (Ethereum, Arbitrum, Base, Optimism, zkSync, Sepolia, Arbitrum Sepolia). User assumes all risks. Runs locally. Preview/execute ETH sends with hard policy limits, track DeFi positions. All actions are append-only audit logged.
+version: 0.2.1
 metadata:
   openclaw:
     emoji: "🦀"
@@ -20,7 +20,7 @@ You are connected to an isolated Ethereum Agent Wallet via the local `rustok-age
 
 This wallet is **separate** from the user's main wallet. All spending limits, address blocklists, and daily budgets are enforced in **code** — you cannot negotiate them away. The wallet runs entirely on the user's machine; no private keys ever leave localhost.
 
-> ⚠️ **Beta:** testnet only. Do not send mainnet funds.
+> ⚠️ **Beta.** By default the wallet is configured for **all supported chains** including Ethereum mainnet (chain_id 1), Arbitrum One, Base, Optimism, zkSync Era, Sepolia, and Arbitrum Sepolia. **The user assumes all risks.** If you do not want mainnet access, restrict `allowed_chain_ids` via `--policy-config`.
 
 ## When to use
 
@@ -268,7 +268,7 @@ preview mismatch
 - Added dual-mode transport: HTTP server (`--transport http`) and stdio (`--transport stdio`) for Claude Desktop / Cursor.
 - Added GitHub Releases with prebuilt binaries for Linux, macOS (Apple Silicon), and Windows.
 - Added one-command install script.
-- Testnet-only by default (chain_id 421614), configurable via `MCP_CHAIN_IDS` env var.
+- **All supported chains enabled by default** (Ethereum, Arbitrum, Base, Optimism, zkSync, Sepolia, Arbitrum Sepolia). Use `--policy-config` to restrict.
 
 ### 0.1.0
 - Initial release
@@ -279,9 +279,22 @@ preview mismatch
 
 ---
 
-## Testnet ETH (Arbitrum Sepolia)
+## Supported Chains & Testnet ETH
 
-The wallet operates on **Arbitrum Sepolia** testnet (`chain_id: 421614`). Users need test ETH to pay gas fees for transactions.
+By default the wallet is active on **all supported chains**:
+- Ethereum mainnet (`1`)
+- Arbitrum One (`42161`)
+- Base (`8453`)
+- Optimism (`10`)
+- zkSync Era (`324`)
+- Sepolia testnet (`11155111`)
+- Arbitrum Sepolia testnet (`421614`)
+
+To restrict chains, provide a custom policy file (`--policy-config policy.json`) with only the desired `allowed_chain_ids`.
+
+### Testnet ETH (Arbitrum Sepolia)
+
+For testing on **Arbitrum Sepolia** (`chain_id: 421614`) you need test ETH to pay gas.
 
 **Faucets (free test ETH):**
 - [Alchemy Arbitrum Sepolia Faucet](https://www.alchemy.com/faucets/arbitrum-sepolia) — 0.1 ETH/day (requires Alchemy account)

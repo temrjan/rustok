@@ -18,6 +18,7 @@ Self-custody Ethereum Agent Wallet for OpenClaw. Gives your AI agent programmati
 - **Auto-unlock** via env var (`RUSTOK_AGENT_PASSWORD`) — never plaintext in prompts
 - **Policy limits** are code-level, not prompt-level — cannot be bypassed by LLM
 - **Audit log** is append-only — no delete, no tamper
+- **By default all chains are enabled** including Ethereum mainnet. The user assumes all risks. Use `--policy-config` to restrict chains and spending limits.
 
 ## Installation
 
@@ -112,9 +113,22 @@ Options:
   -h, --help                     Print help
 ```
 
+## Supported Chains
+
+By default the wallet is active on **all supported chains**:
+- Ethereum mainnet (`1`)
+- Arbitrum One (`42161`)
+- Base (`8453`)
+- Optimism (`10`)
+- zkSync Era (`324`)
+- Sepolia testnet (`11155111`)
+- Arbitrum Sepolia testnet (`421614`)
+
+Use `--policy-config` with a custom JSON to restrict `allowed_chain_ids` if you only want testnet access.
+
 ## Testnet ETH (Arbitrum Sepolia)
 
-The wallet defaults to **Arbitrum Sepolia** testnet (`chain_id: 421614`). You need test ETH for gas fees.
+For testing on **Arbitrum Sepolia** (`chain_id: 421614`) you need test ETH for gas fees.
 
 ### Faucets (free test ETH)
 
