@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.temrjan/rustok-wallet",
+  "title": "Rustok Wallet",
+  "description": "Self-custody Ethereum Agent Wallet. All chains enabled by default. User assumes all risks.",
+  "version": "0.2.2",
+  "repository": {
+    "url": "https://github.com/temrjan/rustok",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "rustok-agent-mcp",
+      "version": "0.2.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "description": "Password to unlock the agent wallet",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true,
+          "name": "RUSTOK_AGENT_PASSWORD"
+        }
+      ]
+    }
+  ]
+}
