@@ -1,0 +1,113 @@
+name: Publish to rustok-mcp
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: rustok-agent-mcp-x86_64-linux
+            archive_ext: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: rustok-agent-mcp-aarch64-linux
+            archive_ext: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: rustok-agent-mcp-x86_64-darwin
+            archive_ext: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: rustok-agent-mcp-aarch64-darwin
+            archive_ext: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: rustok-agent-mcp-x86_64-windows
+            archive_ext: zip
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@f0deed1e0edfc6a9be95417288c0e1099b1eeec3 # v2.7.7
+        with:
+          shared-key: "release-${{ matrix.target }}"
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --bin rustok-agent-mcp
+
+      - name: Smoke test
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            ./target/${{ matrix.target }}/release/rustok-agent-mcp.exe --help
+          else
+            ./target/${{ matrix.target }}/release/rustok-agent-mcp --help
+          fi
+
+      - name: Package (Unix)
+        if: matrix.archive_ext == 'tar.gz'
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.target }}/release/rustok-agent-mcp dist/
+          cd dist
+          tar czf "${{ matrix.artifact_name }}.tar.gz" rustok-agent-mcp
+          sha256sum "${{ matrix.artifact_name }}.tar.gz" > "${{ matrix.artifact_name }}.tar.gz.sha256"
+
+      - name: Package (Windows)
+        if: matrix.archive_ext == 'zip'
+        run: |
+          mkdir dist
+          cp target/${{ matrix.target }}/release/rustok-agent-mcp.exe dist/
+          cd dist
+          Compress-Archive -Path rustok-agent-mcp.exe -DestinationPath "${{ matrix.artifact_name }}.zip"
+          Get-FileHash "${{ matrix.artifact_name }}.zip" -Algorithm SHA256 | Select-Object -ExpandProperty Hash | Out-File -Encoding ascii "${{ matrix.artifact_name }}.zip.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/${{ matrix.artifact_name }}.*
+
+  release:
+    name: Release to rustok-org/mcp
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f91f0de96 # v4.2.0
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release in rustok-org/mcp
+        uses: softprops/action-gh-release@c95fe14e6d4d2b97eb24b453fd3fbb9311aab2b1 # v2.2.1
+        with:
+          repository: rustok-org/mcp
+          token: ${{ secrets.CROSS_REPO_RELEASE_PAT }}
+          files: artifacts/*
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
