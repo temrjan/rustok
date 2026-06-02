@@ -1,43 +1,46 @@
-# Rustok LLM-агент — архитектурное решение (Rig → нативный MCP)
+# Rustok LLM-агент — Rig: статус и план
 
-> **Статус:** ⛔ **SUPERSEDED** — архивная запись о принятом решении.
-> Прежняя версия этого файла была планом интеграции LLM через [Rig](https://github.com/0xPlaygrounds/rig) на стеке **Tauri + Leptos**. Этот путь **не принят**. Полный исходный текст плана — в git-истории файла (до этого коммита).
+> **Статус:** план уточнён (не «отменён»).
+> Прежняя версия этого файла была детальным планом интеграции **Rig** на стеке **Tauri + Leptos** — **отменён именно этот стек** (перешли на React Native). Сам **Rig из планов не убран**: он отложен и будет переосмыслен chat-first. Полный исходный план — в git-истории файла.
 
-**Пивот:** 2026-04-28 · **Зафиксировано:** 2026-06-02
+**Обновлено:** 2026-06-02
 
 ---
 
-## Что планировалось (отклонено)
+## Две дорожки LLM
 
-LLM-агент кошелька на **Rig**: `#[rig_tool]`-инструменты, `Agent` с провайдерами (Kimi/Anthropic/Ollama), стриминг — в бэкенде **Tauri**, UI терминалом на **Leptos** (WASM). Ключи в Stronghold, история в `rusqlite`, конфиг в `rustok.toml`.
+### 1. MCP-сервер — отгружено (сделали первым, параллельно)
 
-## Что выбрали вместо этого
-
-**Нативный MCP-сервер, без Rig.** Кошелёк — «тупой» policy-bounded исполнитель; рассуждает и планирует **внешний LLM-клиент** (Claude / Kimi / Cursor / VS Code / …), вызывая инструменты по MCP.
+Rustok можно подключить к **любому LLM-клиенту** (Claude Desktop, Cursor, VS Code, Kimi…) как набор инструментов по MCP — кошелёк уже «ставится» в LLM.
 
 | Слой | Реализация | Статус |
 |---|---|---|
 | `crates/agent-wallet` | policy + budget + audit + `context` / `preview_send` / `execute_send` | **prod** |
 | `crates/agent-dapps` | коннекторы Aave v3 + ERC-4626 (read-only) | partial |
-| `crates/agent-mcp` | Axum HTTP (`/context` `/preview` `/execute` `/positions`) + stdio JSON-RPC MCP-прокси | partial |
-| Инструменты | заданы **вручную (JSON-схемы)**, НЕ `#[rig_tool]` | — |
-| Секреты / конфиг | `MCP_API_KEY` (env) · CLI-флаги — **не Stronghold, не `rustok.toml`** | — |
-| Мобайл | React Native + uniffi → `rustok-core` + `txguard` (Tauri/Leptos заморожены) | Phase 7 |
+| `crates/agent-mcp` | Axum HTTP (`/context` `/preview` `/execute` `/positions`) + stdio JSON-RPC MCP | partial |
 
-Агент: **Phase 1–4 отгружены.**
+Инструменты заданы вручную (JSON-схемы); рассуждает внешний LLM, кошелёк — policy-bounded исполнитель за `txguard`. **Phase 1–4 отгружены.**
 
-## Почему MCP, а не Rig
+### 2. Rig-копилот в мобайле — план (отложено, не отменено)
 
-- **Разделение ответственности.** Кошелёк должен только проверять политику, гонять txguard и подписывать — а не оркестрировать LLM. Решения/планирование — на стороне любого MCP-клиента.
-- **Совместимость.** Один MCP-сервер работает с Claude Desktop, Cursor, VS Code, Kimi и т.д. — без привязки к одному фреймворку.
-- **Упрощение стека.** Переход с Tauri+Leptos на React Native сделал «backend-only Rig в Tauri» неактуальным.
-- **Меньше зависимостей** в финансовом коде (type safety на Rust, без лишнего слоя).
+LLM-слой самого кошелька на **Rig**, в приложении **React Native** (Android/iOS). Цель — **chat-first / LLM-first «копилот кошелька»**: пользователь разговаривает с кошельком, а каждое действие всё равно проходит через `txguard`.
 
-## Канон (читать вместо этого файла)
+- Нужно **переосмыслить дизайн**: уйти от старой идеи «терминал на Leptos в Tauri» к chat-first UX (по духу — как копилот).
+- Rig даёт: провайдеры (Kimi/Anthropic/Ollama), tool-calling (`#[rig_tool]`), стриминг, при желании — citations (наш [PR #1778](https://github.com/0xPlaygrounds/rig/pull/1778)) для подкрепления объяснений правил `txguard`.
+- Связь Rust↔RN — через uniffi-мост (как сейчас у `rustok-core` / `txguard`).
+
+## Что изменилось против старого плана
+
+- **Стек:** Tauri + Leptos → **React Native + uniffi** (мобайл-онли, desktop отложен).
+- **UX:** «терминал-агент» → **chat-first копилот**.
+- **Порядок:** сначала отгрузили MCP-сервер (Rustok как инструмент для LLM); Rig-копилот — следующий.
+- **Rig — в планах.** Отменилась Tauri/Leptos-обвязка, не сам Rig.
+
+## Канон
 
 - Мобайл: [`NATIVE-MIGRATION-PLAN.md`](NATIVE-MIGRATION-PLAN.md)
-- LLM-агент: [`PLAN-LLM-WALLET.md`](PLAN-LLM-WALLET.md), [`AGENT-WALLET-ROADMAP.md`](AGENT-WALLET-ROADMAP.md)
+- MCP-агент: [`PLAN-LLM-WALLET.md`](PLAN-LLM-WALLET.md), [`AGENT-WALLET-ROADMAP.md`](AGENT-WALLET-ROADMAP.md)
 
-## Про вклад в Rig
+## Вклад в Rig
 
-[PR #1778 — Anthropic document citations](https://github.com/0xPlaygrounds/rig/pull/1778) реальный и **замержен в Rig** (вошёл в релиз v0.38.1, полезен всему сообществу). Просто Rustok в итоге пошёл по пути нативного MCP — вклад от этого ценности не теряет.
+[PR #1778 — Anthropic document citations](https://github.com/0xPlaygrounds/rig/pull/1778) замержен в Rig (релиз v0.38.1). Пригодится в Rig-копилоте для citation-ссылок на правила `txguard`.
