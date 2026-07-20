@@ -154,23 +154,9 @@ function ActivityScreen() {
   const chainDisplay =
     (chainId !== undefined ? chainName(chainId) : null) ?? 'this network';
 
-  if (entries.length === 0) {
-    return (
-      <View
-        accessibilityLabel="Activity empty"
-        className="flex-1 bg-canvas items-center justify-center px-6"
-        style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
-      >
-        <Text className="text-ink-primary text-base font-semibold mb-2">
-          No transactions yet
-        </Text>
-        <Text className="text-ink-muted text-sm text-center">
-          Your sent and received transactions on {chainDisplay} will appear here
-        </Text>
-      </View>
-    );
-  }
-
+  // Header + chain pills render regardless of whether the selected chain
+  // has history — otherwise landing on an empty chain removes the only
+  // way to switch chains from this screen (no pills = no way back).
   return (
     <View
       className="flex-1 bg-canvas"
@@ -182,8 +168,8 @@ function ActivityScreen() {
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        className="px-6 pb-3"
-
+        className="h-10 grow-0"
+        contentContainerClassName="items-start px-6 pb-3"
       >
         {Array.from(CHAIN_NAMES.entries()).map(([id, name]) => {
           const active = id === chainId;
@@ -209,21 +195,36 @@ function ActivityScreen() {
           );
         })}
       </ScrollView>
-      <FlatList
-        data={entries}
-        keyExtractor={(e) => e.txHash}
-        renderItem={({ item }) => (
-          <TransactionRow
-            entry={item}
-            isPending={item.timeAgo === 'Pending'}
-            direction={inferDirection(item, address)}
-            onPress={() => handleRowPress(item)}
-          />
-        )}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
-      />
+      {entries.length === 0 ? (
+        <View
+          accessibilityLabel="Activity empty"
+          className="flex-1 items-center justify-center px-6"
+        >
+          <Text className="text-ink-primary text-base font-semibold mb-2">
+            No transactions yet
+          </Text>
+          <Text className="text-ink-muted text-sm text-center">
+            Your sent and received transactions on {chainDisplay} will appear here
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          className="flex-1"
+          data={entries}
+          keyExtractor={(e) => e.txHash}
+          renderItem={({ item }) => (
+            <TransactionRow
+              entry={item}
+              isPending={item.timeAgo === 'Pending'}
+              direction={inferDirection(item, address)}
+              onPress={() => handleRowPress(item)}
+            />
+          )}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          }
+        />
+      )}
     </View>
   );
 }
