@@ -61,6 +61,44 @@ pub(crate) async fn health() -> Json<HealthResponse> {
 }
 
 // ---------------------------------------------------------------------------
+// GET /connector-status
+// ---------------------------------------------------------------------------
+
+/// Response for the licensed-provider integration status check.
+#[derive(Serialize)]
+pub(crate) struct ConnectorStatusResponse {
+    /// Always "architecture_ready" today — the Compliance Bridge
+    /// integration point (KYC handoff, UZS on/off-ramp, compliance
+    /// reporting) is designed but not wired to a live partner.
+    status: &'static str,
+    /// True once a licensed provider is actually integrated.
+    partner_connected: bool,
+}
+
+/// Report Compliance Bridge readiness. No client input, nothing that can
+/// fail — mirrors `health` (always 200, static payload) rather than the
+/// upstream-calling handlers above.
+pub(crate) async fn connector_status() -> Json<ConnectorStatusResponse> {
+    Json(ConnectorStatusResponse {
+        status: "architecture_ready",
+        partner_connected: false,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn connector_status_reports_architecture_ready_and_no_partner() {
+        let Json(resp) = connector_status().await;
+
+        assert_eq!(resp.status, "architecture_ready");
+        assert!(!resp.partner_connected);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // POST /check-address
 // ---------------------------------------------------------------------------
 

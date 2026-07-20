@@ -29,6 +29,23 @@ ignore = [
     # rand 0.8 unsoundness — requires custom logger + thread_rng; we use neither.
     # Still triggered by fresh cargo-deny advisory DB even if not in local lockfile.
     { id = "RUSTSEC-2026-0097", reason = "rand 0.8 unsoundness requires custom logger + thread_rng — we use neither" },
+    # quick-xml NsReader DoS requires parsing untrusted XML at runtime.
+    # wayland-scanner (Tauri desktop clipboard chain) only uses quick-xml
+    # to parse Wayland protocol XML files bundled in the crate at build
+    # time — no untrusted-input code path exists. Fix requires quick-xml
+    # >=0.41, which needs a wayland-scanner major bump not yet available
+    # within the current semver range.
+    { id = "RUSTSEC-2026-0195", reason = "wayland-scanner uses quick-xml only for build-time parsing of bundled protocol XML — no untrusted-input path" },
+    # Same quick-xml quadratic-runtime advisory hits two versions in the
+    # lockfile: 0.38.4 via `plist` (Tauri's macOS Info.plist bundling —
+    # build-time, local files) and 0.39.2 via wayland-scanner (see above).
+    # Neither path parses untrusted/network-sourced XML.
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml quadratic-runtime — both consumers (plist/Tauri bundling, wayland-scanner) parse only local build-time XML, not untrusted input" },
+    # proc-macro-error2 (via alloy-sol-macro -> txguard) executes only at
+    # compile time on our own source; a proc-macro has no runtime attack
+    # surface. Same "unmaintained, not a live vulnerability" category as
+    # the Tauri GTK/GLib entries above.
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 is a compile-time-only proc-macro dep (via alloy-sol-macro) — unmaintained, no runtime attack surface" },
 ]
 
 [licenses]
