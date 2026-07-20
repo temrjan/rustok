@@ -2,9 +2,10 @@
  * SettingsScreen — Phase 7.
  *
  * Production settings: Security (lock timeout, lock now), Network
- * (readonly badge), Privacy (proxy toggle), About (version, privacy
- * link), and Appearance (theme switcher). DEV-only routes preserved
- * under `{__DEV__}` guards.
+ * (picker — testnet live, mainnet visible/disabled, see
+ * `NetworkPicker`), Legalize (Compliance Bridge status), Privacy
+ * (proxy toggle), About (version, privacy link), and Appearance (theme
+ * switcher). DEV-only routes preserved under `{__DEV__}` guards.
  */
 
 import React, { useCallback } from 'react';
@@ -18,9 +19,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, Switch, ThemeSwitcher } from '../../components';
+import { Button, NetworkPicker, Switch, ThemeSwitcher, toast } from '../../components';
 import { useWalletStore } from '../../stores/walletStore';
-import { useNetworkStore } from '../../stores/networkStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { getWalletHandle } from '../../lib/walletHandle';
 import type { SettingsStackParamList } from '../../navigation/types';
@@ -36,19 +36,6 @@ const TIMEOUT_OPTIONS = [
 
 type Nav = NativeStackNavigationProp<SettingsStackParamList, 'SettingsMain'>;
 
-function formatChainName(chainId: bigint | undefined): string {
-  if (chainId === undefined) return 'Not connected';
-  const map: Record<string, string> = {
-    '1': 'Ethereum',
-    '11155111': 'Sepolia',
-    '42161': 'Arbitrum',
-    '8453': 'Base',
-    '10': 'Optimism',
-    '137': 'Polygon',
-  };
-  return map[chainId.toString()] ?? `Chain ${chainId.toString()}`;
-}
-
 function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
@@ -56,7 +43,6 @@ function SettingsScreen() {
 
   const { lockTimeoutSec, setLockTimeoutSec, proxyEnabled, setProxyEnabled } =
     useSettingsStore();
-  const chainId = useNetworkStore((s) => s.chainId);
 
   const handleLockNow = useCallback(async () => {
     try {
@@ -133,12 +119,26 @@ function SettingsScreen() {
 
       {/* Network */}
       <Section title="Network">
-        <View className="flex-row items-center justify-between py-2">
-          <Text className="text-ink-primary text-base">Current network</Text>
-          <Text className="text-ink-muted text-sm">
-            {formatChainName(chainId)}
-          </Text>
-        </View>
+        <NetworkPicker />
+      </Section>
+
+      {/* Legalize */}
+      <Section title="Legalize">
+        <Text className="text-ink-muted text-xs mb-3">
+          Rustok never holds your keys or your funds — architecturally, not
+          by promise. For fiat legalization we&apos;re building a Compliance
+          Bridge: an open integration point for a licensed provider (KYC,
+          UZS on/off-ramp, compliance reporting).
+        </Text>
+        <TouchableOpacity
+          onPress={() => toast.info('Compliance Bridge coming soon')}
+          accessibilityRole="button"
+          accessibilityLabel="Compliance Bridge, coming soon"
+          className="flex-row items-center justify-between py-2 opacity-50"
+        >
+          <Text className="text-ink-primary text-base">Connect licensed provider</Text>
+          <Text className="text-ink-muted text-xs">Architecture ready</Text>
+        </TouchableOpacity>
       </Section>
 
       {/* Privacy */}

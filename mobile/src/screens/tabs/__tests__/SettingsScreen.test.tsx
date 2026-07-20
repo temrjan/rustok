@@ -54,20 +54,16 @@ jest.mock('../../../stores/settingsStore', () => ({
   ),
 }));
 
-let mockChainId: bigint | undefined = 1n;
-jest.mock('../../../stores/networkStore', () => ({
-  useNetworkStore: (selector: (s: unknown) => unknown) =>
-    selector({ chainId: mockChainId }),
-}));
-
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
 jest.mock('../../../components', () => ({
   Button: (_props: Record<string, unknown>) => null,
+  NetworkPicker: () => null,
   Switch: (_props: Record<string, unknown>) => null,
   ThemeSwitcher: () => null,
+  toast: { info: jest.fn(), success: jest.fn(), error: jest.fn(), hide: jest.fn() },
 }));
 
 import { Linking } from 'react-native';
@@ -83,7 +79,6 @@ describe('SettingsScreen', () => {
   beforeEach(() => {
     mockLockTimeoutSec = 30;
     mockProxyEnabled = false;
-    mockChainId = 1n;
     mockNavigate.mockClear();
     mockLockWallet.mockClear();
     mockRefresh.mockClear();

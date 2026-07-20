@@ -46,6 +46,7 @@ async fn main() {
         .route("/health", get(handlers::health))
         .route("/check-address", post(handlers::check_address))
         .route("/decode", post(handlers::decode))
+        .route("/connector-status", get(handlers::connector_status))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
