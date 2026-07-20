@@ -1,6 +1,16 @@
 # Rustok — AI Session Quick Start
 
-**Актуальная точка входа — `docs/NATIVE-MIGRATION-PLAN.md` секции A-O (Onboarding).** Прочитай ПОЛНОСТЬЮ перед работой. Затем `docs/POC-FOUNDATION.md`.
+**Это НЕ рабочая копия Rustok Org.** Это отдельный клон `temrjan/rustok`, подготовленный под подачу на **President Tech Award** (Узбекистан). Полная память сессии → `project-rustok-award-submission` в auto-memory (см. `~/.claude/projects/-home-temrjan-Dev/memory/`).
+
+**Статус на 2026-07-20 (device-smoke на Poco X6, `JFLFG6MZSSL7WCF6`, реально на устройстве, не только Jest):**
+- Send/Receive/Activity/Network-picker/Legalize-секция — ЖИВЬЁМ подтверждены на Sepolia.
+- 🔴 Баг: `previewSend` теряет выбранную сеть между Settings и Send (Rust-сторона `get_chain_id()` иногда возвращает `None`, откат на mainnet=0 баланс). Воркэраунд: Settings→Network→перевыбрать Sepolia перед Send. Причина не пофикшена — минимум 2 silent-catch в `networkStore.ts` (`setChainId`, `hydrate`).
+- 🔴 Баг: ошибка «Network too slow» на broadcast не отличает «точно провал» от «неизвестно» — транзакция может реально уйти при показанной ошибке (задвоение при слепом ретрае).
+- 🟡 Activity: пагинации нет, жёстко топ-20 транзакций по всем сетям (`handle.rs:555`).
+- **Ренейминг:** решено НЕ трогать сегодня (риск для уже проверенной функциональности прямо перед дедлайном). Капитан подбирает новое имя, полная замена (8 Rust-крейтов + Android applicationId + iOS bundle ID + захардкоженные rustokwallet.com-ссылки + TRADEMARK.md) — отдельным заходом после подачи, не спеша.
+- **Деплой:** сервер 7demo готов (`rustok-api` контейнер на сети `proxy`, лендинг, Caddy-блок), домен ещё не выбран — НЕ `rustokwallet.com`/`rustok.org` (оба зарезервированы под Rustok Org).
+
+**Актуальная точка входа для истории разработки (устарела по неймингу, но верна по механике) — `docs/NATIVE-MIGRATION-PLAN.md` секции A-O (Onboarding).** Затем `docs/POC-FOUNDATION.md`.
 
 ---
 
@@ -56,20 +66,29 @@ cargo test --workspace
 cd mobile && npm run lint && npm run typecheck && npm run test
 ```
 
-## Android dev (Windows — PowerShell!)
+## Android dev (Fedora/Linux — проверено 2026-07-20 на этой машине)
 
-```powershell
-# local.properties нужен вручную (gitignored):
-# sdk.dir=C\:\\Users\\omadg\\AppData\\Local\\Android\\Sdk
+```bash
+# ubrn-биндинги нужно сгенерировать один раз после npm install (Rust→RN мост):
+cd packages/react-native-rustok-bridge && npm run ubrn:android
+# кросс-компилирует rustok-mobile-bindings под arm64-v8a+x86_64, генерирует TS
 
-# Metro (отдельный терминал):
+# Metro (отдельный терминал/background) — падает от NativeWind/Tailwind v3
+# watcher race при активном редактировании файлов, проверять `ps aux | grep metro`
+# + порт 8081, не гадать на кеш если правки не долетают:
 cd mobile && npx react-native start --port 8081
 
-# Сборка + установка:
-cd mobile/android && .\gradlew.bat app:installDebug -PreactNativeDevServerPort=8081
+# gradlew без прав на выполнение после fresh clone — обязательно chmod +x первым делом:
+chmod +x mobile/android/gradlew
 
-# Физ. устройство — reverse port:
+# Сборка — ОБЯЗАТЕЛЬНО JDK17, не системную (AGP требует именно 17):
+cd mobile/android && JAVA_HOME=~/.sdkman/candidates/java/17.0.13-tem ./gradlew app:assembleDebug
+# ⚠️ гейт: пайп через `tail` съедает реальный exit code — всегда через
+# `tee log | tail -N; echo EXIT:${PIPESTATUS[0]}`, не доверять «отчёту таска»
+
+# Физ. устройство — reverse port ОБЯЗАТЕЛЕН для debug-сборки (JS не забандлен):
 adb reverse tcp:8081 tcp:8081
+adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ## Links
