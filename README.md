@@ -4,7 +4,7 @@ Ethereum wallet with chain abstraction and transaction security engine.
 
 **Status:** Production — Phase 7 DONE — Android verified on Sepolia; iOS supported. React Native app with real on-chain transactions, full onboarding, and txguard live analysis.
 
-**Website:** [rustokwallet.com](https://rustokwallet.com) | **API:** [api.rustokwallet.com](https://api.rustokwallet.com/health) | **X:** [@rustokwallet](https://x.com/rustokwallet)
+**Website:** [rustok.uz](https://rustok.uz) | **API:** [api.rustok.uz](https://api.rustok.uz/health) | **X:** [@rustokwallet](https://x.com/rustokwallet)
 
 ---
 
@@ -67,7 +67,7 @@ The mobile app (Android + iOS) is the primary interface. A public HTTP API and C
 │  │ • send      │  │ • enrichment│  │  /decode            │ │
 │  │ • explorer  │  │             │  │                     │ │
 │  │ • explainer │  │ 8 security  │  │  Live:              │ │
-│  │ • convert   │  │ rules       │  │  api.rustokwallet.com│ │
+│  │ • convert   │  │ rules       │  │  api.rustok.uz      │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘ │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
 │  │ rustok-cli  │  │ rustok-types│  │rustok-mobile-bindings│ │
@@ -211,7 +211,7 @@ rustok wallet send --keystore wallet.json --password "pwd" --to 0xd8dA...6045 --
 
 ## txguard API
 
-Public API for transaction security analysis. Live at `api.rustokwallet.com`.
+Public API for transaction security analysis. Live at `api.rustok.uz`.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -221,12 +221,12 @@ Public API for transaction security analysis. Live at `api.rustokwallet.com`.
 
 ```bash
 # Check address
-curl -X POST https://api.rustokwallet.com/check-address \
+curl -X POST https://api.rustok.uz/check-address \
   -H "Content-Type: application/json" \
   -d '{"address": "0xdAC17F958D2ee523a2206206994597C13D831ec7"}'
 
 # Decode transaction
-curl -X POST https://api.rustokwallet.com/decode \
+curl -X POST https://api.rustok.uz/decode \
   -H "Content-Type: application/json" \
   -d '{"to": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "data": "0x095ea7b3000000000000000000000000000000000000000000000000000000000000dead00000000000000000000000000000000000000000000000000000000000f4240"}'
 ```
