@@ -7,7 +7,9 @@ on:
       - "crates/agent-mcp/**"
       - "crates/agent-wallet/**"
       - "crates/agent-dapps/**"
-      - "crates/core/**"
+      # crates/core/** intentionally absent: mobile wallet work in core must not
+      # redeploy the production agent image. Deploy after core changes via
+      # workflow_dispatch when the agent actually needs the new core.
       - "docker-compose.yml"
       - "crates/agent-mcp/Dockerfile"
       - ".github/workflows/deploy-agent-mcp.yml"
