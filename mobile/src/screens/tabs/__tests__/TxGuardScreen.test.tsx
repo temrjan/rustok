@@ -15,6 +15,7 @@ import {
   RuleCategoryDto,
 } from 'react-native-rustok-bridge';
 import TxGuardScreen from '../TxGuardScreen';
+import { mount as sharedMount } from '../../../testing/mount';
 
 const mockedAnalyzeTransaction = jest.mocked(analyzeTransaction);
 
@@ -47,13 +48,9 @@ async function press(tree: renderer.ReactTestRenderer, label: string) {
   });
 }
 
-async function mount(): Promise<renderer.ReactTestRenderer> {
-  let tree!: renderer.ReactTestRenderer;
-  await act(async () => {
-    tree = renderer.create(<TxGuardScreen />);
-  });
-  return tree;
-}
+// Shared mount registers the tree for global teardown (unmountAll in
+// jest.setup-after-env.js) so pending React work never outlives the test env.
+const mount = () => sharedMount(<TxGuardScreen />);
 
 describe('TxGuardScreen', () => {
   beforeEach(() => {

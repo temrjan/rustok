@@ -78,7 +78,12 @@ describe('ActivityScreen', () => {
     mockAbort.mockClear();
     mockActivityState = { phase: 'idle', entries: [], error: undefined };
     mockWalletAddress = '0x6f7c8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f';
-    jest.resetModules();
+    // No jest.resetModules() here (same call is disabled in
+    // SettingsScreen.test.tsx): a fresh module registry gives the screen a
+    // second `react` copy, and the deferred render then crashes on a null
+    // hooks dispatcher when the global afterEach flushes it inside act().
+    // The store mocks read mockActivityState lazily at render time, so
+    // module re-instantiation buys nothing.
   });
 
   it('renders the idle phase (Spinner) without throwing', () => {

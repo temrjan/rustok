@@ -15,6 +15,7 @@ import renderer, { act } from 'react-test-renderer';
 import { Linking } from 'react-native';
 import { ActionDto } from 'react-native-rustok-bridge';
 import ConfirmSendScreen from '../ConfirmSendScreen';
+import { mount as sharedMount } from '../../../testing/mount';
 import { getWalletHandle } from '../../../lib/walletHandle';
 import { useWalletStore } from '../../../stores/walletStore';
 
@@ -86,13 +87,9 @@ function findByA11y(tree: renderer.ReactTestRenderer, label: string) {
   return tree.root.findByProps({ accessibilityLabel: label });
 }
 
-async function mount(): Promise<renderer.ReactTestRenderer> {
-  let tree!: renderer.ReactTestRenderer;
-  await act(async () => {
-    tree = renderer.create(<ConfirmSendScreen />);
-  });
-  return tree;
-}
+// Shared mount registers the tree for global teardown (unmountAll in
+// jest.setup-after-env.js) so pending React work never outlives the test env.
+const mount = () => sharedMount(<ConfirmSendScreen />);
 
 describe('ConfirmSendScreen', () => {
   beforeEach(() => {

@@ -16,6 +16,7 @@
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import SendScreen from '../SendScreen';
+import { mount as sharedMount } from '../../../testing/mount';
 import { useWallet } from '../../../hooks/useWallet';
 
 jest.mock('../../../hooks/useWallet', () => ({
@@ -63,13 +64,9 @@ async function press(tree: renderer.ReactTestRenderer, label: string) {
   });
 }
 
-async function mount(): Promise<renderer.ReactTestRenderer> {
-  let tree!: renderer.ReactTestRenderer;
-  await act(async () => {
-    tree = renderer.create(<SendScreen />);
-  });
-  return tree;
-}
+// Shared mount registers the tree for global teardown (unmountAll in
+// jest.setup-after-env.js) so pending React work never outlives the test env.
+const mount = () => sharedMount(<SendScreen />);
 
 describe('SendScreen', () => {
   beforeEach(() => {

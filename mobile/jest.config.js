@@ -1,6 +1,10 @@
 module.exports = {
   preset: '@react-native/jest-preset',
   setupFiles: ['<rootDir>/jest.setup.js'],
+  // Runs after the test framework is installed (unlike setupFiles): wires a
+  // global afterEach that unmounts react-test-renderer trees and flushes
+  // React work scheduled outside act(), so nothing fires post-teardown.
+  setupFilesAfterEnv: ['<rootDir>/jest.setup-after-env.js'],
   // react-native-worklets ships an official jest resolver that strips the
   // `.native` extension from worklets-internal resolution paths, so the
   // package's TurboModule init (which throws in jest env) is bypassed
