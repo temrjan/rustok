@@ -5,10 +5,12 @@
 //! future WalletConnect adapter stays thin). Every operation carries an
 //! explicit `chain_id` — the network is never hidden state.
 //!
-//! PR-1 scope: the model and the [`journal::Journal`] (idempotent broadcast,
-//! status tracking, future history merge). The `Executor` lands in the next
-//! commit of this PR; delegation (EIP-7702), self-call batches and the
-//! sponsored path in later PRs of circle 1.
+//! PR-1 scope: the model, the [`journal::Journal`] (idempotent broadcast,
+//! status tracking, future history merge), and the [`Executor`] for the
+//! `DirectEoa` path only. Delegation (EIP-7702) and self-call batches land in
+//! later PRs of circle 1 — a multi-call batch selects
+//! [`AccountError::PathUnavailable`]. The sponsored path is circle 4 and has
+//! no selector branch at all until then.
 
 pub mod journal;
 
@@ -16,7 +18,9 @@ use alloy_primitives::{Address, B256, Bytes, U256};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use journal::JournalError;
+use crate::provider::{MultiProvider, ProviderError};
+use crate::send::SendError;
+use journal::{Journal, JournalError};
 
 /// A single contract call inside an [`Operation`] — the EIP-5792 call shape.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -146,6 +150,14 @@ pub enum AccountError {
     #[error(transparent)]
     Journal(#[from] JournalError),
 
+    /// Send-domain failure (txguard block, RPC, signing).
+    #[error(transparent)]
+    Send(#[from] SendError),
+
+    /// Provider/RPC failure during status polling.
+    #[error(transparent)]
+    Provider(#[from] ProviderError),
+
     /// An operation needs at least one call.
     #[error("operation has no calls")]
     EmptyCalls,
@@ -176,6 +188,137 @@ pub const fn select_path(calls: &[Call]) -> Result<SubmissionPath, AccountError>
     Err(AccountError::PathUnavailable {
         path: SubmissionPath::DirectSelfCall.as_str(),
     })
+}
+
+/// Executes journaled operations against a [`MultiProvider`].
+///
+/// Borrows the provider and the journal; construct per call site — the
+/// struct is a thin coordinator, all state lives in the journal and on-chain.
+pub struct Executor<'a> {
+    provider: &'a MultiProvider,
+    journal: &'a Journal,
+}
+
+impl<'a> Executor<'a> {
+    /// Create an executor over `provider` with operations recorded in `journal`.
+    pub const fn new(provider: &'a MultiProvider, journal: &'a Journal) -> Self {
+        Self { provider, journal }
+    }
+
+    /// Record and broadcast an operation. Returns its journal entry.
+    ///
+    /// Idempotent: a repeated call with the same `(chain_id, from, calls)`
+    /// returns the existing journal entry instead of broadcasting twice.
+    /// An entry already past `Draft` (broadcast/confirmed/failed) is returned
+    /// as-is — resubmitting a broadcast attempt whose outcome is unknown could
+    /// double-spend, so the caller must inspect the status instead.
+    ///
+    /// The receipt is NOT awaited: the entry is returned as soon as the hash
+    /// is known; poll [`Self::status`] for inclusion. This structurally closes
+    /// the "Network too slow" bug (ADR-001 §2: the old path blocked on the
+    /// receipt for 120 s inside Rust while the UI timed out at 12 s).
+    ///
+    /// Residual double-broadcast window (review finding, circle 1 PR-1):
+    /// signing/broadcast happens inside
+    /// [`crate::sign::sign_and_send_transaction_with_signer`], so the
+    /// journal's dedupe guarantee does NOT cover
+    /// (a) a kill between an RPC-accepted broadcast and
+    ///     [`Journal::mark_broadcast`], nor
+    /// (b) two CONCURRENT `execute` calls with the same
+    ///     `(chain_id, from, calls)` inside one process (e.g. a UI
+    ///     double-tap): both can observe `Draft` before either reaches
+    ///     `mark_broadcast`, and both would broadcast — with distinct nonces
+    ///     both transactions could land.
+    ///
+    /// Closing this needs the signed envelope and nonce stored in the journal
+    /// BEFORE broadcast (the Executor owning signing) plus serialization per
+    /// dedupe key — that is the `send.rs`/`sign.rs` absorption PR of circle 1.
+    /// HARD GATE: until then `execute` must not be wired into the bridge/UI
+    /// (PR-3) without call-site serialization per `(chain_id, from, calls)`.
+    ///
+    /// # Errors
+    ///
+    /// - [`AccountError::EmptyCalls`] / [`AccountError::PathUnavailable`] from
+    ///   the path policy ([`select_path`]).
+    /// - [`AccountError::Journal`] on journal failures.
+    /// - [`AccountError::Send`] from txguard/RPC/signing during broadcast
+    ///   (the entry stays in `Draft` and may be retried via a fresh
+    ///   `execute` — the dedupe key replays the same operation).
+    pub async fn execute(
+        &self,
+        signer: &alloy_signer_local::PrivateKeySigner,
+        chain_id: u64,
+        calls: Vec<Call>,
+    ) -> Result<Operation, AccountError> {
+        let path = select_path(&calls)?;
+        let from = signer.address();
+
+        let op = self.journal.insert_draft(chain_id, from, &calls, path)?;
+        if op.status != OperationStatus::Draft {
+            // Idempotent replay — see method docs.
+            return Ok(op);
+        }
+
+        debug_assert_eq!(op.calls.len(), 1, "DirectEoa path implies a single call");
+        let call = &op.calls[0];
+        let tx = alloy_rpc_types_eth::TransactionRequest::default()
+            .to(call.to)
+            .value(call.value)
+            .input(call.data.clone().into());
+
+        let tx_hash =
+            crate::sign::sign_and_send_transaction_with_signer(signer, self.provider, tx, chain_id)
+                .await?;
+
+        Ok(self.journal.mark_broadcast(&op.id, tx_hash)?)
+    }
+
+    /// Current status of an operation: journal state, refreshed from the
+    /// chain for broadcast-but-unconfirmed entries.
+    ///
+    /// Returns `None` for an unknown id. For `Broadcast` entries with a known
+    /// `tx_hash` this polls the receipt once: a successful receipt marks the
+    /// operation `Confirmed`, a reverted one marks it `Failed`, and a missing
+    /// receipt leaves it `Broadcast` (still pending).
+    ///
+    /// # Errors
+    ///
+    /// [`AccountError::Journal`] on journal failures,
+    /// [`AccountError::Provider`] if every RPC endpoint of the chain fails.
+    pub async fn status(&self, id: &str) -> Result<Option<Operation>, AccountError> {
+        let Some(op) = self.journal.get(id)? else {
+            return Ok(None);
+        };
+
+        if op.status != OperationStatus::Broadcast {
+            return Ok(Some(op));
+        }
+        let Some(tx_hash) = op.tx_hash else {
+            // Broadcast without a hash cannot be polled; nothing to refresh.
+            return Ok(Some(op));
+        };
+
+        let Some(receipt) = self
+            .provider
+            .transaction_receipt(op.chain_id, tx_hash)
+            .await?
+        else {
+            return Ok(Some(op)); // not mined yet
+        };
+        let Some(block_number) = receipt.block_number else {
+            // Receipt without a block number: not usefully confirmable yet.
+            return Ok(Some(op));
+        };
+
+        if receipt.status() {
+            Ok(Some(self.journal.mark_confirmed(&op.id, block_number)?))
+        } else {
+            Ok(Some(
+                self.journal
+                    .mark_failed(&op.id, "transaction reverted on-chain")?,
+            ))
+        }
+    }
 }
 
 #[cfg(test)]

@@ -298,6 +298,20 @@ impl MultiProvider {
         Self::fetch_call(chain, tx, &self.http).await
     }
 
+    /// Fetch a transaction receipt on a specific chain with RPC fallback.
+    ///
+    /// `Ok(None)` means the first responding endpoint answered successfully
+    /// and the transaction is not mined yet — remaining endpoints are not
+    /// consulted for a definitive `None` (a pending tx is not an error).
+    pub async fn transaction_receipt(
+        &self,
+        chain_id: u64,
+        tx_hash: alloy_primitives::B256,
+    ) -> Result<Option<alloy_rpc_types_eth::TransactionReceipt>, ProviderError> {
+        let chain = self.find_chain(chain_id)?;
+        Self::fetch_receipt(chain, tx_hash, &self.http).await
+    }
+
     /// Fetch call result with RPC fallback.
     async fn fetch_call(
         chain: &Chain,
@@ -320,6 +334,37 @@ impl MultiProvider {
                         rpc = %rpc_url,
                         error = %e,
                         "eth_call failed, trying next"
+                    );
+                    continue;
+                }
+            }
+        }
+
+        Err(ProviderError::AllEndpointsFailed { chain_id: chain.id })
+    }
+
+    /// Fetch a transaction receipt with RPC fallback.
+    async fn fetch_receipt(
+        chain: &Chain,
+        tx_hash: alloy_primitives::B256,
+        http: &reqwest::Client,
+    ) -> Result<Option<alloy_rpc_types_eth::TransactionReceipt>, ProviderError> {
+        for rpc_url in &chain.rpc_urls {
+            let url = match rpc_url.parse() {
+                Ok(u) => u,
+                Err(_) => continue,
+            };
+
+            let provider = ProviderBuilder::new().connect_reqwest(http.clone(), url);
+
+            match provider.get_transaction_receipt(tx_hash).await {
+                Ok(receipt) => return Ok(receipt),
+                Err(e) => {
+                    tracing::debug!(
+                        chain_id = chain.id,
+                        rpc = %rpc_url,
+                        error = %e,
+                        "receipt fetch failed, trying next"
                     );
                     continue;
                 }
