@@ -195,3 +195,80 @@ async fn analyze_transaction_native_transfer_succeeds() {
     .expect("native transfer must succeed");
     assert_eq!(verdict.findings.len(), 0);
 }
+
+// ─── AccountErrorKind mappings (pure `From` conversions) ───────
+
+#[test]
+fn account_error_empty_calls_maps_to_account_kind() {
+    let err = BindingsError::from(rustok_core::account::AccountError::EmptyCalls);
+    assert!(matches!(
+        err,
+        BindingsError::Account {
+            kind: rustok_mobile_bindings::AccountErrorKind::EmptyCalls
+        }
+    ));
+}
+
+#[test]
+fn account_error_path_unavailable_maps_to_account_kind() {
+    let err = BindingsError::from(rustok_core::account::AccountError::PathUnavailable {
+        path: "direct_self_call",
+        reason: "test",
+    });
+    assert!(matches!(
+        err,
+        BindingsError::Account {
+            kind: rustok_mobile_bindings::AccountErrorKind::PathUnavailable
+        }
+    ));
+}
+
+#[test]
+fn delegation_error_variants_map_to_account_kinds() {
+    use rustok_core::account::delegation::DelegationError;
+    use rustok_mobile_bindings::AccountErrorKind;
+
+    let cases: Vec<(DelegationError, AccountErrorKind)> = vec![
+        (DelegationError::ChainIdZero, AccountErrorKind::ChainIdZero),
+        (
+            DelegationError::UnsupportedChain(324),
+            AccountErrorKind::UnsupportedChain,
+        ),
+        (
+            DelegationError::ForeignDelegation(alloy_primitives::Address::ZERO),
+            AccountErrorKind::ForeignDelegation,
+        ),
+        (
+            DelegationError::NotDelegatable,
+            AccountErrorKind::NotDelegatable,
+        ),
+        (
+            DelegationError::DelegateCodeMismatch(1),
+            AccountErrorKind::DelegateCodeMismatch,
+        ),
+        (
+            DelegationError::NothingToRevoke,
+            AccountErrorKind::NothingToRevoke,
+        ),
+    ];
+    for (source, expected) in cases {
+        let mapped = BindingsError::from(source);
+        assert!(
+            matches!(&mapped, BindingsError::Account { kind } if std::mem::discriminant(kind) == std::mem::discriminant(&expected)),
+            "expected {expected}, got {mapped:?}"
+        );
+    }
+}
+
+#[test]
+fn journal_error_not_found_maps_to_account_not_found() {
+    let err = BindingsError::from(rustok_core::account::journal::JournalError::NotFound(
+        "0xabc".into(),
+    ));
+    assert!(matches!(
+        err,
+        BindingsError::Account {
+            kind: rustok_mobile_bindings::AccountErrorKind::NotFound
+        }
+    ));
+}

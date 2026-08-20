@@ -507,6 +507,10 @@ pub struct TransactionHistoryEntry {
     pub timestamp: u64,
     /// Pre-formatted relative time (e.g. `"2h ago"`).
     pub time_ago: String,
+    /// Lifecycle status: `"pending" | "confirmed" | "failed"`.
+    pub status: String,
+    /// Direction relative to the wallet: `"sent" | "received" | "self"`.
+    pub direction: String,
 }
 
 impl From<rustok_types::TransactionDto> for TransactionHistoryEntry {
@@ -520,6 +524,8 @@ impl From<rustok_types::TransactionDto> for TransactionHistoryEntry {
             value_formatted: t.value_formatted,
             timestamp: t.timestamp,
             time_ago: t.time_ago,
+            status: t.status,
+            direction: t.direction,
         }
     }
 }
@@ -542,6 +548,104 @@ impl From<rustok_types::TransactionHistoryDto> for TransactionHistory {
                 .map(TransactionHistoryEntry::from)
                 .collect(),
             errors: h.errors,
+        }
+    }
+}
+
+// ─── Account operations / delegation ────────────────────────────
+
+/// A single call inside an operation (EIP-5792 call shape).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct CallDto {
+    /// Target address (`0x`-prefixed hex).
+    pub to: String,
+    /// Native value in wei (decimal string).
+    pub value_wei: String,
+    /// Calldata (`0x`-prefixed hex; `""` / `"0x"` for a plain transfer).
+    pub data: String,
+}
+
+impl CallDto {
+    /// Convert to `rustok_core::account::Call`, validating hex/decimal
+    /// fields.
+    ///
+    /// # Errors
+    ///
+    /// [`BindingsError::Encoding`] if any field is malformed.
+    pub fn into_core(self) -> Result<rustok_core::account::Call, BindingsError> {
+        let data = if self.data.is_empty() || self.data == "0x" {
+            Bytes::new()
+        } else {
+            parse_bytes(&self.data)?
+        };
+        Ok(rustok_core::account::Call {
+            to: parse_address(&self.to)?,
+            value: parse_u256(&self.value_wei)?,
+            data,
+        })
+    }
+}
+
+/// A journaled account operation (EIP-5792 `wallet_sendCalls` shape).
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct OperationDto {
+    /// Journal-generated id (`0x` + 64 hex chars).
+    pub id: String,
+    /// Chain id this operation belongs to.
+    pub chain_id: u64,
+    /// Lifecycle status: `"draft" | "broadcast" | "confirmed" | "failed" |
+    /// "dropped"` (stable strings, `OperationStatus::as_str`).
+    pub status: String,
+    /// Submission path: `"direct_eoa" | "direct_self_call" | "sponsored"`.
+    pub path: String,
+    /// Transaction hash once broadcast (`0x` hex).
+    pub tx_hash: Option<String>,
+    /// Error detail when `status == "failed"`.
+    pub error: Option<String>,
+}
+
+impl From<rustok_core::account::Operation> for OperationDto {
+    fn from(op: rustok_core::account::Operation) -> Self {
+        Self {
+            id: op.id,
+            chain_id: op.chain_id,
+            status: op.status.as_str().to_string(),
+            path: op.path.as_str().to_string(),
+            tx_hash: op.tx_hash.map(|h| format!("{h:#x}")),
+            error: op.error,
+        }
+    }
+}
+
+/// Delegation state of the wallet account on one chain.
+#[derive(Debug, Clone, uniffi::Record)]
+pub struct DelegationStatusDto {
+    /// Chain id.
+    pub chain_id: u64,
+    /// State: `"none" | "ours" | "foreign" | "other"` (`other` = the
+    /// address holds non-7702 contract code).
+    pub state: String,
+    /// Foreign delegation target (`0x` hex) when `state == "foreign"`.
+    pub foreign_address: Option<String>,
+}
+
+impl DelegationStatusDto {
+    /// Build from a core [`DelegationState`](rustok_core::account::delegation::DelegationState).
+    pub fn from_core(
+        chain_id: u64,
+        state: rustok_core::account::delegation::DelegationState,
+    ) -> Self {
+        use rustok_core::account::delegation::DelegationState as S;
+        let (state, foreign_address) = match state {
+            S::None => ("none", None),
+            S::Ours => ("ours", None),
+            S::Foreign(addr) => ("foreign", Some(format!("{addr:#x}"))),
+            S::Other => ("other", None),
+        };
+        Self {
+            chain_id,
+            state: state.to_string(),
+            foreign_address,
         }
     }
 }

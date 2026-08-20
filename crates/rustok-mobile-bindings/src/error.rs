@@ -9,6 +9,9 @@
 //!   tag so production debugging can correlate Rust logs with FFI
 //!   `BindingsError` returns at the mobile boundary.
 
+use rustok_core::account::AccountError;
+use rustok_core::account::delegation::DelegationError;
+use rustok_core::account::journal::JournalError;
 use rustok_core::keyring::KeyringError;
 use rustok_core::send::SendError;
 use rustok_core::swap::SwapError;
@@ -58,6 +61,13 @@ pub enum BindingsError {
     Swap {
         /// Specific swap error variant.
         kind: SwapErrorKind,
+    },
+
+    /// Account operation / delegation errors.
+    #[error("account error: {kind}")]
+    Account {
+        /// Specific account error variant.
+        kind: AccountErrorKind,
     },
 
     /// Internal / unexpected errors. Sensitive context never crosses FFI;
@@ -192,6 +202,40 @@ pub enum SwapErrorKind {
     Invalid,
 }
 
+/// Account operation / delegation error variants.
+#[derive(Debug, thiserror::Error, uniffi::Enum)]
+pub enum AccountErrorKind {
+    /// Operation submitted without any calls.
+    #[error("operation has no calls")]
+    EmptyCalls,
+    /// Required submission path is not available (e.g. batch without
+    /// an active delegation).
+    #[error("submission path unavailable")]
+    PathUnavailable,
+    /// Chain has no EIP-7702 support / no pinned delegate deployment.
+    #[error("chain does not support EIP-7702")]
+    UnsupportedChain,
+    /// `chain_id = 0` authorization attempted (valid on all chains at once).
+    #[error("chain_id 0 authorizations are forbidden")]
+    ChainIdZero,
+    /// Account is delegated to a foreign address — never overwritten
+    /// silently.
+    #[error("account is delegated to a foreign address")]
+    ForeignDelegation,
+    /// Account address holds non-7702 contract code.
+    #[error("account is not delegatable")]
+    NotDelegatable,
+    /// Pinned delegate code-hash mismatch (compromised lookalike).
+    #[error("pinned delegate code mismatch")]
+    DelegateCodeMismatch,
+    /// Revoke attempted on an account that is not delegated.
+    #[error("nothing to revoke")]
+    NothingToRevoke,
+    /// Operation id unknown to the journal.
+    #[error("operation not found")]
+    NotFound,
+}
+
 // ─── Conversions ────────────────────────────────────────────────
 
 impl From<WalletServiceError> for BindingsError {
@@ -309,6 +353,75 @@ impl From<ParseError> for BindingsError {
         tracing::error!(error = ?e, "ParseError → BindingsError");
         Self::TxGuard {
             kind: TxGuardErrorKind::Parse,
+        }
+    }
+}
+
+impl From<AccountError> for BindingsError {
+    fn from(e: AccountError) -> Self {
+        tracing::error!(error = ?e, "AccountError → BindingsError");
+        match e {
+            AccountError::Journal(j) => j.into(),
+            AccountError::Send(s) => s.into(),
+            AccountError::Provider(_) => Self::Rpc {
+                kind: RpcErrorKind::Connection,
+            },
+            AccountError::Delegation(d) => d.into(),
+            AccountError::EmptyCalls => Self::Account {
+                kind: AccountErrorKind::EmptyCalls,
+            },
+            AccountError::PathUnavailable { .. } => Self::Account {
+                kind: AccountErrorKind::PathUnavailable,
+            },
+        }
+    }
+}
+
+impl From<DelegationError> for BindingsError {
+    fn from(e: DelegationError) -> Self {
+        tracing::error!(error = ?e, "DelegationError → BindingsError");
+        match e {
+            DelegationError::Provider(_) => Self::Rpc {
+                kind: RpcErrorKind::Connection,
+            },
+            DelegationError::Send(s) => s.into(),
+            DelegationError::Sign(_) => Self::Wallet {
+                kind: WalletErrorKind::Crypto,
+            },
+            DelegationError::UnsupportedChain(_) => Self::Account {
+                kind: AccountErrorKind::UnsupportedChain,
+            },
+            DelegationError::ChainIdZero => Self::Account {
+                kind: AccountErrorKind::ChainIdZero,
+            },
+            DelegationError::ForeignDelegation(_) => Self::Account {
+                kind: AccountErrorKind::ForeignDelegation,
+            },
+            DelegationError::NotDelegatable => Self::Account {
+                kind: AccountErrorKind::NotDelegatable,
+            },
+            DelegationError::DelegateCodeMismatch(_) => Self::Account {
+                kind: AccountErrorKind::DelegateCodeMismatch,
+            },
+            DelegationError::NothingToRevoke => Self::Account {
+                kind: AccountErrorKind::NothingToRevoke,
+            },
+        }
+    }
+}
+
+impl From<JournalError> for BindingsError {
+    fn from(e: JournalError) -> Self {
+        tracing::error!(error = ?e, "JournalError → BindingsError");
+        match e {
+            JournalError::NotFound(_) => Self::Account {
+                kind: AccountErrorKind::NotFound,
+            },
+            // The journal is local SQLite storage — remaining variants are
+            // storage-class failures.
+            _ => Self::Wallet {
+                kind: WalletErrorKind::Storage,
+            },
         }
     }
 }
