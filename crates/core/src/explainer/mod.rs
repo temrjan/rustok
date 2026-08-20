@@ -117,6 +117,13 @@ pub fn describe_action(parsed: &ParsedTransaction) -> String {
                 short_addr(parsed.to),
             )
         }
+        TransactionAction::Batch { calls } => {
+            format!(
+                "Batch of {} atomic call{} via smart account",
+                calls.len(),
+                if calls.len() == 1 { "" } else { "s" },
+            )
+        }
         TransactionAction::Unknown {
             selector,
             calldata_len,
