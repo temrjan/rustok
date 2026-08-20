@@ -5,13 +5,19 @@
 //! future WalletConnect adapter stays thin). Every operation carries an
 //! explicit `chain_id` — the network is never hidden state.
 //!
-//! PR-1 scope: the model, the [`journal::Journal`] (idempotent broadcast,
-//! status tracking, future history merge), and the [`Executor`] for the
-//! `DirectEoa` path only. Delegation (EIP-7702) and self-call batches land in
-//! later PRs of circle 1 — a multi-call batch selects
-//! [`AccountError::PathUnavailable`]. The sponsored path is circle 4 and has
-//! no selector branch at all until then.
+//! PR-2 scope: on top of the PR-1 model, [`journal::Journal`] and the
+//! `DirectEoa` executor, this adds EIP-7702 delegation
+//! ([`delegation`]: state from `eth_getCode`, authorize/revoke, a foreign
+//! delegation is never silently overwritten), the pinned delegate and the
+//! 7702 network matrix ([`delegate`]), and the `DirectSelfCall` path —
+//! a multi-call operation executed as a self-call `executeBatch` through
+//! the delegated account ([`direct`]). A single call always goes
+//! `DirectEoa` (ADR-001 §8.2: dApps need a real tx hash). The sponsored
+//! path is circle 4 and has no selector branch until then.
 
+pub mod delegate;
+pub mod delegation;
+pub mod direct;
 pub mod journal;
 
 use alloy_primitives::{Address, B256, Bytes, U256};
@@ -20,6 +26,7 @@ use thiserror::Error;
 
 use crate::provider::{MultiProvider, ProviderError};
 use crate::send::SendError;
+use delegation::{DelegationError, DelegationState};
 use journal::{Journal, JournalError};
 
 /// A single contract call inside an [`Operation`] — the EIP-5792 call shape.
@@ -40,8 +47,8 @@ pub struct Call {
 pub enum SubmissionPath {
     /// Plain EOA transaction, gas paid by the user. Always available.
     DirectEoa,
-    /// Self-call `executeBatch` through a delegated (EIP-7702) account.
-    /// Available in a later PR of circle 1.
+    /// Self-call `executeBatch` through a delegated (EIP-7702) account,
+    /// gas paid by the user. Requires `DelegationState::Ours` on the chain.
     DirectSelfCall,
     /// ERC-4337 user operation via a rented bundler/paymaster — circle 4.
     Sponsored,
@@ -125,7 +132,8 @@ pub struct Operation {
     pub chain_id: u64,
     /// Sender (our own address).
     pub from: Address,
-    /// Calls to execute atomically. PR-1 executes exactly one (`DirectEoa`).
+    /// Calls to execute atomically. A single call goes `DirectEoa`; a batch
+    /// requires `DirectSelfCall` (active delegation) or later `Sponsored`.
     pub calls: Vec<Call>,
     /// Submission path chosen by policy.
     pub path: SubmissionPath,
@@ -158,36 +166,60 @@ pub enum AccountError {
     #[error(transparent)]
     Provider(#[from] ProviderError),
 
+    /// Delegation-state failure (foreign delegation, unsupported chain,
+    /// delegate code mismatch) from the path policy or delegation lifecycle.
+    #[error(transparent)]
+    Delegation(#[from] DelegationError),
+
     /// An operation needs at least one call.
     #[error("operation has no calls")]
     EmptyCalls,
 
-    /// The policy selected a path that is not implemented in circle 1 PR-1
-    /// (delegation / self-call batch / sponsored). Explicit error instead of a
-    /// silent fallback — a silent downgrade to `DirectEoa` would mask bugs.
-    #[error("submission path {path} is not available yet (circle 1, later PR)")]
+    /// The policy selected a path that is not implemented in circle 1 PR-2
+    /// (multi-call without an active delegation, or sponsored). Explicit
+    /// error instead of a silent fallback — a silent downgrade to
+    /// `DirectEoa` would mask bugs and break batch atomicity.
+    #[error("submission path {path} is not available: {reason}")]
     PathUnavailable {
         /// Path that would be required.
         path: &'static str,
+        /// Why the path cannot be used for this operation.
+        reason: &'static str,
     },
 }
 
-/// Pick the submission path for a set of calls (pure policy, no I/O).
+/// Pick the submission path for a set of calls given the on-chain
+/// delegation state (pure policy, no I/O).
 ///
-/// PR-1: a single call goes `DirectEoa`. Multiple calls require a delegated
-/// self-call batch (later PR) — without delegation state there is no direct
-/// way to batch, so this is [`AccountError::PathUnavailable`], not a silent
-/// split into separate transactions (that would break atomicity silently).
-pub const fn select_path(calls: &[Call]) -> Result<SubmissionPath, AccountError> {
+/// A single call always goes `DirectEoa` — ADR-001 §8.2: `eth_sendTransaction`
+/// from a dApp must return a real tx hash, so the direct path for a single
+/// call is kept forever, delegation or not. Multiple calls require the
+/// delegated self-call batch: `Ours` → [`SubmissionPath::DirectSelfCall`];
+/// no delegation → [`AccountError::PathUnavailable`] (not a silent split
+/// into separate transactions — that would break atomicity silently);
+/// a foreign delegation or contract code is an explicit error (invariant
+/// ADR-001 §5.2.5 — never silently work around someone else's delegate).
+pub const fn select_path(
+    calls: &[Call],
+    delegation: &DelegationState,
+) -> Result<SubmissionPath, AccountError> {
     if calls.is_empty() {
         return Err(AccountError::EmptyCalls);
     }
     if calls.len() == 1 {
         return Ok(SubmissionPath::DirectEoa);
     }
-    Err(AccountError::PathUnavailable {
-        path: SubmissionPath::DirectSelfCall.as_str(),
-    })
+    match delegation {
+        DelegationState::Ours => Ok(SubmissionPath::DirectSelfCall),
+        DelegationState::None => Err(AccountError::PathUnavailable {
+            path: SubmissionPath::DirectSelfCall.as_str(),
+            reason: "multi-call batch requires an active 7702 delegation",
+        }),
+        DelegationState::Foreign(addr) => Err(AccountError::Delegation(
+            DelegationError::ForeignDelegation(*addr),
+        )),
+        DelegationState::Other => Err(AccountError::Delegation(DelegationError::NotDelegatable)),
+    }
 }
 
 /// Executes journaled operations against a [`MultiProvider`].
@@ -212,6 +244,13 @@ impl<'a> Executor<'a> {
     /// An entry already past `Draft` (broadcast/confirmed/failed) is returned
     /// as-is — resubmitting a broadcast attempt whose outcome is unknown could
     /// double-spend, so the caller must inspect the status instead.
+    ///
+    /// Path selection: a single call always goes `DirectEoa` (ADR-001 §8.2).
+    /// A multi-call operation reads the on-chain delegation state first
+    /// (invariant ADR-001 §5.2.3): delegated to our pinned delegate →
+    /// `DirectSelfCall` (self-call `executeBatch`, one atomic transaction);
+    /// otherwise an explicit error — never a silent split into separate
+    /// transactions.
     ///
     /// The receipt is NOT awaited: the entry is returned as soon as the hash
     /// is known; poll [`Self::status`] for inclusion. This structurally closes
@@ -238,8 +277,9 @@ impl<'a> Executor<'a> {
     ///
     /// # Errors
     ///
-    /// - [`AccountError::EmptyCalls`] / [`AccountError::PathUnavailable`] from
-    ///   the path policy ([`select_path`]).
+    /// - [`AccountError::EmptyCalls`] / [`AccountError::PathUnavailable`] /
+    ///   [`AccountError::Delegation`] from the path policy ([`select_path`])
+    ///   and the delegation-state read for multi-call operations.
     /// - [`AccountError::Journal`] on journal failures.
     /// - [`AccountError::Send`] from txguard/RPC/signing during broadcast
     ///   (the entry stays in `Draft` and may be retried via a fresh
@@ -250,8 +290,19 @@ impl<'a> Executor<'a> {
         chain_id: u64,
         calls: Vec<Call>,
     ) -> Result<Operation, AccountError> {
-        let path = select_path(&calls)?;
         let from = signer.address();
+
+        // The path policy for a multi-call operation needs the on-chain
+        // delegation state (invariant ADR-001 §5.2.3). A single call goes
+        // `DirectEoa` regardless — skip the RPC entirely.
+        let delegation = if calls.len() > 1 {
+            delegation::Delegation::new(self.provider)
+                .state(chain_id, from)
+                .await?
+        } else {
+            DelegationState::None
+        };
+        let path = select_path(&calls, &delegation)?;
 
         let op = self.journal.insert_draft(chain_id, from, &calls, path)?;
         if op.status != OperationStatus::Draft {
@@ -259,12 +310,34 @@ impl<'a> Executor<'a> {
             return Ok(op);
         }
 
-        debug_assert_eq!(op.calls.len(), 1, "DirectEoa path implies a single call");
-        let call = &op.calls[0];
-        let tx = alloy_rpc_types_eth::TransactionRequest::default()
-            .to(call.to)
-            .value(call.value)
-            .input(call.data.clone().into());
+        let tx = match op.path {
+            SubmissionPath::DirectEoa => {
+                debug_assert_eq!(op.calls.len(), 1, "DirectEoa path implies a single call");
+                let call = &op.calls[0];
+                alloy_rpc_types_eth::TransactionRequest::default()
+                    .to(call.to)
+                    .value(call.value)
+                    .input(call.data.clone().into())
+            }
+            SubmissionPath::DirectSelfCall => {
+                // Self-call through the delegated account: the delegate
+                // executes every call atomically; the carrier transaction
+                // itself carries no value. See `direct.rs` for the accepted
+                // revoke-race window.
+                alloy_rpc_types_eth::TransactionRequest::default()
+                    .to(from)
+                    .value(U256::ZERO)
+                    .input(direct::encode_execute_batch(&op.calls).into())
+            }
+            SubmissionPath::Sponsored => {
+                // The policy never selects this in circle 1; a replayed
+                // journal entry from a future version still must not send.
+                return Err(AccountError::PathUnavailable {
+                    path: SubmissionPath::Sponsored.as_str(),
+                    reason: "sponsored path lands in circle 4",
+                });
+            }
+        };
 
         let tx_hash =
             crate::sign::sign_and_send_transaction_with_signer(signer, self.provider, tx, chain_id)
@@ -374,25 +447,68 @@ mod tests {
 
     #[test]
     fn select_path_single_call_is_direct_eoa() {
-        assert_eq!(
-            select_path(&[sample_call()]).unwrap(),
-            SubmissionPath::DirectEoa
-        );
+        // Single call → DirectEoa regardless of delegation state
+        // (ADR-001 §8.2: dApps need a real tx hash).
+        for state in [
+            DelegationState::None,
+            DelegationState::Ours,
+            DelegationState::Foreign(address!("1111111111111111111111111111111111111111")),
+            DelegationState::Other,
+        ] {
+            assert_eq!(
+                select_path(&[sample_call()], &state).unwrap(),
+                SubmissionPath::DirectEoa,
+                "single call must be DirectEoa in state {state:?}"
+            );
+        }
     }
 
     #[test]
     fn select_path_empty_calls_rejected() {
-        assert!(matches!(select_path(&[]), Err(AccountError::EmptyCalls)));
+        assert!(matches!(
+            select_path(&[], &DelegationState::None),
+            Err(AccountError::EmptyCalls)
+        ));
     }
 
     #[test]
-    fn select_path_batch_unavailable_in_pr1() {
+    fn select_path_batch_with_our_delegation_is_self_call() {
+        let calls = vec![sample_call(), sample_call()];
+        assert_eq!(
+            select_path(&calls, &DelegationState::Ours).unwrap(),
+            SubmissionPath::DirectSelfCall
+        );
+    }
+
+    #[test]
+    fn select_path_batch_without_delegation_is_unavailable() {
         let calls = vec![sample_call(), sample_call()];
         assert!(matches!(
-            select_path(&calls),
+            select_path(&calls, &DelegationState::None),
             Err(AccountError::PathUnavailable {
-                path: "direct_self_call"
+                path: "direct_self_call",
+                ..
             })
+        ));
+    }
+
+    /// Invariant ADR-001 §5.2.5 at the policy level: a batch on an account
+    /// with a foreign delegation or contract code is an explicit error,
+    /// never a silent fallback.
+    #[test]
+    fn select_path_batch_with_foreign_or_contract_is_rejected() {
+        let calls = vec![sample_call(), sample_call()];
+        let foreign =
+            DelegationState::Foreign(address!("1111111111111111111111111111111111111111"));
+        assert!(matches!(
+            select_path(&calls, &foreign),
+            Err(AccountError::Delegation(
+                DelegationError::ForeignDelegation(_)
+            ))
+        ));
+        assert!(matches!(
+            select_path(&calls, &DelegationState::Other),
+            Err(AccountError::Delegation(DelegationError::NotDelegatable))
         ));
     }
 

@@ -312,6 +312,52 @@ impl MultiProvider {
         Self::fetch_receipt(chain, tx_hash, &self.http).await
     }
 
+    /// Fetch the code at an address (`eth_getCode`, latest block) on a
+    /// specific chain with RPC fallback.
+    ///
+    /// This is the on-chain source of truth for EIP-7702 delegation state
+    /// (ADR-001 §5.2.3): an empty result means an EOA, a 23-byte
+    /// `0xef0100‖address` result means a 7702 delegation.
+    pub async fn code_at(
+        &self,
+        chain_id: u64,
+        address: Address,
+    ) -> Result<alloy_primitives::Bytes, ProviderError> {
+        let chain = self.find_chain(chain_id)?;
+        Self::fetch_code(chain, address, &self.http).await
+    }
+
+    /// Fetch code with RPC fallback.
+    async fn fetch_code(
+        chain: &Chain,
+        address: Address,
+        http: &reqwest::Client,
+    ) -> Result<alloy_primitives::Bytes, ProviderError> {
+        for rpc_url in &chain.rpc_urls {
+            let url = match rpc_url.parse() {
+                Ok(u) => u,
+                Err(_) => continue,
+            };
+
+            let provider = ProviderBuilder::new().connect_reqwest(http.clone(), url);
+
+            match provider.get_code_at(address).await {
+                Ok(code) => return Ok(code),
+                Err(e) => {
+                    tracing::debug!(
+                        chain_id = chain.id,
+                        rpc = %rpc_url,
+                        error = %e,
+                        "eth_getCode failed, trying next"
+                    );
+                    continue;
+                }
+            }
+        }
+
+        Err(ProviderError::AllEndpointsFailed { chain_id: chain.id })
+    }
+
     /// Fetch call result with RPC fallback.
     async fn fetch_call(
         chain: &Chain,
