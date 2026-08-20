@@ -22,6 +22,11 @@ export type TabsParamList = {
 // The `__` prefix matches the `_DevHarness` / `_ComponentsScreen` file pattern.
 export type SettingsStackParamList = {
   SettingsMain: undefined;
+  // PR-3: delegation consent (ADR-001 §5.2.7). `chainId` crosses as a
+  // decimal string — bigint route params trip React Navigation's
+  // serializable-state warning (same reason ConfirmSend takes
+  // `amountWei` as string).
+  DelegationConsent: { chainId: string; chainName: string };
   __DevHarness: undefined;
   __ComponentsScreen: undefined;
 };

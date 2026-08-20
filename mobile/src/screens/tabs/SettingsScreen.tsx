@@ -20,6 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Button, NetworkPicker, Switch, ThemeSwitcher, toast } from '../../components';
+import { SmartAccountSection } from './SmartAccountSection';
 import { useWalletStore } from '../../stores/walletStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { getWalletHandle } from '../../lib/walletHandle';
@@ -139,6 +140,11 @@ function SettingsScreen() {
           <Text className="text-ink-primary text-base">Connect licensed provider</Text>
           <Text className="text-ink-muted text-xs">Architecture ready</Text>
         </TouchableOpacity>
+      </Section>
+
+      {/* Smart account (EIP-7702 delegation) */}
+      <Section title="Smart account">
+        <SmartAccountSection />
       </Section>
 
       {/* Privacy */}

@@ -19,6 +19,8 @@ const baseEntry = {
   valueFormatted: '0.12 ETH',
   timestamp: 1_700_000_000n,
   timeAgo: '2h ago',
+  status: 'confirmed',
+  direction: 'sent',
 };
 
 describe('TransactionRow', () => {
@@ -52,7 +54,7 @@ describe('TransactionRow', () => {
     expect(() =>
       renderer.create(
         <TransactionRow
-          entry={{ ...baseEntry, timeAgo: 'Pending' }}
+          entry={{ ...baseEntry, status: 'pending', timeAgo: 'Pending' }}
           isPending
           direction="sent"
           onPress={() => undefined}

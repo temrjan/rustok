@@ -65,6 +65,8 @@ function pendingToEntry(p: pendingTxCache.PendingTxEntry): TransactionHistoryEnt
     valueFormatted: formatWeiToEth(p.valueWei),
     timestamp: BigInt(p.broadcastAt),
     timeAgo: 'Pending',
+    status: 'pending',
+    direction: 'sent',
   };
 }
 

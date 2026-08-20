@@ -36,11 +36,22 @@
  *   double-tap could surface two broadcasts with incrementing nonces,
  *   draining the wallet twice over.
  *
- * - **AbortSignal on both `previewSend` and `sendEth`.** 12 s budget
- *   each (`AbortController + setTimeout`, same pattern as
- *   `walletStore.hydrate`; `AbortSignal.timeout` is outside the
- *   project's TS lib set). Stalled RPC surfaces "Network too slow"
- *   instead of an indefinite spinner.
+ * - **AbortSignal on `previewSend` only.** The preview keeps the 12 s
+ *   budget (stalled RPC surfaces "Network too slow"). The broadcast
+ *   itself has NO abort since PR-3: `executeOperation` returns as soon
+ *   as the tx hash is known and the operation is journaled — aborting
+ *   mid-broadcast was the "Network too slow" bug class (UI gives up
+ *   while Rust later broadcasts; ADR-001 §2).
+ *
+ * - **Operation model (PR-3).** Confirm calls
+ *   `executeOperation(chainId, [call])` with the explicit chain from
+ *   `useNetworkStore` (fallback: the preview's route chain). The
+ *   operation is journaled Rust-side before broadcast; after the hash
+ *   is known the screen polls `getOperationStatus` a few times, then
+ *   lands on the Activity tab where the merged history (journal +
+ *   explorer) shows the entry as pending. The old `pendingTxCache`
+ *   write is gone from this screen — the journal covers it (the cache
+ *   stays for the non-journaled `sendTransaction` path).
  *
  * - **Verdict.action mapping.**
  *   - `Allow` → primary CTA, standard flow
@@ -50,7 +61,7 @@
  * - **Post-broadcast UX.** Toast with truncated tx hash + Etherscan
  *   `Linking.openURL` (fire-and-forget — `.catch` surfaces a fallback
  *   toast if no browser handler is registered). `walletStore.refresh`
- *   runs detached so balance updates while we pop back to Wallet.
+ *   runs detached so balance updates while we navigate to Activity.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -67,8 +78,8 @@ import { Spinner } from '../../components/Spinner';
 import { toast } from '../../components/Toast';
 import { txUrl } from '../../lib/chainExplorer';
 import { formatWeiToEth } from '../../lib/ethAmount';
-import * as pendingTxCache from '../../lib/pendingTxCache';
 import { getWalletHandle } from '../../lib/walletHandle';
+import { useNetworkStore } from '../../stores/networkStore';
 import { useWalletStore } from '../../stores/walletStore';
 import type { UnlockedParamList } from '../../navigation/types';
 
@@ -76,6 +87,10 @@ type Nav = NativeStackNavigationProp<UnlockedParamList, 'ConfirmSend'>;
 type ConfirmRoute = RouteProp<UnlockedParamList, 'ConfirmSend'>;
 
 const RPC_TIMEOUT_MS = 12_000;
+
+/** Post-broadcast status polls: check first, then wait — 3 tries × 2 s. */
+const STATUS_POLL_TRIES = 3;
+const STATUS_POLL_INTERVAL_MS = 2_000;
 
 type PreviewState =
   | { status: 'loading' }
@@ -95,6 +110,12 @@ function truncateAddress(address: string): string {
 function truncateTxHash(hash: string): string {
   if (hash.length <= 14) return hash;
   return `${hash.slice(0, 10)}…${hash.slice(-4)}`;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 
 function verdictHeadline(action: ActionDto): string {
@@ -143,9 +164,10 @@ function ConfirmSendScreen() {
   const navigation = useNavigation<Nav>();
   const route = useRoute<ConfirmRoute>();
   const { to, amountWei } = route.params;
-  const { address, refresh } = useWalletStore(
-    useShallow((s) => ({ address: s.address, refresh: s.refresh })),
+  const { refresh } = useWalletStore(
+    useShallow((s) => ({ refresh: s.refresh })),
   );
+  const preferredChainId = useNetworkStore((s) => s.chainId);
 
   const [preview, setPreview] = useState<PreviewState>({ status: 'loading' });
   const [isBroadcasting, setIsBroadcasting] = useState(false);
@@ -187,68 +209,71 @@ function ConfirmSendScreen() {
     if (preview.status !== 'ready') return;
     if (preview.preview.verdict.action === ActionDto.Block) return;
     setIsBroadcasting(true);
-    const controller = new AbortController();
-    const timeoutHandle = setTimeout(() => {
-      controller.abort();
-    }, RPC_TIMEOUT_MS);
     try {
-      const result = await getWalletHandle().sendEth(to, amountWei, {
-        signal: controller.signal,
-      });
-      // Record the broadcast in the local pending cache so the Activity
-      // tab can surface it as Pending immediately, before the Blockscout
-      // explorer API picks it up (typically 30 s – 2 min). Silent — the
-      // cache is a UX cushion, not a system of record; a failure here
-      // must not derail the toast / refresh / nav handoff.
-      try {
-        if (address !== undefined) {
-          pendingTxCache.add({
-            txHash: result.txHash,
-            chainId: result.chainId,
-            from: address.toLowerCase(),
-            to: to.toLowerCase(),
-            valueWei: amountWei,
-            broadcastAt: Math.floor(Date.now() / 1000),
-          });
-        }
-      } catch (cacheErr: unknown) {
-        if (__DEV__) {
-          console.warn('pendingTxCache.add failed', cacheErr);
+      // Explicit chain: the user's network choice wins; the preview's
+      // route chain is the fallback for a cold-start race where
+      // networkStore has not hydrated yet. The chain is never ambient
+      // Rust-side state from the UI's perspective (ADR-001 §2).
+      const chainId = preferredChainId ?? preview.preview.route.chainId;
+      const handle = getWalletHandle();
+      // No abort/timeout here on purpose: the operation is journaled
+      // before broadcast, so a slow network no longer risks a lost
+      // transaction — the Activity tab reflects the journal entry.
+      const op = await handle.executeOperation(chainId, [
+        { to, valueWei: amountWei, data: '0x' },
+      ]);
+      // Best-effort status polling (the journaled Activity entry is the
+      // source of truth — this only fast-forwards a confirmation toast).
+      if (op.status === 'broadcast') {
+        for (let attempt = 0; attempt < STATUS_POLL_TRIES; attempt += 1) {
+          if (attempt > 0) {
+            await delay(STATUS_POLL_INTERVAL_MS);
+          }
+          try {
+            const current = await handle.getOperationStatus(op.id);
+            if (current === undefined) break;
+            if (current.status === 'confirmed' || current.status === 'failed') {
+              if (current.status === 'failed') {
+                toast.error(current.error ?? 'Transaction failed on-chain');
+              }
+              break;
+            }
+          } catch {
+            break; // Polling is best-effort; the journal keeps the state.
+          }
         }
       }
-      const url = txUrl(result.chainId, result.txHash);
-      const hashShort = truncateTxHash(result.txHash);
+      const hashShort =
+        op.txHash !== undefined ? truncateTxHash(op.txHash) : op.id.slice(0, 10);
       toast.success(`Sent ${hashShort}`);
-      if (url !== null) {
-        // `Linking.openURL` can throw synchronously on some runtimes
-        // when no handler is registered (test env without RN's Linking
-        // mock most prominently). Wrap to cover both the sync-throw
-        // and async-reject paths — neither should derail the
-        // popToTop / refresh handoff that follows.
-        try {
-          Linking.openURL(url).catch(() => {
+      if (op.txHash !== undefined) {
+        const url = txUrl(op.chainId, op.txHash);
+        if (url !== null) {
+          // `Linking.openURL` can throw synchronously on some runtimes
+          // when no handler is registered (test env without RN's Linking
+          // mock most prominently). Wrap to cover both the sync-throw
+          // and async-reject paths — neither should derail the
+          // navigation / refresh handoff that follows.
+          try {
+            Linking.openURL(url).catch(() => {
+              toast.error('Cannot open explorer');
+            });
+          } catch {
             toast.error('Cannot open explorer');
-          });
-        } catch {
-          toast.error('Cannot open explorer');
+          }
         }
       }
-      // Detached refresh — pop happens immediately so the user lands
-      // back on Wallet without waiting for the balance round-trip.
+      // Detached refresh — navigation happens immediately so the user
+      // lands on Activity without waiting for the balance round-trip.
       refresh().catch(() => undefined);
-      navigation.popToTop();
+      navigation.navigate('Tabs', { screen: 'Activity' });
     } catch (e: unknown) {
-      const message = isAbortError(e)
-        ? 'Network too slow — please try again'
-        : e instanceof Error
-          ? e.message
-          : 'Send failed';
+      const message = e instanceof Error ? e.message : 'Send failed';
       toast.error(message);
     } finally {
-      clearTimeout(timeoutHandle);
       setIsBroadcasting(false);
     }
-  }, [isBroadcasting, preview, to, amountWei, navigation, refresh, address]);
+  }, [isBroadcasting, preview, to, amountWei, navigation, refresh, preferredChainId]);
 
   const confirmDisabled =
     isBroadcasting ||
