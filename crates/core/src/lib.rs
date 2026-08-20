@@ -12,6 +12,7 @@
 //!                     → explainer (human language)
 //! ```
 
+pub mod account;
 pub mod amount;
 pub mod convert;
 pub mod explainer;

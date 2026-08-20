@@ -6430,6 +6430,7 @@ dependencies = [
  "qrcode",
  "rand 0.8.5",
  "reqwest 0.13.2",
+ "rusqlite",
  "rustls",
  "rustok-types",
  "serde",
