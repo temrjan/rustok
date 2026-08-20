@@ -50,6 +50,9 @@ qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+# Local operation journal (idempotent broadcast, status tracking, history)
+rusqlite = { workspace = true }
+
 # Error handling
 thiserror = { workspace = true }
 
