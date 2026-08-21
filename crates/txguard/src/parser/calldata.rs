@@ -3,7 +3,7 @@
 //! [`ParsedTransaction`] is the structured output of the parser — it describes
 //! what a transaction does in terms the rules engine and explainer can work with.
 
-use alloy_primitives::{Address, U256};
+use alloy_primitives::{Address, Bytes, U256};
 use serde::Serialize;
 
 /// A parsed transaction with decoded action.
@@ -75,6 +75,15 @@ pub enum TransactionAction {
         deadline: U256,
     },
 
+    /// Atomic batch via a 7702 delegate `executeBatch((address,uint256,bytes)[])`.
+    ///
+    /// The transaction target (`to`) is the smart account itself; the calls
+    /// it executes atomically are what the rules engine must analyze.
+    Batch {
+        /// Calls executed atomically by the delegate.
+        calls: Vec<BatchCall>,
+    },
+
     /// Unknown function call — selector recognized but not decoded.
     Unknown {
         /// 4-byte function selector as hex string.
@@ -82,6 +91,17 @@ pub enum TransactionAction {
         /// Raw calldata length.
         calldata_len: usize,
     },
+}
+
+/// A single call inside a [`TransactionAction::Batch`].
+#[derive(Debug, Clone, Serialize)]
+pub struct BatchCall {
+    /// Call target (contract or EOA).
+    pub target: Address,
+    /// Native value in wei.
+    pub value: U256,
+    /// Calldata (empty for a plain native transfer).
+    pub data: Bytes,
 }
 
 impl TransactionAction {

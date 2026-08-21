@@ -78,6 +78,8 @@ describe('activityStore', () => {
     valueFormatted: string;
     timestamp: bigint;
     timeAgo: string;
+    status: string;
+    direction: string;
   } {
     return {
       txHash: '0xa',
@@ -88,6 +90,8 @@ describe('activityStore', () => {
       valueFormatted: '1.0 ETH',
       timestamp: 100n,
       timeAgo: '1m ago',
+      status: 'confirmed',
+      direction: 'sent',
       ...overrides,
     };
   }
@@ -350,5 +354,9 @@ describe('activityStore', () => {
     expect(row?.valueFormatted).toContain('ETH');
     expect(row?.chainName).toBe('Sepolia');
     expect(row?.timeAgo).toBe('Pending');
+    // PR-3: pending cache entries carry the record-level fields the
+    // Activity row now keys on (no more `timeAgo === 'Pending'` heuristic).
+    expect(row?.status).toBe('pending');
+    expect(row?.direction).toBe('sent');
   });
 });

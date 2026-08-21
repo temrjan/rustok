@@ -11,6 +11,7 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SettingsScreen from '../screens/tabs/SettingsScreen';
+import DelegationConsentScreen from '../screens/wallet/DelegationConsentScreen';
 import DevHarnessRoute from './DevHarnessRoute';
 import ComponentsScreenRoute from './ComponentsScreenRoute';
 import type { SettingsStackParamList } from './types';
@@ -21,6 +22,10 @@ function SettingsStackNavigator() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name="SettingsMain" component={SettingsScreen} />
+      <Stack.Screen
+        name="DelegationConsent"
+        component={DelegationConsentScreen}
+      />
       {/* DEV-only routes — wrapped in __DEV__ so tree-shaking can drop
           _DevHarness (~470 LOC) and _ComponentsScreen (~330 LOC) bundles
           out of release builds. */}

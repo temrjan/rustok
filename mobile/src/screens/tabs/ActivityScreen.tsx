@@ -25,11 +25,13 @@
  *   phase=='loaded'  && entries>0     → FlatList
  *   phase=='error'                    → message + Retry
  *
- * Direction inference: `entry.from.toLowerCase() === address.toLowerCase()`
- * → 'sent', else 'received'. During a cold-start race where the wallet
- * address has not hydrated yet we surface 'unknown' (Activity icon +
- * neutral label) — next focus / refresh re-renders with a real direction
- * once `walletStore.address` lands.
+ * Direction and pending state (PR-3): the bridge record carries
+ * `direction` (`sent` / `received` / `self`) and `status`
+ * (`pending` / `confirmed` / `failed`) computed Rust-side from the
+ * journal / explorer row — the screen no longer infers them from
+ * `from === address` or the `timeAgo === 'Pending'` heuristic.
+ * `self` (batches, self-transfers) renders via the neutral 'unknown'
+ * row variant until it gets a dedicated icon.
  */
 
 import React, { useCallback, useState } from 'react';
@@ -48,16 +50,16 @@ import {
 import { chainName, CHAIN_NAMES, txUrl } from '../../lib/chainExplorer';
 import { useActivityStore } from '../../stores/activityStore';
 import { useNetworkStore } from '../../stores/networkStore';
-import { useWalletStore } from '../../stores/walletStore';
 
-function inferDirection(
-  entry: TransactionHistoryEntry,
-  address: string | undefined,
-): TransactionDirection {
-  if (address === undefined) return 'unknown';
-  return entry.from.toLowerCase() === address.toLowerCase()
-    ? 'sent'
-    : 'received';
+function inferDirection(entry: TransactionHistoryEntry): TransactionDirection {
+  // PR-3: the bridge record carries the direction (core computes it from
+  // the operation/journal or the explorer row). 'self' (batches,
+  // self-transfers) has no dedicated row variant yet — render as the
+  // neutral 'unknown'.
+  if (entry.direction === 'sent' || entry.direction === 'received') {
+    return entry.direction;
+  }
+  return 'unknown';
 }
 
 function ActivityScreen() {
@@ -70,7 +72,6 @@ function ActivityScreen() {
       fetch: s.fetch,
     })),
   );
-  const address = useWalletStore((s) => s.address);
   const chainId = useNetworkStore((s) => s.chainId);
   const setChainId = useNetworkStore((s) => s.setChainId);
   const [refreshing, setRefreshing] = useState(false);
@@ -215,8 +216,8 @@ function ActivityScreen() {
           renderItem={({ item }) => (
             <TransactionRow
               entry={item}
-              isPending={item.timeAgo === 'Pending'}
-              direction={inferDirection(item, address)}
+              isPending={item.status === 'pending'}
+              direction={inferDirection(item)}
               onPress={() => handleRowPress(item)}
             />
           )}

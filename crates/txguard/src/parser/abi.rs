@@ -40,6 +40,20 @@ sol! {
     ) external;
 }
 
+// EIP-7702 smart-account delegate batch (eth-infinitism Simple7702Account
+// shape, also used by ERC-7821-style minimal delegates).
+sol! {
+    /// Single call tuple inside `executeBatch`.
+    struct BatchCallItem {
+        address target;
+        uint256 value;
+        bytes data;
+    }
+
+    /// Atomic batch execution — the delegate runs every call in one transaction.
+    function executeBatch(BatchCallItem[] calls) external;
+}
+
 /// Well-known function selectors for quick matching.
 pub(crate) mod selectors {
     /// ERC-20 `transfer(address,uint256)` — 0xa9059cbb
@@ -56,4 +70,8 @@ pub(crate) mod selectors {
 
     /// EIP-2612 `permit(address,address,uint256,uint256,uint8,bytes32,bytes32)` — 0xd505accf
     pub(crate) const PERMIT: [u8; 4] = [0xd5, 0x05, 0xac, 0xcf];
+
+    /// 7702 delegate `executeBatch((address,uint256,bytes)[])` — 0x34fcd5be
+    /// (confirmed against the deployed Simple7702AccountV09 bytecode).
+    pub(crate) const EXECUTE_BATCH: [u8; 4] = [0x34, 0xfc, 0xd5, 0xbe];
 }

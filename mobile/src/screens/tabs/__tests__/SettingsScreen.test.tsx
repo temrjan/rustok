@@ -11,6 +11,9 @@ import renderer, { act } from 'react-test-renderer';
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
+  // SmartAccountSection refreshes statuses on focus; a no-op keeps the
+  // render smoke tests free of async bridge traffic.
+  useFocusEffect: () => {},
 }));
 
 const mockLockWallet = jest.fn();

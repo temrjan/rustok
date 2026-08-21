@@ -25,8 +25,32 @@ pub(crate) fn try_decode_known(
         selectors::TRANSFER_FROM => decode_transfer_from(to, calldata, value),
         selectors::SET_APPROVAL_FOR_ALL => decode_set_approval_for_all(to, calldata, value),
         selectors::PERMIT => decode_permit(to, calldata, value),
+        selectors::EXECUTE_BATCH => decode_execute_batch(to, calldata, value),
         _ => None,
     }
+}
+
+/// Decode a 7702 delegate `executeBatch((address,uint256,bytes)[])` call into
+/// a [`TransactionAction::Batch`] so the rules engine can analyze every inner
+/// call instead of flagging the batch as an unknown function.
+fn decode_execute_batch(to: Address, calldata: &Bytes, value: U256) -> Option<ParsedTransaction> {
+    let decoded = abi::executeBatchCall::abi_decode(calldata).ok()?;
+    let calls = decoded
+        .calls
+        .iter()
+        .map(|c| super::calldata::BatchCall {
+            target: c.target,
+            value: c.value,
+            data: c.data.clone(),
+        })
+        .collect();
+    Some(ParsedTransaction {
+        to,
+        value,
+        action: TransactionAction::Batch { calls },
+        function_name: Some("executeBatch".into()),
+        function_selector: Some(selectors::EXECUTE_BATCH),
+    })
 }
 
 fn decode_transfer(to: Address, calldata: &Bytes, value: U256) -> Option<ParsedTransaction> {
@@ -186,5 +210,56 @@ mod tests {
         let unknown = [0xde, 0xad, 0xbe, 0xef];
         let calldata = Bytes::from(vec![0xde, 0xad, 0xbe, 0xef, 0x00, 0x00]);
         assert!(try_decode_known(USDT, &unknown, &calldata, U256::ZERO).is_none());
+    }
+
+    #[test]
+    fn decode_execute_batch() {
+        let calls = vec![
+            abi::BatchCallItem {
+                target: ALICE,
+                value: U256::from(1u64),
+                data: Bytes::new(),
+            },
+            abi::BatchCallItem {
+                target: USDT,
+                value: U256::ZERO,
+                data: Bytes::from(vec![0xa9, 0x05, 0x9c, 0xbb]),
+            },
+        ];
+        let calldata = abi::executeBatchCall { calls }.abi_encode();
+
+        // The selector is the one confirmed against the deployed
+        // Simple7702AccountV09 bytecode.
+        assert_eq!(&calldata[..4], &selectors::EXECUTE_BATCH);
+
+        let parsed = try_decode_known(
+            ALICE, // self-call carrier: to == the account itself
+            &selectors::EXECUTE_BATCH,
+            &calldata.into(),
+            U256::ZERO,
+        )
+        .expect("should decode executeBatch");
+
+        assert_eq!(parsed.function_name.as_deref(), Some("executeBatch"));
+        match &parsed.action {
+            TransactionAction::Batch { calls } => {
+                assert_eq!(calls.len(), 2);
+                assert_eq!(calls[0].target, ALICE);
+                assert_eq!(calls[0].value, U256::from(1u64));
+                assert!(calls[0].data.is_empty());
+                assert_eq!(calls[1].target, USDT);
+            }
+            other => panic!("expected Batch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn decode_execute_batch_rejects_malformed_calldata() {
+        // Right selector, garbage payload — must fall back to None (the
+        // caller then produces the `Unknown` action), never panic.
+        let calldata = Bytes::from(vec![0x34, 0xfc, 0xd5, 0xbe, 0x00, 0x01]);
+        assert!(
+            try_decode_known(ALICE, &selectors::EXECUTE_BATCH, &calldata, U256::ZERO).is_none()
+        );
     }
 }

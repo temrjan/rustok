@@ -33,14 +33,15 @@ pub mod handle;
 pub mod types;
 
 pub use error::{
-    BindingsError, EncodingErrorKind, RpcErrorKind, SendErrorKind, SwapErrorKind, TxGuardErrorKind,
-    WalletErrorKind,
+    AccountErrorKind, BindingsError, EncodingErrorKind, RpcErrorKind, SendErrorKind, SwapErrorKind,
+    TxGuardErrorKind, WalletErrorKind,
 };
 pub use handle::{WalletHandle, WalletWithMnemonic, analyze_transaction};
 pub use types::{
-    ActionDto, ChainBalance, FindingDto, LiquiditySource, RouteDto, RuleCategoryDto, SendPreview,
-    SendResult, SeverityDto, SwapPreview, SwapQuote, SwapQuoteParams, TransactionHistory,
-    TransactionHistoryEntry, TransactionPreview, UnifiedBalance, VerdictDto, WalletInfo,
+    ActionDto, CallDto, ChainBalance, DelegationStatusDto, FindingDto, LiquiditySource,
+    OperationDto, RouteDto, RuleCategoryDto, SendPreview, SendResult, SeverityDto, SwapPreview,
+    SwapQuote, SwapQuoteParams, TransactionHistory, TransactionHistoryEntry, TransactionPreview,
+    UnifiedBalance, VerdictDto, WalletInfo,
 };
 
 /// Generate a fresh 12-word BIP-39 mnemonic phrase.

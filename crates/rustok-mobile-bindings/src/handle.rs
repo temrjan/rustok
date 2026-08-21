@@ -16,6 +16,9 @@ use alloy_rpc_types_eth::TransactionRequest;
 use alloy_signer::Signer;
 use zeroize::Zeroizing;
 
+use rustok_core::account::delegation::{Delegation, DelegationError};
+use rustok_core::account::journal::Journal;
+use rustok_core::account::{Executor, delegate, history};
 use rustok_core::explorer::ExplorerClient;
 use rustok_core::http::build_http_client;
 use rustok_core::provider::MultiProvider;
@@ -25,9 +28,9 @@ use rustok_core::wallet::WalletService;
 
 use crate::error::{BindingsError, EncodingErrorKind, WalletErrorKind};
 use crate::types::{
-    SendPreview, SendResult, SwapPreview, SwapQuote, SwapQuoteParams, TransactionHistory,
-    TransactionPreview, VerdictDto, WalletInfo, parse_address, parse_b256, parse_bytes,
-    parse_hex_bytes, parse_u256,
+    CallDto, DelegationStatusDto, OperationDto, SendPreview, SendResult, SwapPreview, SwapQuote,
+    SwapQuoteParams, TransactionHistory, TransactionHistoryEntry, TransactionPreview, VerdictDto,
+    WalletInfo, parse_address, parse_b256, parse_bytes, parse_hex_bytes, parse_u256,
 };
 
 /// Mobile FFI facade. One instance per app session.
@@ -37,7 +40,50 @@ pub struct WalletHandle {
     provider: std::sync::RwLock<Arc<MultiProvider>>,
     swap_provider: Arc<ZeroXProvider>,
     explorer: Arc<ExplorerClient>,
+    /// Local SQLite journal of account operations (`<data_dir>/journal.db`).
+    journal: Journal,
+    /// Serializes every broadcast path (`execute_operation`,
+    /// `authorize_delegation`, `revoke_delegation` and the legacy
+    /// `send_eth` / `send_transaction` / `execute_swap`): closes the
+    /// concurrent-double-tap window of `Executor::execute` (circle 1 PR-1
+    /// review finding 1, window b) and the nonce race between the legacy
+    /// and journaled paths. The kill-between-broadcast-and-`mark_broadcast`
+    /// window (a) stays open until the `send.rs`/`sign.rs` absorption
+    /// (PR-4) — documented in `Executor::execute`.
+    op_lock: tokio::sync::Mutex<()>,
     proxy_enabled: AtomicBool,
+}
+
+/// Internal helpers — NOT exported over FFI (kept out of the
+/// `#[uniffi::export]` impl block on purpose).
+impl WalletHandle {
+    /// Clone the current `Arc<MultiProvider>` (swapped atomically by
+    /// `set_proxy_enabled`).
+    fn provider_arc(&self) -> Arc<MultiProvider> {
+        self.provider.read().expect("poisoned").clone()
+    }
+
+    /// Current signer or [`BindingsError::Wallet`] `NotUnlocked`.
+    async fn require_signer(&self) -> Result<alloy_signer_local::PrivateKeySigner, BindingsError> {
+        self.wallet
+            .current_signer()
+            .await
+            .ok_or(BindingsError::Wallet {
+                kind: WalletErrorKind::NotUnlocked,
+            })
+    }
+
+    /// Current address or [`BindingsError::Wallet`] `NotUnlocked`.
+    async fn require_address(&self) -> Result<alloy_primitives::Address, BindingsError> {
+        let addr_str = self
+            .wallet
+            .current_address()
+            .await
+            .ok_or(BindingsError::Wallet {
+                kind: WalletErrorKind::NotUnlocked,
+            })?;
+        parse_address(&addr_str)
+    }
 }
 
 #[uniffi::export(async_runtime = "tokio")]
@@ -46,14 +92,23 @@ impl WalletHandle {
     ///
     /// `data_dir` is the platform-specific app-private directory
     /// (Android: `Context.getFilesDir()`, iOS: documents directory).
-    /// Created lazily on first write — no failure path here.
+    /// Created if missing (the operation journal `journal.db` is opened
+    /// eagerly here, so the directory must exist).
     ///
     /// # Errors
     ///
-    /// None currently; signature is `Result` for future extensibility
-    /// (e.g. data_dir validation).
+    /// [`BindingsError::Wallet`] with `Storage` if `data_dir` cannot be
+    /// created or the journal database cannot be opened.
     #[uniffi::constructor]
     pub fn new(data_dir: String) -> Result<Arc<Self>, BindingsError> {
+        std::fs::create_dir_all(&data_dir).map_err(|e| {
+            tracing::error!(error = ?e, "create_dir_all(data_dir) failed");
+            BindingsError::Wallet {
+                kind: WalletErrorKind::Storage,
+            }
+        })?;
+        let journal = Journal::open(std::path::Path::new(&data_dir).join("journal.db"))
+            .map_err(BindingsError::from)?;
         let wallet = Arc::new(WalletService::new(data_dir));
         let provider = Arc::new(MultiProvider::default_chains());
         let swap_provider = Arc::new(ZeroXProvider::new(build_http_client()));
@@ -63,6 +118,8 @@ impl WalletHandle {
             provider: std::sync::RwLock::new(provider),
             swap_provider,
             explorer,
+            journal,
+            op_lock: tokio::sync::Mutex::new(()),
             proxy_enabled: AtomicBool::new(false),
         }))
     }
@@ -311,6 +368,7 @@ impl WalletHandle {
         to: String,
         amount_wei: String,
     ) -> Result<SendResult, BindingsError> {
+        let _permit = self.op_lock.lock().await;
         let to_addr = parse_address(&to)?;
         let amount = parse_u256(&amount_wei)?;
         let provider = self.provider.read().expect("poisoned").clone();
@@ -374,6 +432,7 @@ impl WalletHandle {
         value: String,
         chain_id: u64,
     ) -> Result<String, BindingsError> {
+        let _permit = self.op_lock.lock().await;
         let signer = self
             .wallet
             .current_signer()
@@ -511,6 +570,7 @@ impl WalletHandle {
     /// [`BindingsError::Swap`] with `Invalid` if signer ≠ quote taker,
     /// [`BindingsError::Send`] for broadcast failure.
     pub async fn execute_swap(&self, quote: SwapQuote) -> Result<String, BindingsError> {
+        let _permit = self.op_lock.lock().await;
         let core_quote = quote.into_core()?;
         let signer = self
             .wallet
@@ -533,28 +593,171 @@ impl WalletHandle {
         Ok(format!("{hash:#x}"))
     }
 
-    // ─── Transaction history ────────────────────────────────────
+    // ─── Account operations / delegation (EIP-7702) ─────────────
 
-    /// Fetch recent transactions across all configured chains.
+    /// Delegation state of the wallet account on `chain_id`, fresh from
+    /// `eth_getCode` (the chain is the only source of truth — no cache).
     ///
     /// # Errors
     ///
-    /// [`BindingsError::Wallet`] with `NotUnlocked` if locked.
+    /// [`BindingsError::Account`] with `UnsupportedChain` for chains
+    /// outside the 7702 matrix, [`BindingsError::Wallet`] with
+    /// `NotUnlocked` if locked, [`BindingsError::Rpc`] if every RPC
+    /// endpoint of the chain fails.
+    pub async fn get_delegation_status(
+        &self,
+        chain_id: u64,
+    ) -> Result<DelegationStatusDto, BindingsError> {
+        if !delegate::supports_eip7702(chain_id) {
+            return Err(DelegationError::UnsupportedChain(chain_id).into());
+        }
+        let address = self.require_address().await?;
+        let provider = self.provider_arc();
+        let state = Delegation::new(provider.as_ref())
+            .state(chain_id, address)
+            .await?;
+        Ok(DelegationStatusDto::from_core(chain_id, state))
+    }
+
+    /// Authorize the pinned delegate on `chain_id`. Returns the broadcast
+    /// transaction hash, or `None` when already delegated (no-op).
+    ///
+    /// The caller MUST show the delegation consent screen before invoking
+    /// this (invariant ADR-001 §5.2.7) — Rust cannot enforce UI flow, the
+    /// invariant is tested on the mobile side.
+    ///
+    /// Success is NEVER inferred from the broadcast: the caller polls
+    /// [`get_delegation_status`](Self::get_delegation_status) until the
+    /// state changes (ADR-001 §10).
+    ///
+    /// # Errors
+    ///
+    /// [`BindingsError::Account`] for a foreign delegation / contract code
+    /// at the account / delegate code mismatch / unsupported chain;
+    /// [`BindingsError::Wallet`] `NotUnlocked` if locked.
+    pub async fn authorize_delegation(
+        &self,
+        chain_id: u64,
+    ) -> Result<Option<String>, BindingsError> {
+        let _permit = self.op_lock.lock().await;
+        let signer = self.require_signer().await?;
+        let provider = self.provider_arc();
+        let hash = Delegation::new(provider.as_ref())
+            .authorize(&signer, chain_id)
+            .await?;
+        Ok(hash.map(|h| format!("{h:#x}")))
+    }
+
+    /// Revoke the delegation on `chain_id` (authorization to `0x0`).
+    /// Works from both `ours` and `foreign` states. Returns the broadcast
+    /// transaction hash; poll [`get_delegation_status`](Self::get_delegation_status)
+    /// for the actual state change.
+    ///
+    /// # Errors
+    ///
+    /// [`BindingsError::Account`] with `NothingToRevoke` when not
+    /// delegated; see [`authorize_delegation`](Self::authorize_delegation)
+    /// for the rest.
+    pub async fn revoke_delegation(&self, chain_id: u64) -> Result<String, BindingsError> {
+        let _permit = self.op_lock.lock().await;
+        let signer = self.require_signer().await?;
+        let provider = self.provider_arc();
+        let hash = Delegation::new(provider.as_ref())
+            .revoke(&signer, chain_id)
+            .await?;
+        Ok(format!("{hash:#x}"))
+    }
+
+    /// Record and broadcast an operation (EIP-5792 shape). A single call
+    /// goes `DirectEoa`; a batch requires an active delegation
+    /// (`DirectSelfCall`) or fails with [`BindingsError::Account`]
+    /// `PathUnavailable` — never a silent split. Returns as soon as the
+    /// transaction hash is known; poll
+    /// [`get_operation_status`](Self::get_operation_status) for inclusion.
+    ///
+    /// # Errors
+    ///
+    /// [`BindingsError::Encoding`] for malformed call fields,
+    /// [`BindingsError::Account`] for policy/delegation failures,
+    /// [`BindingsError::Send`] / [`BindingsError::Rpc`] for broadcast
+    /// failures, [`BindingsError::Wallet`] `NotUnlocked` if locked.
+    pub async fn execute_operation(
+        &self,
+        chain_id: u64,
+        calls: Vec<CallDto>,
+    ) -> Result<OperationDto, BindingsError> {
+        let _permit = self.op_lock.lock().await;
+        let signer = self.require_signer().await?;
+        let calls = calls
+            .into_iter()
+            .map(CallDto::into_core)
+            .collect::<Result<Vec<_>, _>>()?;
+        let provider = self.provider_arc();
+        let op = Executor::new(provider.as_ref(), &self.journal)
+            .execute(&signer, chain_id, calls)
+            .await?;
+        Ok(op.into())
+    }
+
+    /// Current status of an operation: journal state, refreshed from the
+    /// chain for broadcast-but-unconfirmed entries. `None` for an unknown
+    /// id.
+    ///
+    /// # Errors
+    ///
+    /// [`BindingsError::Wallet`] `Storage` on journal failure,
+    /// [`BindingsError::Rpc`] if every RPC endpoint of the chain fails.
+    pub async fn get_operation_status(
+        &self,
+        id: String,
+    ) -> Result<Option<OperationDto>, BindingsError> {
+        let provider = self.provider_arc();
+        let op = Executor::new(provider.as_ref(), &self.journal)
+            .status(&id)
+            .await?;
+        Ok(op.map(OperationDto::from))
+    }
+
+    // ─── Transaction history ────────────────────────────────────
+
+    /// Recent transactions across all configured chains: the local
+    /// operation journal merged with the explorer `txlist` (dedup by tx
+    /// hash, journal status wins for `Broadcast`/`Failed`).
+    ///
+    /// # Errors
+    ///
+    /// [`BindingsError::Wallet`] with `NotUnlocked` if locked or with
+    /// `Storage` on journal failure.
     pub async fn get_transaction_history(&self) -> Result<TransactionHistory, BindingsError> {
-        let addr_str = self
-            .wallet
-            .current_address()
-            .await
-            .ok_or(BindingsError::Wallet {
-                kind: WalletErrorKind::NotUnlocked,
-            })?;
-        let addr = parse_address(&addr_str)?;
-        let provider = self.provider.read().expect("poisoned").clone();
-        let history = self
+        const LIMIT: u32 = 20;
+        let addr = self.require_address().await?;
+        let provider = self.provider_arc();
+        let dto = self
             .explorer
-            .fetch_history(addr, provider.chains(), 20)
+            .fetch_history(addr, provider.chains(), LIMIT)
             .await;
-        Ok(history.into())
+
+        let mut merged = Vec::new();
+        for chain in provider.chains() {
+            let ops = self.journal.list_by_chain(chain.id, LIMIT)?;
+            let explorer_txs: Vec<_> = dto
+                .transactions
+                .iter()
+                .filter(|tx| tx.chain_id == chain.id)
+                .cloned()
+                .collect();
+            merged.extend(history::merge_history(&ops, &explorer_txs, chain, LIMIT));
+        }
+        merged.sort_by_key(|tx| std::cmp::Reverse(tx.timestamp));
+        merged.truncate(LIMIT as usize);
+
+        Ok(TransactionHistory {
+            transactions: merged
+                .into_iter()
+                .map(TransactionHistoryEntry::from)
+                .collect(),
+            errors: dto.errors,
+        })
     }
 }
 

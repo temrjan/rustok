@@ -117,6 +117,13 @@ pub fn describe_action(parsed: &ParsedTransaction) -> String {
                 short_addr(parsed.to),
             )
         }
+        TransactionAction::Batch { calls } => {
+            format!(
+                "Batch of {} atomic call{} via smart account",
+                calls.len(),
+                if calls.len() == 1 { "" } else { "s" },
+            )
+        }
         TransactionAction::Unknown {
             selector,
             calldata_len,
@@ -213,6 +220,35 @@ mod tests {
         let parsed = make_eth_transfer(U256::from(1_500_000_000_000_000_000u128));
         let desc = describe_action(&parsed);
         assert!(desc.starts_with("Send 1.5 ETH to 0xd8dA...6045"));
+    }
+
+    #[test]
+    fn describe_batch_counts_calls_and_pluralizes() {
+        // PR-3: the Batch arm feeds the real send/sign UX — pin its shape
+        // (review minor 8).
+        use txguard::parser::BatchCall;
+        let call = BatchCall {
+            target: address!("d8dA6BF26964aF9D7eEd9e03E53415D37aA96045"),
+            value: U256::ZERO,
+            data: alloy_primitives::Bytes::new(),
+        };
+        let make = |n: usize| ParsedTransaction {
+            to: address!("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266"),
+            value: U256::ZERO,
+            action: TransactionAction::Batch {
+                calls: vec![call.clone(); n],
+            },
+            function_name: Some("executeBatch".into()),
+            function_selector: Some([0x34, 0xfc, 0xd5, 0xbe]),
+        };
+        assert_eq!(
+            describe_action(&make(2)),
+            "Batch of 2 atomic calls via smart account"
+        );
+        assert_eq!(
+            describe_action(&make(1)),
+            "Batch of 1 atomic call via smart account"
+        );
     }
 
     #[test]

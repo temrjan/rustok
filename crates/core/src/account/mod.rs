@@ -18,6 +18,7 @@
 pub mod delegate;
 pub mod delegation;
 pub mod direct;
+pub mod history;
 pub mod journal;
 
 use alloy_primitives::{Address, B256, Bytes, U256};

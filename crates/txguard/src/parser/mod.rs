@@ -5,11 +5,11 @@
 //! - **Dynamic ABI**: runtime decoding when function selector is recognized but
 //!   full ABI is not available at compile time.
 
-mod abi;
+pub(crate) mod abi;
 mod calldata;
 mod known;
 
-pub use calldata::{ParsedTransaction, TransactionAction};
+pub use calldata::{BatchCall, ParsedTransaction, TransactionAction};
 
 use alloy_primitives::{Address, Bytes};
 use thiserror::Error;

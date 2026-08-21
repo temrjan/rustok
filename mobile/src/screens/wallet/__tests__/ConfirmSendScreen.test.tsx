@@ -1,9 +1,14 @@
 /**
  * ConfirmSendScreen — coverage for the three preview-lifecycle states
  * (loading / ready / error), verdict branching (Allow / Warn / Block),
- * and broadcast success / failure paths. Mock pattern follows
+ * and operation execution success / failure paths. Mock pattern follows
  * ReceiveScreen.test (per-test override of `lib/walletHandle`,
  * inline jest.mock factory for navigation hooks).
+ *
+ * PR-3: the broadcast path is `executeOperation` + `getOperationStatus`
+ * (journaled operation model) — `sendEth` and the 12 s send abort are
+ * gone from this screen; the pendingTxCache write moved to the Rust
+ * journal (asserted via `executeOperation` call args).
  *
  * All state-changing interactions wrapped in `await act(async () => …)`
  * to dodge the "import after teardown" race documented в
@@ -17,20 +22,24 @@ import { ActionDto } from 'react-native-rustok-bridge';
 import ConfirmSendScreen from '../ConfirmSendScreen';
 import { mount as sharedMount } from '../../../testing/mount';
 import { getWalletHandle } from '../../../lib/walletHandle';
+import { toast } from '../../../components/Toast';
+import { useNetworkStore } from '../../../stores/networkStore';
 import { useWalletStore } from '../../../stores/walletStore';
 
 jest.mock('../../../lib/walletHandle', () => ({
   getWalletHandle: jest.fn(),
 }));
 
+jest.mock('../../../components/Toast', () => ({
+  toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
+}));
+
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
-const mockPopToTop = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     navigate: mockNavigate,
     goBack: mockGoBack,
-    popToTop: mockPopToTop,
   }),
   useRoute: () => ({
     params: {
@@ -41,6 +50,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockedGetWalletHandle = jest.mocked(getWalletHandle);
+const mockedToast = jest.mocked(toast);
 
 const SAMPLE_PREVIEW = {
   verdict: {
@@ -60,27 +70,40 @@ const SAMPLE_PREVIEW = {
   explanation: 'Routed via Sepolia.',
 };
 
-const SAMPLE_SEND_RESULT = {
+const SAMPLE_OPERATION = {
+  id: '0xoperationid',
+  chainId: 11155111n,
+  status: 'broadcast',
+  path: 'direct_eoa',
   txHash:
     '0x9d3f04254a5f3b2eef25dcb1c5fa6f3a05dfdd2f76e913cce63e0c0e2c1d4b50',
-  chainId: 11155111n,
+  error: undefined,
 };
 
 function mountWithBridge(opts: {
   previewSend?: jest.Mock;
-  sendEth?: jest.Mock;
+  executeOperation?: jest.Mock;
+  getOperationStatus?: jest.Mock;
 }): {
   previewSend: jest.Mock;
-  sendEth: jest.Mock;
+  executeOperation: jest.Mock;
+  getOperationStatus: jest.Mock;
 } {
   const previewSend = opts.previewSend ?? jest.fn().mockResolvedValue(SAMPLE_PREVIEW);
-  const sendEth = opts.sendEth ?? jest.fn().mockResolvedValue(SAMPLE_SEND_RESULT);
-  // Cast through `unknown` — the test surface only needs these two
+  const executeOperation =
+    opts.executeOperation ?? jest.fn().mockResolvedValue(SAMPLE_OPERATION);
+  // First poll reports confirmed → the poll loop breaks without delays.
+  const getOperationStatus =
+    opts.getOperationStatus ??
+    jest.fn().mockResolvedValue({ ...SAMPLE_OPERATION, status: 'confirmed' });
+  // Cast through `unknown` — the test surface only needs these
   // methods; recreating the full WalletHandle shape would be noisy.
   mockedGetWalletHandle.mockReturnValue(
-    { previewSend, sendEth } as unknown as ReturnType<typeof getWalletHandle>,
+    { previewSend, executeOperation, getOperationStatus } as unknown as ReturnType<
+      typeof getWalletHandle
+    >,
   );
-  return { previewSend, sendEth };
+  return { previewSend, executeOperation, getOperationStatus };
 }
 
 function findByA11y(tree: renderer.ReactTestRenderer, label: string) {
@@ -96,7 +119,12 @@ describe('ConfirmSendScreen', () => {
     mockedGetWalletHandle.mockReset();
     mockNavigate.mockReset();
     mockGoBack.mockReset();
-    mockPopToTop.mockReset();
+    mockedToast.success.mockReset();
+    mockedToast.error.mockReset();
+    mockedToast.info.mockReset();
+    // No preferred chain by default — tests fall back to the preview
+    // route's chainId (11155111n) unless a test sets one explicitly.
+    useNetworkStore.setState({ chainId: undefined });
     // Reset the in-memory store between tests so `refresh` calls are
     // isolated.
     useWalletStore.setState({
@@ -196,21 +224,86 @@ describe('ConfirmSendScreen', () => {
     expect(confirm.props.disabled).toBe(true);
   });
 
-  it('broadcasts via sendEth and pops to top on Confirm tap', async () => {
-    const { sendEth } = mountWithBridge({});
+  it('executes the operation and navigates to Activity on Confirm tap', async () => {
+    const { executeOperation, getOperationStatus } = mountWithBridge({});
     const tree = await mount();
     await act(async () => {
       findByA11y(tree, 'Confirm send').props.onPress();
     });
-    expect(sendEth).toHaveBeenCalledWith(
-      '0x97beed7ff45dfe2d5802686821a0196070cf1951',
-      '500000000000000000',
-      { signal: expect.any(AbortSignal) },
-    );
-    expect(mockPopToTop).toHaveBeenCalledTimes(1);
+    // Explicit chain id (networkStore empty in test → preview route
+    // fallback 11155111n), single native-transfer call, no AbortSignal —
+    // the journaled operation replaced the 12 s send abort.
+    expect(executeOperation).toHaveBeenCalledWith(11155111n, [
+      {
+        to: '0x97beed7ff45dfe2d5802686821a0196070cf1951',
+        valueWei: '500000000000000000',
+        data: '0x',
+      },
+    ]);
+    expect(getOperationStatus).toHaveBeenCalledWith('0xoperationid');
+    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Activity' });
   });
 
-  it('opens the Etherscan link after broadcast succeeds', async () => {
+  it('explicit network choice overrides the preview route chain', async () => {
+    useNetworkStore.setState({ chainId: 1n });
+    const { executeOperation } = mountWithBridge({});
+    const tree = await mount();
+    await act(async () => {
+      findByA11y(tree, 'Confirm send').props.onPress();
+    });
+    expect(executeOperation).toHaveBeenCalledWith(1n, [
+      {
+        to: '0x97beed7ff45dfe2d5802686821a0196070cf1951',
+        valueWei: '500000000000000000',
+        data: '0x',
+      },
+    ]);
+  });
+
+  it('a failed status observed by polling never reaches the success path', async () => {
+    // Regression for review blocker 1 (PR-3): previously the flow fell
+    // through to toast.success + navigate after a real on-chain revert.
+    mountWithBridge({
+      getOperationStatus: jest.fn().mockResolvedValue({
+        ...SAMPLE_OPERATION,
+        status: 'failed',
+        error: 'transaction reverted on-chain',
+      }),
+    });
+    const tree = await mount();
+    await act(async () => {
+      findByA11y(tree, 'Confirm send').props.onPress();
+    });
+    expect(mockedToast.error).toHaveBeenCalledWith('transaction reverted on-chain');
+    expect(mockedToast.success).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    // User stays on Confirm, button re-enabled for retry.
+    expect(findByA11y(tree, 'Confirm send').props.disabled).toBe(false);
+  });
+
+  it('an idempotent replay returning an already-failed op skips polling and the success path', async () => {
+    // Same (chain, from, calls) after a failed attempt: the journal
+    // returns the Failed entry as-is — no new broadcast, no polling.
+    const { getOperationStatus } = mountWithBridge({
+      executeOperation: jest.fn().mockResolvedValue({
+        ...SAMPLE_OPERATION,
+        status: 'failed',
+        error: 'rpc down',
+        txHash: undefined,
+      }),
+    });
+    const tree = await mount();
+    await act(async () => {
+      findByA11y(tree, 'Confirm send').props.onPress();
+    });
+    expect(getOperationStatus).not.toHaveBeenCalled();
+    expect(mockedToast.error).toHaveBeenCalledWith('rpc down');
+    expect(mockedToast.success).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(findByA11y(tree, 'Confirm send').props.disabled).toBe(false);
+  });
+
+  it('opens the Etherscan link after the operation broadcasts', async () => {
     mountWithBridge({});
     const openSpy = jest
       .spyOn(Linking, 'openURL')
@@ -220,25 +313,23 @@ describe('ConfirmSendScreen', () => {
       findByA11y(tree, 'Confirm send').props.onPress();
     });
     expect(openSpy).toHaveBeenCalledWith(
-      `https://sepolia.etherscan.io/tx/${SAMPLE_SEND_RESULT.txHash}`,
+      `https://sepolia.etherscan.io/tx/${SAMPLE_OPERATION.txHash}`,
     );
     openSpy.mockRestore();
   });
 
-  it('surfaces a friendly timeout message when sendEth aborts', async () => {
-    const abortError = new Error('The operation was aborted.');
-    abortError.name = 'AbortError';
-    const { sendEth } = mountWithBridge({
-      sendEth: jest.fn().mockRejectedValue(abortError),
+  it('surfaces the bridge error and stays on screen when executeOperation fails', async () => {
+    const { executeOperation } = mountWithBridge({
+      executeOperation: jest.fn().mockRejectedValue(new Error('rpc 503')),
     });
     const tree = await mount();
     await act(async () => {
       findByA11y(tree, 'Confirm send').props.onPress();
     });
-    // Sendеth threw; popToTop must NOT fire so the user stays on
-    // Confirm and can retry.
-    expect(sendEth).toHaveBeenCalledTimes(1);
-    expect(mockPopToTop).not.toHaveBeenCalled();
+    // The throw must NOT navigate away — the user stays on Confirm and
+    // can retry.
+    expect(executeOperation).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).not.toHaveBeenCalled();
     // Confirm button is re-enabled for retry.
     expect(findByA11y(tree, 'Confirm send').props.disabled).toBe(false);
   });
@@ -253,7 +344,7 @@ describe('ConfirmSendScreen', () => {
         description: 'Recipient flagged as malicious.',
       },
     };
-    const { sendEth } = mountWithBridge({
+    const { executeOperation } = mountWithBridge({
       previewSend: jest.fn().mockResolvedValue(blockPreview),
     });
     const tree = await mount();
@@ -262,7 +353,7 @@ describe('ConfirmSendScreen', () => {
     await act(async () => {
       findByA11y(tree, 'Confirm send').props.onPress();
     });
-    expect(sendEth).not.toHaveBeenCalled();
+    expect(executeOperation).not.toHaveBeenCalled();
   });
 
   it('Retry on preview error re-runs previewSend', async () => {
