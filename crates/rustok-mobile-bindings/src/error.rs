@@ -417,6 +417,9 @@ impl From<JournalError> for BindingsError {
             JournalError::NotFound(_) => Self::Account {
                 kind: AccountErrorKind::NotFound,
             },
+            // A rejected status transition is a state-machine bug, not an
+            // I/O failure — it must not masquerade as `Storage`.
+            JournalError::InvalidTransition { .. } => Self::Internal,
             // The journal is local SQLite storage — remaining variants are
             // storage-class failures.
             _ => Self::Wallet {

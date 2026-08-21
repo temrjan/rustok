@@ -272,3 +272,17 @@ fn journal_error_not_found_maps_to_account_not_found() {
         }
     ));
 }
+
+#[test]
+fn journal_invalid_transition_maps_to_internal_not_storage() {
+    // A rejected status transition is a state-machine bug (not I/O) —
+    // it must not masquerade as Wallet::Storage (review, PR-3 minor 7).
+    let err = BindingsError::from(
+        rustok_core::account::journal::JournalError::InvalidTransition {
+            id: "0x1".into(),
+            from: "draft",
+            to: "confirmed",
+        },
+    );
+    assert!(matches!(err, BindingsError::Internal));
+}
