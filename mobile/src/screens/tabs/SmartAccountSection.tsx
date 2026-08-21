@@ -77,16 +77,20 @@ export function SmartAccountSection() {
   const [busyChain, setBusyChain] = useState<string | undefined>(undefined);
 
   const load = useCallback(async () => {
-    for (const chain of DELEGATION_CHAINS) {
-      const key = chain.id.toString();
-      setRows((prev) => ({ ...prev, [key]: prev[key] ?? 'loading' }));
-      try {
-        const status = await getWalletHandle().getDelegationStatus(chain.id);
-        setRows((prev) => ({ ...prev, [key]: status }));
-      } catch {
-        setRows((prev) => ({ ...prev, [key]: 'unavailable' }));
-      }
-    }
+    // Parallel per-chain fetches: six sequential RPC round-trips made the
+    // section take ~6×RTT on every Settings focus (review, PR-3 minor).
+    await Promise.all(
+      DELEGATION_CHAINS.map(async (chain) => {
+        const key = chain.id.toString();
+        setRows((prev) => ({ ...prev, [key]: prev[key] ?? 'loading' }));
+        try {
+          const status = await getWalletHandle().getDelegationStatus(chain.id);
+          setRows((prev) => ({ ...prev, [key]: status }));
+        } catch {
+          setRows((prev) => ({ ...prev, [key]: 'unavailable' }));
+        }
+      }),
+    );
   }, []);
 
   useFocusEffect(

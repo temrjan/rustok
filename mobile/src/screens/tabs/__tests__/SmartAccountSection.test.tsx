@@ -75,8 +75,8 @@ function allText(tree: renderer.ReactTestRenderer): string {
     return '';
   };
   return tree.root
-    .findAll((n) => n.type === 'Text' || n.props?.accessibilityLabel !== undefined)
-    .map((n) => collect(n.props?.children))
+    .findAll((n) => n.props?.children !== undefined)
+    .map((n) => collect(n.props.children))
     .join('\n');
 }
 
@@ -122,6 +122,51 @@ describe('SmartAccountSection', () => {
       chainName: 'Sepolia',
     });
     expect(authorizeDelegation).not.toHaveBeenCalled();
+  });
+
+  it('Enable is unreachable for a foreign delegation — only Revoke (§5.2.5)', async () => {
+    mountWithBridge();
+    const tree = await mount();
+    expect(
+      tree.root.findAllByProps({
+        accessibilityLabel: 'Enable smart account on Ethereum',
+      }),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findByProps({
+        accessibilityLabel: 'Revoke smart account on Ethereum',
+      }),
+    ).toBeDefined();
+  });
+
+  it('RPC failure marks the row unavailable, other chains still load', async () => {
+    const getDelegationStatus = jest
+      .fn()
+      .mockImplementation((chainId: bigint) =>
+        chainId === 8453n
+          ? Promise.reject(new Error('rpc down'))
+          : Promise.resolve(statusFor(chainId)),
+      );
+    mockedGetWalletHandle.mockReturnValue({
+      getDelegationStatus,
+      revokeDelegation: jest.fn(),
+      authorizeDelegation: jest.fn(),
+    } as unknown as ReturnType<typeof getWalletHandle>);
+    const tree = await mount();
+    const text = allText(tree);
+    expect(text).toContain('Unavailable');
+    expect(text).toContain('Enabled');
+    // No actions on an unavailable row.
+    expect(
+      tree.root.findAllByProps({
+        accessibilityLabel: 'Enable smart account on Base',
+      }),
+    ).toHaveLength(0);
+    expect(
+      tree.root.findAllByProps({
+        accessibilityLabel: 'Revoke smart account on Base',
+      }),
+    ).toHaveLength(0);
   });
 
   it('Revoke asks for confirmation and only then calls revokeDelegation', async () => {
