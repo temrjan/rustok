@@ -222,9 +222,20 @@ function ConfirmSendScreen() {
       const op = await handle.executeOperation(chainId, [
         { to, valueWei: amountWei, data: '0x' },
       ]);
+      // Idempotent replay (same chain/from/calls after a failed attempt)
+      // returns the existing journal entry as-is — which can already be
+      // Failed. A failed operation must NEVER reach the success path:
+      // error toast only, stay on this screen (the finally re-enables
+      // the button for retry with changed inputs).
+      if (op.status === 'failed') {
+        toast.error(op.error ?? 'Transaction failed');
+        return;
+      }
       // Best-effort status polling (the journaled Activity entry is the
-      // source of truth — this only fast-forwards a confirmation toast).
+      // source of truth — this only fast-forwards the final state). A
+      // revert observed here is terminal for this flow too.
       if (op.status === 'broadcast') {
+        let failed: string | undefined;
         for (let attempt = 0; attempt < STATUS_POLL_TRIES; attempt += 1) {
           if (attempt > 0) {
             await delay(STATUS_POLL_INTERVAL_MS);
@@ -232,15 +243,18 @@ function ConfirmSendScreen() {
           try {
             const current = await handle.getOperationStatus(op.id);
             if (current === undefined) break;
-            if (current.status === 'confirmed' || current.status === 'failed') {
-              if (current.status === 'failed') {
-                toast.error(current.error ?? 'Transaction failed on-chain');
-              }
+            if (current.status === 'confirmed') break;
+            if (current.status === 'failed') {
+              failed = current.error ?? 'Transaction failed on-chain';
               break;
             }
           } catch {
             break; // Polling is best-effort; the journal keeps the state.
           }
+        }
+        if (failed !== undefined) {
+          toast.error(failed);
+          return;
         }
       }
       const hashShort =

@@ -22,10 +22,16 @@ import { ActionDto } from 'react-native-rustok-bridge';
 import ConfirmSendScreen from '../ConfirmSendScreen';
 import { mount as sharedMount } from '../../../testing/mount';
 import { getWalletHandle } from '../../../lib/walletHandle';
+import { toast } from '../../../components/Toast';
+import { useNetworkStore } from '../../../stores/networkStore';
 import { useWalletStore } from '../../../stores/walletStore';
 
 jest.mock('../../../lib/walletHandle', () => ({
   getWalletHandle: jest.fn(),
+}));
+
+jest.mock('../../../components/Toast', () => ({
+  toast: { success: jest.fn(), error: jest.fn(), info: jest.fn() },
 }));
 
 const mockNavigate = jest.fn();
@@ -44,6 +50,7 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const mockedGetWalletHandle = jest.mocked(getWalletHandle);
+const mockedToast = jest.mocked(toast);
 
 const SAMPLE_PREVIEW = {
   verdict: {
@@ -112,6 +119,12 @@ describe('ConfirmSendScreen', () => {
     mockedGetWalletHandle.mockReset();
     mockNavigate.mockReset();
     mockGoBack.mockReset();
+    mockedToast.success.mockReset();
+    mockedToast.error.mockReset();
+    mockedToast.info.mockReset();
+    // No preferred chain by default — tests fall back to the preview
+    // route's chainId (11155111n) unless a test sets one explicitly.
+    useNetworkStore.setState({ chainId: undefined });
     // Reset the in-memory store between tests so `refresh` calls are
     // isolated.
     useWalletStore.setState({
@@ -229,6 +242,65 @@ describe('ConfirmSendScreen', () => {
     ]);
     expect(getOperationStatus).toHaveBeenCalledWith('0xoperationid');
     expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Activity' });
+  });
+
+  it('explicit network choice overrides the preview route chain', async () => {
+    useNetworkStore.setState({ chainId: 1n });
+    const { executeOperation } = mountWithBridge({});
+    const tree = await mount();
+    await act(async () => {
+      findByA11y(tree, 'Confirm send').props.onPress();
+    });
+    expect(executeOperation).toHaveBeenCalledWith(1n, [
+      {
+        to: '0x97beed7ff45dfe2d5802686821a0196070cf1951',
+        valueWei: '500000000000000000',
+        data: '0x',
+      },
+    ]);
+  });
+
+  it('a failed status observed by polling never reaches the success path', async () => {
+    // Regression for review blocker 1 (PR-3): previously the flow fell
+    // through to toast.success + navigate after a real on-chain revert.
+    mountWithBridge({
+      getOperationStatus: jest.fn().mockResolvedValue({
+        ...SAMPLE_OPERATION,
+        status: 'failed',
+        error: 'transaction reverted on-chain',
+      }),
+    });
+    const tree = await mount();
+    await act(async () => {
+      findByA11y(tree, 'Confirm send').props.onPress();
+    });
+    expect(mockedToast.error).toHaveBeenCalledWith('transaction reverted on-chain');
+    expect(mockedToast.success).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    // User stays on Confirm, button re-enabled for retry.
+    expect(findByA11y(tree, 'Confirm send').props.disabled).toBe(false);
+  });
+
+  it('an idempotent replay returning an already-failed op skips polling and the success path', async () => {
+    // Same (chain, from, calls) after a failed attempt: the journal
+    // returns the Failed entry as-is — no new broadcast, no polling.
+    const { getOperationStatus } = mountWithBridge({
+      executeOperation: jest.fn().mockResolvedValue({
+        ...SAMPLE_OPERATION,
+        status: 'failed',
+        error: 'rpc down',
+        txHash: undefined,
+      }),
+    });
+    const tree = await mount();
+    await act(async () => {
+      findByA11y(tree, 'Confirm send').props.onPress();
+    });
+    expect(getOperationStatus).not.toHaveBeenCalled();
+    expect(mockedToast.error).toHaveBeenCalledWith('rpc down');
+    expect(mockedToast.success).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(findByA11y(tree, 'Confirm send').props.disabled).toBe(false);
   });
 
   it('opens the Etherscan link after the operation broadcasts', async () => {
