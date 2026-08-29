@@ -55,7 +55,7 @@ Copy the example and edit limits:
 
 ```bash
 cp skills/rustok-wallet/examples/policy.json ~/.rustok/policy.json
-# Edit: max_single_tx_eth, max_daily_spend_eth, blocked_addresses, etc.
+# Edit: max_single_tx_wei, max_daily_spend_wei (decimal wei strings), blocked_addresses, etc.
 ```
 
 ### Claude Desktop / Cursor (stdio mode)
@@ -149,7 +149,7 @@ For testing on **Arbitrum Sepolia** (`chain_id: 421614`) you need test ETH for g
 | `no unlock password available` | Set `RUSTOK_AGENT_PASSWORD` env var |
 | `no agent wallet found` | Run with `--create-wallet` flag |
 | `wallet locked` | Server failed to auto-unlock; check password |
-| `daily budget exceeded` | Increase `max_daily_spend_eth` in policy.json |
+| `daily budget exceeded` | Increase `max_daily_spend_wei` (decimal wei string) in policy.json |
 
 ## Donations
 

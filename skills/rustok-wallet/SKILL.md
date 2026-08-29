@@ -222,7 +222,7 @@ curl -fsS -X POST http://127.0.0.1:3000/execute \
 
 **Response on policy block (HTTP 403):**
 ```
-policy blocked: exceeds max_single_tx_eth
+policy blocked: amount 100000000000000000 wei exceeds max_single_tx (100000000000000000 wei)
 ```
 
 **Response on budget exceeded (HTTP 403):**

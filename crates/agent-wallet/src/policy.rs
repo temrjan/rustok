@@ -6,6 +6,7 @@
 //! within them. If the agent tries to exceed a limit, the operation is blocked
 //! and logged to the audit trail.
 
+use crate::amount::Wei;
 use alloy_primitives::Address;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -17,13 +18,15 @@ use std::collections::HashSet;
 /// user say "give the agent full access" while still sleeping at night.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AgentPolicy {
-    /// Maximum ETH value for a single transaction.
+    /// Maximum wei value for a single transaction.
     /// Default: 0.1 ETH.
-    pub max_single_tx_eth: f64,
+    #[serde(rename = "max_single_tx_wei")]
+    pub max_single_tx: Wei,
 
-    /// Maximum total ETH spend per day (UTC midnight reset).
+    /// Maximum total wei spend per day (UTC midnight reset).
     /// Default: 0.5 ETH.
-    pub max_daily_spend_eth: f64,
+    #[serde(rename = "max_daily_spend_wei")]
+    pub max_daily_spend: Wei,
 
     /// Maximum gas fee (maxFeePerGas) in gwei. Protects against gas spikes
     /// and runaway retry loops during network congestion.
@@ -49,8 +52,8 @@ pub struct AgentPolicy {
 impl Default for AgentPolicy {
     fn default() -> Self {
         Self {
-            max_single_tx_eth: 0.1,
-            max_daily_spend_eth: 0.5,
+            max_single_tx: Wei::DEFAULT_MAX_SINGLE_TX,
+            max_daily_spend: Wei::DEFAULT_MAX_DAILY_SPEND,
             max_gas_fee_gwei: 100,
             blocked_addresses: HashSet::new(),
             allowed_chain_ids: default_allowed_chains(),
@@ -90,7 +93,7 @@ pub enum PolicyResult {
 impl AgentPolicy {
     /// Check whether a native ETH send is within policy.
     #[must_use]
-    pub fn check_send(&self, to: &Address, amount_eth: f64, chain_id: u64) -> PolicyResult {
+    pub fn check_send(&self, to: &Address, amount: Wei, chain_id: u64) -> PolicyResult {
         // Chain whitelist
         if !self.allowed_chain_ids.contains(&chain_id) {
             return PolicyResult::Block {
@@ -99,11 +102,11 @@ impl AgentPolicy {
         }
 
         // Single tx limit
-        if amount_eth > self.max_single_tx_eth {
+        if amount > self.max_single_tx {
             return PolicyResult::Block {
                 reason: format!(
-                    "amount {amount_eth:.6} ETH exceeds max_single_tx ({} ETH)",
-                    self.max_single_tx_eth
+                    "amount {} wei exceeds max_single_tx ({} wei)",
+                    amount, self.max_single_tx
                 ),
             };
         }
@@ -157,14 +160,14 @@ impl AgentPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::address;
+    use alloy_primitives::{U256, address};
 
     #[test]
     fn default_policy_allows_small_send() {
         let policy = AgentPolicy::default();
         let result = policy.check_send(
             &address!("0x0000000000000000000000000000000000000001"),
-            0.05,
+            Wei(U256::from(50_000_000_000_000_000u128)), // 0.05 ETH
             1,
         );
         assert!(matches!(result, PolicyResult::Allow));
@@ -175,10 +178,32 @@ mod tests {
         let policy = AgentPolicy::default();
         let result = policy.check_send(
             &address!("0x0000000000000000000000000000000000000001"),
-            0.5,
+            Wei(U256::from(500_000_000_000_000_000u128)), // 0.5 ETH
             1,
         );
         assert!(matches!(result, PolicyResult::Block { .. }));
+    }
+
+    #[test]
+    fn policy_blocks_one_wei_above_limit() {
+        let policy = AgentPolicy::default();
+        let result = policy.check_send(
+            &address!("0x0000000000000000000000000000000000000001"),
+            Wei(U256::from(100_000_000_000_000_001u128)), // 0.1 ETH + 1 wei
+            1,
+        );
+        assert!(matches!(result, PolicyResult::Block { .. }));
+    }
+
+    #[test]
+    fn policy_accepts_exactly_at_limit() {
+        let policy = AgentPolicy::default();
+        let result = policy.check_send(
+            &address!("0x0000000000000000000000000000000000000001"),
+            Wei(U256::from(100_000_000_000_000_000u128)), // 0.1 ETH
+            1,
+        );
+        assert!(matches!(result, PolicyResult::Allow));
     }
 
     #[test]
@@ -186,7 +211,7 @@ mod tests {
         let policy = AgentPolicy::default();
         let result = policy.check_send(
             &address!("0x0000000000000000000000000000000000000001"),
-            0.01,
+            Wei(U256::from(10_000_000_000_000_000u128)), // 0.01 ETH
             999,
         );
         assert!(matches!(result, PolicyResult::Block { .. }));
@@ -200,7 +225,7 @@ mod tests {
             .insert("0xdead000000000000000000000000000000000000".into());
         let result = policy.check_send(
             &address!("0xdead000000000000000000000000000000000000"),
-            0.01,
+            Wei(U256::from(10_000_000_000_000_000u128)), // 0.01 ETH
             1,
         );
         assert!(matches!(result, PolicyResult::Block { .. }));
@@ -214,7 +239,7 @@ mod tests {
             .insert("0xDeAd000000000000000000000000000000000000".into());
         let result = policy.check_send(
             &address!("0xdead000000000000000000000000000000000000"),
-            0.01,
+            Wei(U256::from(10_000_000_000_000_000u128)), // 0.01 ETH
             1,
         );
         assert!(matches!(result, PolicyResult::Block { .. }));

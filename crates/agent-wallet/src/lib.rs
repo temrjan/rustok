@@ -18,6 +18,7 @@
 //!       └─ UnlockStrategy (env password / fixed / session)
 //! ```
 
+pub mod amount;
 pub mod audit;
 pub mod budget;
 pub mod context;
@@ -34,6 +35,7 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 use zeroize::Zeroizing;
 
+use amount::Wei;
 use audit::{AgentAction, AuditEntry, AuditLog};
 use budget::BudgetTracker;
 use policy::{AgentPolicy, PolicyResult};
@@ -56,12 +58,16 @@ pub enum AgentWalletError {
     Audit(String),
 
     /// Budget exceeded.
-    #[error("daily budget exceeded: spent {spent:.6} / limit {limit:.6} ETH")]
+    #[error(
+        "daily budget exceeded: spent {spent_eth:.6} / limit {limit_eth:.6} ETH",
+        spent_eth = spent.to_eth_f64(),
+        limit_eth = limit.to_eth_f64()
+    )]
     BudgetExceeded {
-        /// ETH already spent today.
-        spent: f64,
-        /// Daily ETH limit from policy.
-        limit: f64,
+        /// Wei already spent today.
+        spent: Wei,
+        /// Daily wei limit from policy.
+        limit: Wei,
     },
 
     /// IO / storage error.
@@ -161,7 +167,7 @@ impl AgentWalletService {
         let provider = MultiProvider::default_chains();
         let audit_path = wallet_dir.join("audit.db");
         let audit = Mutex::new(AuditLog::open(audit_path)?);
-        let budget = BudgetTracker::new(policy.max_daily_spend_eth);
+        let budget = BudgetTracker::new(policy.max_daily_spend);
         let budget_lock = Mutex::new(());
         let context_cache = Mutex::new(None);
         let preview_cache = Mutex::new(std::collections::HashMap::new());
@@ -267,15 +273,9 @@ impl AgentWalletService {
 
         let audit_guard = self.audit.lock().await;
         let spent_today = self.budget.spent_today(&audit_guard)?;
-        let daily_spend_remaining = (self.policy.max_daily_spend_eth - spent_today).max(0.0);
         drop(audit_guard);
 
-        let limits = context::PolicySnapshot {
-            max_single_tx_eth: self.policy.max_single_tx_eth,
-            max_daily_spend_eth: self.policy.max_daily_spend_eth,
-            daily_spend_remaining_eth: daily_spend_remaining,
-            max_gas_fee_gwei: self.policy.max_gas_fee_gwei,
-        };
+        let limits = context::PolicySnapshot::from_policy_and_spent(&self.policy, spent_today);
 
         // 3. Gas oracle (best-effort, parallel)
         let mut set = tokio::task::JoinSet::new();
@@ -353,13 +353,13 @@ impl AgentWalletService {
         amount_wei: U256,
         chain_id: u64,
     ) -> Result<(uuid::Uuid, SendPreview), AgentWalletError> {
-        let amount_eth = wei_to_eth(amount_wei)?;
+        let amount = Wei::from(amount_wei);
 
         // 1. Policy gate
-        match self.policy.check_send(&to, amount_eth, chain_id) {
+        match self.policy.check_send(&to, amount, chain_id) {
             PolicyResult::Allow => {}
             PolicyResult::Block { reason } => {
-                self.log_policy_reject(AgentAction::Send, amount_eth, &reason, chain_id)
+                self.log_policy_reject(AgentAction::Send, amount, &reason, chain_id)
                     .await;
                 return Err(AgentWalletError::PolicyBlocked(reason));
             }
@@ -367,22 +367,23 @@ impl AgentWalletService {
 
         // 2. Budget gate
         let audit_guard = self.audit.lock().await;
-        if !self.budget.can_spend(&audit_guard, amount_eth)? {
+        if !self.budget.can_spend(&audit_guard, amount)? {
             let spent = self.budget.spent_today(&audit_guard)?;
             drop(audit_guard);
             self.log_policy_reject(
                 AgentAction::Send,
-                amount_eth,
+                amount,
                 &format!(
-                    "daily budget exceeded: {spent:.6} / {} ETH",
-                    self.policy.max_daily_spend_eth
+                    "daily budget exceeded: {spent_eth:.6} / {limit_eth:.6} ETH",
+                    spent_eth = spent.to_eth_f64(),
+                    limit_eth = self.policy.max_daily_spend.to_eth_f64()
                 ),
                 chain_id,
             )
             .await;
             return Err(AgentWalletError::BudgetExceeded {
                 spent,
-                limit: self.policy.max_daily_spend_eth,
+                limit: self.policy.max_daily_spend,
             });
         }
         drop(audit_guard);
@@ -428,7 +429,7 @@ impl AgentWalletService {
         chain_id: u64,
         preview_id: uuid::Uuid,
     ) -> Result<SendResult, AgentWalletError> {
-        let amount_eth = wei_to_eth(amount_wei)?;
+        let amount = Wei::from(amount_wei);
 
         // Resolve preview ID → trusted risk score (with parameter validation)
         let cached = {
@@ -450,10 +451,10 @@ impl AgentWalletService {
         }
 
         // Defense-in-depth: re-check policy and budget at execution time.
-        match self.policy.check_send(&to, amount_eth, chain_id) {
+        match self.policy.check_send(&to, amount, chain_id) {
             PolicyResult::Allow => {}
             PolicyResult::Block { reason } => {
-                self.log_policy_reject(AgentAction::Send, amount_eth, &reason, chain_id)
+                self.log_policy_reject(AgentAction::Send, amount, &reason, chain_id)
                     .await;
                 return Err(AgentWalletError::PolicyBlocked(reason));
             }
@@ -468,7 +469,7 @@ impl AgentWalletService {
         // Atomic budget check
         {
             let audit_guard = self.audit.lock().await;
-            if !self.budget.can_spend(&audit_guard, amount_eth)? {
+            if !self.budget.can_spend(&audit_guard, amount)? {
                 let spent = self.budget.spent_today(&audit_guard)?;
                 if let Err(e) = audit_guard.append(&AuditEntry {
                     id: 0,
@@ -478,20 +479,21 @@ impl AgentWalletService {
                     target_address: None,
                     tx_hash: None,
                     chain_id: Some(chain_id),
-                    amount_eth,
-                    gas_cost_eth: 0.0,
+                    amount_wei: amount,
+                    gas_cost_wei: Wei::ZERO,
                     txguard_risk_score: 0,
                     success: false,
                     error: Some(format!(
-                        "daily budget exceeded: {spent:.6} / {} ETH",
-                        self.policy.max_daily_spend_eth
+                        "daily budget exceeded: {spent_eth:.6} / {limit_eth:.6} ETH",
+                        spent_eth = spent.to_eth_f64(),
+                        limit_eth = self.policy.max_daily_spend.to_eth_f64()
                     )),
                 }) {
                     tracing::error!(error = %e, "audit append failed during budget rejection");
                 }
                 return Err(AgentWalletError::BudgetExceeded {
                     spent,
-                    limit: self.policy.max_daily_spend_eth,
+                    limit: self.policy.max_daily_spend,
                 });
             }
         } // audit released, budget_lock still held
@@ -525,9 +527,9 @@ impl AgentWalletService {
                         target_address: Some(format!("{to:#x}")),
                         tx_hash: Some(result.tx_hash.to_string()),
                         chain_id: Some(chain_id),
-                        amount_eth,
+                        amount_wei: amount,
                         // TODO(#42): fetch receipt and compute actual gas cost
-                        gas_cost_eth: 0.0,
+                        gas_cost_wei: Wei::ZERO,
                         txguard_risk_score: cached.preview.verdict.risk_score,
                         success: true,
                         error: None,
@@ -544,9 +546,9 @@ impl AgentWalletService {
                         target_address: Some(format!("{to:#x}")),
                         tx_hash: None,
                         chain_id: Some(chain_id),
-                        amount_eth,
+                        amount_wei: amount,
                         // TODO(#42): fetch receipt and compute actual gas cost
-                        gas_cost_eth: 0.0,
+                        gas_cost_wei: Wei::ZERO,
                         txguard_risk_score: cached.preview.verdict.risk_score,
                         success: false,
                         error: Some(err_str.clone()),
@@ -596,11 +598,15 @@ impl AgentWalletService {
     async fn log_policy_reject(
         &self,
         _action: AgentAction,
-        amount: f64,
+        amount: Wei,
         reason: &str,
         chain_id: u64,
     ) {
-        warn!(%reason, amount, "agent operation blocked by policy");
+        warn!(
+            %reason,
+            amount_wei = %amount,
+            "agent operation blocked by policy"
+        );
         if let Err(e) = self.audit.lock().await.append(&AuditEntry {
             id: 0,
             timestamp: chrono::Utc::now(),
@@ -609,8 +615,8 @@ impl AgentWalletService {
             target_address: None,
             tx_hash: None,
             chain_id: Some(chain_id),
-            amount_eth: amount,
-            gas_cost_eth: 0.0,
+            amount_wei: amount,
+            gas_cost_wei: Wei::ZERO,
             txguard_risk_score: 0,
             success: false,
             error: Some(reason.into()),
@@ -618,12 +624,6 @@ impl AgentWalletService {
             tracing::error!(error = %e, "audit append failed during policy rejection");
         }
     }
-}
-
-fn wei_to_eth(wei: U256) -> Result<f64, AgentWalletError> {
-    let eth = alloy_primitives::utils::format_ether(wei);
-    eth.parse::<f64>()
-        .map_err(|e| AgentWalletError::InvalidAmount(format!("invalid ether format: {e}")))
 }
 
 #[cfg(test)]
@@ -635,8 +635,8 @@ mod tests {
     async fn agent_wallet_lifecycle() {
         let dir = tempfile::tempdir().unwrap();
         let policy = AgentPolicy {
-            max_single_tx_eth: 0.1,
-            max_daily_spend_eth: 0.5,
+            max_single_tx: Wei::from(alloy_primitives::U256::from(100_000_000_000_000_000u128)),
+            max_daily_spend: Wei::from(alloy_primitives::U256::from(500_000_000_000_000_000u128)),
             ..Default::default()
         };
         let service = AgentWalletService::new(
@@ -673,8 +673,8 @@ mod tests {
     async fn policy_blocks_oversized_send() {
         let dir = tempfile::tempdir().unwrap();
         let policy = AgentPolicy {
-            max_single_tx_eth: 0.01,
-            max_daily_spend_eth: 0.1,
+            max_single_tx: Wei::from(alloy_primitives::U256::from(10_000_000_000_000_000u128)),
+            max_daily_spend: Wei::from(alloy_primitives::U256::from(100_000_000_000_000_000u128)),
             ..Default::default()
         };
         let service = AgentWalletService::new(

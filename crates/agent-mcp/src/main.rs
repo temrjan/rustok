@@ -4,7 +4,9 @@ use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
 use rustok_agent_mcp::McpServer;
-use rustok_agent_wallet::{AgentWalletService, policy::AgentPolicy, unlock::UnlockStrategy};
+use rustok_agent_wallet::{
+    AgentWalletService, amount::Wei, policy::AgentPolicy, unlock::UnlockStrategy,
+};
 use tracing::info;
 
 #[derive(Parser, Debug)]
@@ -73,8 +75,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     // In stdio mode the user controls the wallet directly; remove restrictive
     // defaults unless an explicit policy file is provided.
     if cli.transport == "stdio" && cli.policy_config.is_none() {
-        policy.max_single_tx_eth = 1_000_000_000.0;
-        policy.max_daily_spend_eth = 1_000_000_000.0;
+        policy.max_single_tx = Wei::UNRESTRICTED;
+        policy.max_daily_spend = Wei::UNRESTRICTED;
         policy.max_gas_fee_gwei = 10_000;
     }
 
