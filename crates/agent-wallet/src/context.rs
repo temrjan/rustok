@@ -1,5 +1,7 @@
 //! Wallet context — snapshot of agent wallet state for LLM consumption.
 
+use crate::amount::Wei;
+use crate::policy::AgentPolicy;
 use rustok_agent_dapps::types::Position;
 use rustok_core::provider::UnifiedBalance;
 use serde::Serialize;
@@ -35,6 +37,24 @@ pub struct PolicySnapshot {
     pub daily_spend_remaining_eth: f64,
     /// Max gas fee (gwei) allowed by policy.
     pub max_gas_fee_gwei: u64,
+}
+
+impl PolicySnapshot {
+    /// Build a human-readable snapshot from exact wei policy limits and the
+    /// wei amount already spent today.
+    ///
+    /// All ETH fields are lossy `f64` and intended for LLM prompts/logs only.
+    pub fn from_policy_and_spent(policy: &AgentPolicy, spent_today: Wei) -> Self {
+        Self {
+            max_single_tx_eth: policy.max_single_tx.to_eth_f64(),
+            max_daily_spend_eth: policy.max_daily_spend.to_eth_f64(),
+            daily_spend_remaining_eth: policy
+                .max_daily_spend
+                .saturating_sub(spent_today)
+                .to_eth_f64(),
+            max_gas_fee_gwei: policy.max_gas_fee_gwei,
+        }
+    }
 }
 
 /// Gas fee estimates across chains.

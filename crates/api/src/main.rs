@@ -26,7 +26,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let state = AppState {
-        goplus: Arc::new(GoPlusClient::new()),
+        goplus: Arc::new(GoPlusClient::new().expect("failed to build GoPlus HTTP client")),
     };
 
     let cors = CorsLayer::new()

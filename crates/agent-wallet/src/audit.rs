@@ -3,7 +3,15 @@
 //! Every action — successful or failed, approved or rejected by policy — is
 //! recorded in an append-only SQLite database. The user (orchestrator) can
 //! review the full history of what the agent did, when, and why.
+//!
+//! Monetary amounts are stored as decimal wei strings (`TEXT`) to avoid the
+//! precision loss of SQLite `REAL` columns. Existing databases that still use
+//! the legacy `amount_eth`/`gas_cost_eth` `REAL` columns are detected and
+//! migrated by recreating the table. This is a destructive migration: the old
+//! audit trail is dropped because `f64` ETH values cannot be safely converted
+//! back to exact wei.
 
+use crate::amount::Wei;
 use chrono::{DateTime, Utc};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
@@ -66,10 +74,10 @@ pub struct AuditEntry {
     pub tx_hash: Option<String>,
     /// Chain ID where the action occurred.
     pub chain_id: Option<u64>,
-    /// ETH value involved (e.g., send amount, swap input).
-    pub amount_eth: f64,
-    /// Gas cost in ETH (actual, not estimated).
-    pub gas_cost_eth: f64,
+    /// Amount involved in wei (e.g., send amount, swap input).
+    pub amount_wei: Wei,
+    /// Gas cost in wei (actual, not estimated).
+    pub gas_cost_wei: Wei,
     /// txguard risk score at the time of action (0-100).
     pub txguard_risk_score: u8,
     /// Whether the operation succeeded.
@@ -111,6 +119,26 @@ impl AuditLog {
     }
 
     fn init_schema(&self) -> Result<(), rusqlite::Error> {
+        // Detect and drop legacy schema that used REAL columns for ETH amounts.
+        // SQLite does not support dropping/renaming columns, so we recreate the
+        // table. Old f64 ETH values are intentionally discarded because they
+        // cannot be safely converted back to exact wei.
+        let has_legacy_columns: bool = self.conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('audit_log')
+             WHERE name IN ('amount_eth', 'gas_cost_eth')",
+            [],
+            |row| row.get(0),
+        )?;
+
+        if has_legacy_columns {
+            tracing::warn!(
+                "legacy audit_log schema detected (REAL ETH columns); dropping and recreating table"
+            );
+            self.conn
+                .execute("DROP INDEX IF EXISTS idx_audit_timestamp", [])?;
+            self.conn.execute("DROP TABLE IF EXISTS audit_log", [])?;
+        }
+
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS audit_log (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -120,8 +148,8 @@ impl AuditLog {
                 target_address TEXT,
                 tx_hash     TEXT,
                 chain_id    INTEGER,
-                amount_eth  REAL NOT NULL,
-                gas_cost_eth REAL NOT NULL DEFAULT 0.0,
+                amount_wei  TEXT NOT NULL,
+                gas_cost_wei TEXT NOT NULL DEFAULT '0',
                 risk_score  INTEGER NOT NULL DEFAULT 0,
                 success     INTEGER NOT NULL DEFAULT 1,
                 error       TEXT
@@ -147,7 +175,7 @@ impl AuditLog {
         self.conn.execute(
             "INSERT INTO audit_log
              (timestamp, action, protocol, target_address, tx_hash, chain_id,
-              amount_eth, gas_cost_eth, risk_score, success, error)
+              amount_wei, gas_cost_wei, risk_score, success, error)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 entry.timestamp.to_rfc3339(),
@@ -156,8 +184,8 @@ impl AuditLog {
                 entry.target_address.as_ref(),
                 entry.tx_hash.as_ref(),
                 entry.chain_id,
-                entry.amount_eth,
-                entry.gas_cost_eth,
+                entry.amount_wei,
+                entry.gas_cost_wei,
                 entry.txguard_risk_score,
                 if entry.success { 1 } else { 0 },
                 entry.error.as_ref(),
@@ -183,7 +211,7 @@ impl AuditLog {
     ) -> Result<Vec<AuditEntry>, rusqlite::Error> {
         let mut sql = String::from(
             "SELECT id, timestamp, action, protocol, target_address, tx_hash,
-                    chain_id, amount_eth, gas_cost_eth, risk_score, success, error
+                    chain_id, amount_wei, gas_cost_wei, risk_score, success, error
              FROM audit_log WHERE 1=1",
         );
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
@@ -219,8 +247,8 @@ impl AuditLog {
                 target_address: row.get(4)?,
                 tx_hash: row.get(5)?,
                 chain_id: row.get(6)?,
-                amount_eth: row.get(7)?,
-                gas_cost_eth: row.get(8)?,
+                amount_wei: row.get(7)?,
+                gas_cost_wei: row.get(8)?,
                 txguard_risk_score: row.get::<_, i64>(9)? as u8,
                 success: row.get::<_, i64>(10)? != 0,
                 error: row.get(11)?,
@@ -230,19 +258,28 @@ impl AuditLog {
         rows.collect()
     }
 
-    /// Total ETH spent in a given time range.
+    /// Total wei spent in a given time range.
+    ///
+    /// Only successful (`success = 1`) entries are counted.
     pub fn total_spent(
         &self,
         from: DateTime<Utc>,
         to: DateTime<Utc>,
-    ) -> Result<f64, rusqlite::Error> {
-        self.conn.query_row(
-            "SELECT COALESCE(SUM(amount_eth), 0.0)
+    ) -> Result<Wei, rusqlite::Error> {
+        let mut stmt = self.conn.prepare(
+            "SELECT amount_wei
                  FROM audit_log
                  WHERE timestamp >= ?1 AND timestamp <= ?2 AND success = 1",
-            params![from.to_rfc3339(), to.to_rfc3339()],
-            |row| row.get(0),
-        )
+        )?;
+        let rows = stmt.query_map(params![from.to_rfc3339(), to.to_rfc3339()], |row| {
+            row.get::<_, Wei>(0)
+        })?;
+
+        let mut total = Wei::ZERO;
+        for amount in rows {
+            total = total.saturating_add(amount?);
+        }
+        Ok(total)
     }
 
     /// Count of entries for a given action.
@@ -276,8 +313,9 @@ fn parse_action(s: &str) -> Result<AgentAction, rusqlite::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use alloy_primitives::U256;
 
-    fn dummy_entry(action: AgentAction, amount: f64, success: bool) -> AuditEntry {
+    fn dummy_entry(action: AgentAction, amount: Wei, success: bool) -> AuditEntry {
         AuditEntry {
             id: 0,
             timestamp: Utc::now(),
@@ -286,8 +324,8 @@ mod tests {
             target_address: Some("0x0000000000000000000000000000000000000001".into()),
             tx_hash: None,
             chain_id: Some(1),
-            amount_eth: amount,
-            gas_cost_eth: 0.001,
+            amount_wei: amount,
+            gas_cost_wei: Wei::ZERO,
             txguard_risk_score: 10,
             success,
             error: if success {
@@ -301,25 +339,44 @@ mod tests {
     #[test]
     fn append_and_query() {
         let log = AuditLog::open_in_memory().unwrap();
-        let entry = dummy_entry(AgentAction::Send, 0.05, true);
+        let entry = dummy_entry(
+            AgentAction::Send,
+            Wei(U256::from(50_000_000_000_000_000u128)),
+            true,
+        );
         let id = log.append(&entry).unwrap();
         assert!(id > 0);
 
         let results = log.query(None, None, None, 10).unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].action, AgentAction::Send);
-        assert_eq!(results[0].amount_eth, 0.05);
+        assert_eq!(
+            results[0].amount_wei,
+            Wei(U256::from(50_000_000_000_000_000u128))
+        );
     }
 
     #[test]
     fn query_by_action() {
         let log = AuditLog::open_in_memory().unwrap();
-        log.append(&dummy_entry(AgentAction::Send, 0.05, true))
-            .unwrap();
-        log.append(&dummy_entry(AgentAction::Swap, 0.1, true))
-            .unwrap();
-        log.append(&dummy_entry(AgentAction::Send, 0.02, true))
-            .unwrap();
+        log.append(&dummy_entry(
+            AgentAction::Send,
+            Wei(U256::from(50_000_000_000_000_000u128)),
+            true,
+        ))
+        .unwrap();
+        log.append(&dummy_entry(
+            AgentAction::Swap,
+            Wei(U256::from(100_000_000_000_000_000u128)),
+            true,
+        ))
+        .unwrap();
+        log.append(&dummy_entry(
+            AgentAction::Send,
+            Wei(U256::from(20_000_000_000_000_000u128)),
+            true,
+        ))
+        .unwrap();
 
         let sends = log.query(None, None, Some(AgentAction::Send), 10).unwrap();
         assert_eq!(sends.len(), 2);
@@ -329,11 +386,19 @@ mod tests {
     fn total_spent_resets_daily() {
         let log = AuditLog::open_in_memory().unwrap();
         let now = Utc::now();
-        let mut entry = dummy_entry(AgentAction::Send, 0.1, true);
+        let mut entry = dummy_entry(
+            AgentAction::Send,
+            Wei(U256::from(100_000_000_000_000_000u128)),
+            true,
+        );
         entry.timestamp = now;
         log.append(&entry).unwrap();
 
-        let mut entry2 = dummy_entry(AgentAction::Send, 0.2, true);
+        let mut entry2 = dummy_entry(
+            AgentAction::Send,
+            Wei(U256::from(200_000_000_000_000_000u128)),
+            true,
+        );
         entry2.timestamp = now;
         log.append(&entry2).unwrap();
 
@@ -343,6 +408,76 @@ mod tests {
                 now + chrono::Duration::hours(1),
             )
             .unwrap();
-        assert!((total - 0.3).abs() < 0.001);
+        assert_eq!(total, Wei(U256::from(300_000_000_000_000_000u128)));
+    }
+
+    #[test]
+    fn total_spent_ignores_failed_transactions() {
+        let log = AuditLog::open_in_memory().unwrap();
+        let now = Utc::now();
+        let mut success = dummy_entry(
+            AgentAction::Send,
+            Wei(U256::from(100_000_000_000_000_000u128)),
+            true,
+        );
+        success.timestamp = now;
+        log.append(&success).unwrap();
+
+        let mut failed = dummy_entry(
+            AgentAction::Send,
+            Wei(U256::from(200_000_000_000_000_000u128)),
+            false,
+        );
+        failed.timestamp = now;
+        log.append(&failed).unwrap();
+
+        let total = log
+            .total_spent(
+                now - chrono::Duration::hours(1),
+                now + chrono::Duration::hours(1),
+            )
+            .unwrap();
+        assert_eq!(total, Wei(U256::from(100_000_000_000_000_000u128)));
+    }
+
+    #[test]
+    fn legacy_schema_is_migrated() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute(
+            "CREATE TABLE audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                action TEXT NOT NULL,
+                amount_eth REAL NOT NULL,
+                gas_cost_eth REAL NOT NULL DEFAULT 0.0
+            )",
+            [],
+        )
+        .unwrap();
+
+        // Wrap the connection in AuditLog and run schema init.
+        let log = AuditLog { conn };
+        log.init_schema().unwrap();
+
+        // Verify new schema accepts wei text.
+        let entry = AuditEntry {
+            id: 0,
+            timestamp: Utc::now(),
+            action: AgentAction::Send,
+            protocol: None,
+            target_address: None,
+            tx_hash: None,
+            chain_id: Some(1),
+            amount_wei: Wei(U256::from(123_456u128)),
+            gas_cost_wei: Wei(U256::from(21_000u128)),
+            txguard_risk_score: 0,
+            success: true,
+            error: None,
+        };
+        log.append(&entry).unwrap();
+        let rows = log.query(None, None, None, 10).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].amount_wei, entry.amount_wei);
+        assert_eq!(rows[0].gas_cost_wei, entry.gas_cost_wei);
     }
 }

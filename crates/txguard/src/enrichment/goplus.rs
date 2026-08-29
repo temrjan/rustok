@@ -18,6 +18,10 @@ pub enum GoPlusError {
     #[error("HTTP request failed: {0}")]
     Http(#[from] reqwest::Error),
 
+    /// Failed to build the HTTP client.
+    #[error("HTTP client build failed: {0}")]
+    HttpClient(String),
+
     /// API returned non-success code.
     #[error("GoPlus API error: code={code}, message={message}")]
     Api {
@@ -39,15 +43,19 @@ pub struct GoPlusClient {
 
 impl GoPlusClient {
     /// Create a new GoPlus client with sensible timeouts.
-    #[must_use]
-    pub fn new() -> Self {
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `GoPlusError::HttpClient` if the underlying HTTP client cannot
+    /// be constructed (e.g. missing TLS backend).
+    pub fn new() -> Result<Self, GoPlusError> {
+        Ok(Self {
             http: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(10))
                 .connect_timeout(std::time::Duration::from_secs(5))
                 .build()
-                .expect("default TLS backend is always available"),
-        }
+                .map_err(|e| GoPlusError::HttpClient(e.to_string()))?,
+        })
     }
 
     /// Check token security (honeypot, tax, mintable, etc.).
@@ -103,12 +111,6 @@ impl GoPlusClient {
 
         let raw = resp.result.ok_or(GoPlusError::NotFound)?;
         Ok(AddressSecurity::from_raw(raw))
-    }
-}
-
-impl Default for GoPlusClient {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
