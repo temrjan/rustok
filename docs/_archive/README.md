@@ -24,8 +24,21 @@
 снимок: они открываются фразой о переходе от «mobile wallet for humans» к «Agent Wallet
 Infrastructure», и этот переход отменён.
 
-## Стек WebView (снят 2026-04-28)
+## Стек Tauri + Leptos (решение о миграции 2026-04-28, код снят 2026-08-30)
+
+Приложение `app/` (Leptos UI + крейт `rustok-desktop`) и оба Android-воркфлоу удалены. Проект
+живёт на React Native (`mobile/`). Обоснование ухода — `docs/RESEARCH-NATIVE-STACKS.md`: он
+**остался на месте**, потому что `docs/NATIVE-MIGRATION-PLAN.md` цитирует его как действующий
+источник, а не как историю.
 
 | Файл | Что фиксирует |
 |---|---|
-| `FRONTEND-IMPLEMENTATION-WEBVIEW.md` | Реализация фронтенда на Tauri + Leptos до миграции на React Native |
+| `FRONTEND-IMPLEMENTATION-WEBVIEW.md` | Реализация фронтенда на Tauri + Leptos до миграции |
+| `SESSION.md` | Мастер-документ эпохи Tauri, вёлся до миграции |
+| `SETUP.md` | Инструкция по запуску на Tauri. RN-эквивалент — `CLAUDE.md` и `mobile/README.md` |
+| `REDESIGN.md` | Контекст редизайна UI; сам себя объявлял архивным |
+| `BUGS-ANDROID-2026-04-26.md` | Отчёт о регрессиях Android на старом стеке |
+| `PLAN-ANDROID-FIX-2026-04-26.md` | План фикса к этому отчёту |
+
+**Ссылки внутри архивных файлов не чинились** — они указывают на состояние репозитория на момент
+написания. В живых документах ссылки перенаправлены.

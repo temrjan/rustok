@@ -42,7 +42,7 @@
 9. **`docs/_archive/FRONTEND-IMPLEMENTATION-WEBVIEW.md`** — отменённый план (только для понимания контекста; НЕ выполнять)
 
 > ⚠️ **ВНИМАНИЕ — устаревшие источники до Phase 8:**
-> - **`docs/SESSION.md`** — описывает старый стек (Tauri+Leptos), будет обновлён в Phase 8 (cleanup). До этого — **не трактовать как источник истины**, использовать ЭТОТ документ.
+> - **`docs/_archive/SESSION.md`** — описывает старый стек (Tauri+Leptos). Перенесён в архив 2026-08-30 вместе со снятием Tauri-слоя. Источником истины не является — использовать ЭТОТ документ.
 > - **`docs/COMPONENTS.md`, `docs/TECHNICAL.md`, `docs/LEPTOS-GUIDE.md`** — устарели, обновляются/удаляются в Phase 8.
 > - **`project_rustok.md` в auto-memory** — может содержать стек "Tauri 2.0 + Leptos". Обновить ПЕРЕД стартом Phase 1.
 

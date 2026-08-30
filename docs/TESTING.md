@@ -10,12 +10,12 @@ Each scenario below has two columns (iOS / Android). Target devices:
 
 ### iOS
 1. iOS Simulator running (iPhone 17 Pro, iOS 26.4)
-2. `cargo tauri ios dev` — app launched
+2. App launched — see `mobile/README.md` for the React Native run steps
 3. Paste into Simulator: `echo -n "0xADDRESS" | xcrun simctl pbcopy booted`
 
 ### Android
 1. Pixel_8 API 35 emulator running (`emulator -avd Pixel_8_API_35`)
-2. `cargo tauri android dev` — app launched
+2. App launched — Metro + `adb reverse` + install debug APK, see `CLAUDE.md` § Android dev
 3. Paste into Emulator: `adb shell input text "0xADDRESS"` (или через Android clipboard)
 
 ### Common
@@ -47,7 +47,7 @@ Biometric unlock requires enrollment in the host Simulator / Emulator before any
 
 ### iOS Simulator — Face ID
 
-1. Launch the app in Simulator (`cargo tauri ios dev`).
+1. Launch the app in Simulator (see `mobile/README.md`).
 2. In the Simulator menu bar: **Features → Face ID → Enrolled** (checkmark appears).
 3. During testing use:
    - **Features → Face ID → Matching Face** — simulates successful authentication.
@@ -82,8 +82,8 @@ Biometric unlock requires enrollment in the host Simulator / Emulator before any
 | B5 | Re-enable via password unlock → Settings → toggle on → prompt → confirm | [ ] | [ ] |
 
 **Implementation notes (post-refactor):**
-- Mobile stores the password in hardware-backed secure storage (`tauri-plugin-keystore` → Android Keystore / iOS Keychain). No app-static encryption key is used.
-- Desktop stores the password in the OS keyring (`keyring` crate) without a biometric prompt.
+- Mobile stores the password in hardware-backed secure storage (Android Keystore / iOS Keychain). No app-static encryption key is used.
+- The Tauri desktop build was removed on 2026-08-30; only the mobile path remains.
 - `is_biometric_enabled` checks an empty marker file (`biometric.enabled`) and **does not** trigger a biometric prompt.
 - `biometric_unlock_wallet` automatically triggers the system biometric prompt on mobile.
 - Known alpha-plugin limitation (Android): `enable_biometric_unlock` may return success before the user completes the biometric prompt. If the user cancels, the marker file is created but the password is not stored; simply disable and re-enable to recover.
