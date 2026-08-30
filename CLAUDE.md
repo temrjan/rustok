@@ -10,6 +10,13 @@
 - **Ренейминг:** решено НЕ трогать сегодня (риск для уже проверенной функциональности прямо перед дедлайном). Капитан подбирает новое имя, полная замена (8 Rust-крейтов + Android applicationId + iOS bundle ID + захардкоженные rustokwallet.com-ссылки + TRADEMARK.md) — отдельным заходом после подачи, не спеша.
 - **Деплой:** сервер 7demo готов (`rustok-api` контейнер на сети `proxy`, лендинг, Caddy-блок), домен ещё не выбран — НЕ `rustokwallet.com`/`rustok.org` (оба зарезервированы под Rustok Org).
 
+**Обновление 2026-08-30 — два снятия и релизный пайплайн:**
+- **Агентский слой снят** (PR #56): крейты `agent-wallet`, `agent-mcp`, `agent-dapps` + вся дистрибуция. Действующий MCP живёт в `rustok-org/mcp`.
+- **Tauri снят** (PR #57): `app/`, крейт `rustok-desktop`, оба старых Android-воркфлоу. Осталось 6 крейтов + `mobile/`. `cargo --workspace` теперь собирается на Linux без GTK.
+- **Релизный пайплайн Android есть и работает** (PR #58–#61): `android-release.yml` → `gradlew bundleRelease`. Прогон `33315376778` собрал **подписанный AAB** (93 МБ, `Owner: CN=Temrjan, O=Rustok`), 656 задач Gradle, 33 минуты.
+- ⚠️ **AAB ни разу не запускали.** Собрался ≠ работает. Следующий шаг — `bundletool` → APK → Poco X6.
+- ⚠️ **Публикация заблокирована** до решения об имени пакета: `applicationId` = `com.rustok`, листинг в Play = `com.rustok.app`. После первой публикации имя не меняется никогда.
+
 **Актуальная точка входа для истории разработки (устарела по неймингу, но верна по механике) — `docs/NATIVE-MIGRATION-PLAN.md` секции A-O (Onboarding).** Затем `docs/POC-FOUNDATION.md`.
 
 ---
@@ -106,6 +113,7 @@ adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
 - Worklets incident: `docs/REANIMATED-WORKLETS-INCIDENT.md` (root cause + restoration)
 - Jest setup incident: `docs/JEST-SETUP-INCIDENT.md` (RN+NativeWind+MMKV+gorhom test infrastructure post-mortem — chain of 6 cascading fixes)
 - Mobile overview: `mobile/README.md`
+- **Android release:** `docs/ANDROID-RELEASE.md` (подпись, воркфлоу, сервисный аккаунт, блокеры публикации)
 - Team constitution: `docs/TEAM-CONSTITUTION.md` (v2.0 — triadic team: Engineer + Reviewer + Капитан)
 - Repo: https://github.com/temrjan/rustok
 - CI: https://github.com/temrjan/rustok/actions
