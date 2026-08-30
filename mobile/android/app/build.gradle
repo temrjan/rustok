@@ -65,6 +65,26 @@ react {
 def enableProguardInReleaseBuilds = false
 
 /**
+ * Release signing.
+ *
+ * Loaded from keystore.properties, which is gitignored and never committed.
+ * See keystore.properties.example and docs/ANDROID-RELEASE.md.
+ *
+ * When the file is absent, releaseSigning stays null and the release build
+ * fails at configuration time (see the release buildType below). It must never
+ * silently fall back to the debug key: an APK signed with the debug key is
+ * rejected by Play, and before this the fallback was the default, which is how
+ * a release build could look successful while producing an unpublishable
+ * artifact.
+ */
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def releaseSigning = null
+if (keystorePropertiesFile.exists()) {
+    releaseSigning = new Properties()
+    keystorePropertiesFile.withInputStream { releaseSigning.load(it) }
+}
+
+/**
  * The preferred build flavor of JavaScriptCore (JSC)
  *
  * For example, to use the international variant, you can use:
@@ -97,15 +117,27 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (releaseSigning != null) {
+            release {
+                storeFile file(releaseSigning['storeFile'])
+                storePassword releaseSigning['password']
+                keyAlias releaseSigning['keyAlias']
+                keyPassword releaseSigning['password']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // No signingConfig when the keystore is absent: the build then fails
+            // at execution time via the taskGraph guard below, rather than
+            // silently producing a debug-signed artifact. Debug builds stay
+            // usable without a keystore — the guard only fires for release tasks.
+            if (releaseSigning != null) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
@@ -120,5 +152,23 @@ dependencies {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor
+    }
+}
+
+// Fail release builds that have no keystore, instead of shipping a debug-signed
+// artifact Play will reject. Checked against the task graph so that debug builds
+// — the everyday flow, and the only one CI runs — keep working without a
+// keystore. Matches assembleRelease, bundleRelease, installRelease.
+gradle.taskGraph.whenReady { graph ->
+    def needsRelease = graph.allTasks.any { task ->
+        task.project == project && task.name ==~ /(?i)(assemble|bundle|install)Release/
+    }
+    if (needsRelease && releaseSigning == null) {
+        throw new GradleException(
+            "Release build requires mobile/android/keystore.properties.\n" +
+            "Copy keystore.properties.example and fill it in, or run the Android " +
+            "Release workflow, which writes it from repository secrets.\n" +
+            "See docs/ANDROID-RELEASE.md."
+        )
     }
 }
