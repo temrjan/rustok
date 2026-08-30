@@ -107,8 +107,19 @@ android {
         applicationId "com.rustok"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Overridable from the release workflow: -PversionCode / -PversionName.
+        // Play refuses an upload whose versionCode is not higher than the last
+        // one on the track, so this has to move on every release. It is passed
+        // in explicitly rather than derived: github.run_number resets whenever
+        // the workflow file is recreated, and reading the last value from the
+        // Play API needs a service account, which does not exist until the very
+        // last step of setup. Automate it from the Play API once that exists.
+        versionCode (project.hasProperty('versionCode')
+            ? project.property('versionCode').toString().toInteger()
+            : 1)
+        versionName (project.hasProperty('versionName')
+            ? project.property('versionName').toString()
+            : "1.0")
     }
     signingConfigs {
         debug {
