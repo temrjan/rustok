@@ -13,6 +13,14 @@ react {
     reactNativeDir = file("../../../node_modules/react-native")
     codegenDir = file("../../../node_modules/@react-native/codegen")
     cliFile = file("../../../node_modules/react-native/cli.js")
+    // Same hoisting override as the three above, for the same reason. Missed
+    // originally because only release builds bundle JS — debug serves it from
+    // Metro — so nothing exercised it until the first bundleRelease, which
+    // failed with "Couldn't determine Hermesc location".
+    // %OS-BIN% is a token the React Native Gradle plugin substitutes per
+    // platform, so it must survive into the string rather than be resolved by
+    // file().
+    hermesCommand = file("../../../node_modules/react-native/sdks/hermesc").absolutePath + "/%OS-BIN%/hermesc"
     //   The root of your project, i.e. where "package.json" lives. Default is '../..'
     // root = file("../../")
     //   The folder where the react-native NPM package is. Default is ../../node_modules/react-native
