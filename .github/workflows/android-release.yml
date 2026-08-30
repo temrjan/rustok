@@ -1,0 +1,172 @@
+name: Android Release Build
+
+# Builds a signed release AAB from the React Native app in mobile/.
+#
+# The prerequisite chain below (Node + workspace install, Rust android targets,
+# cargo-ndk, SDK/NDK, ubrn bindings) is the same one the CI "mobile" job uses;
+# see the comments there for why each step exists. What this workflow adds is
+# JDK 17, release signing, and Gradle itself, which that job deliberately omits.
+#
+# Uploading to Play is off by default and cannot run until a package name is
+# settled: applicationId is com.rustok while the Play listing is com.rustok.app,
+# and a published package name can never be changed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_code:
+        description: 'versionCode — must be higher than the last one on the track'
+        required: true
+        type: string
+      version_name:
+        description: 'versionName shown to users, e.g. 1.0.0'
+        required: true
+        default: '1.0.0'
+        type: string
+      upload_to_play:
+        description: 'Upload the AAB to Play Console (leave off until the package name is settled)'
+        required: false
+        default: false
+        type: boolean
+      track:
+        description: 'Play track, used only when upload is enabled'
+        required: false
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  android-release:
+    name: Build signed AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Reject a versionCode that is not a positive integer
+        run: |
+          case "${{ inputs.version_code }}" in
+            ''|*[!0-9]*)
+              echo "::error::version_code must be digits only, got '${{ inputs.version_code }}'"
+              exit 1 ;;
+          esac
+          if [ "${{ inputs.version_code }}" -lt 1 ] || [ "${{ inputs.version_code }}" -gt 2100000000 ]; then
+            echo "::error::version_code must be between 1 and 2100000000 (Play's limit)"
+            exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          # Lockfile lives at the repo root (npm workspaces).
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@c5195efecf7bdfc987ee8bae7a71cb8b11521c00 # v4.7.1
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Targets must match packages/react-native-rustok-bridge/ubrn.config.yaml
+      # and mobile/android/gradle.properties. 32-bit is not supported — see
+      # docs/PHASE-2-CONSTRAINTS.md P2.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+
+      - name: Install cargo-ndk
+        run: cargo install cargo-ndk --locked
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          ndk-version: 27.1.12297006
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          cache-on-failure: true
+
+      # Must run at the repo root so workspaces resolve and hoisted deps land in
+      # <root>/node_modules.
+      - name: Install workspace deps
+        run: npm ci
+
+      - name: Build + generate uniffi React Native bindings
+        run: npm run ubrn:android -w packages/react-native-rustok-bridge
+
+      - name: Write release keystore from secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for v in KEYSTORE_BASE64 KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Secret ANDROID_$v is not set. See docs/ANDROID-RELEASE.md."
+              exit 1
+            fi
+          done
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/rustok-release.keystore"
+          cat > mobile/android/keystore.properties <<EOF
+          storeFile=$RUNNER_TEMP/rustok-release.keystore
+          keyAlias=$KEY_ALIAS
+          password=$KEY_PASSWORD
+          EOF
+
+      - name: Build signed AAB
+        working-directory: mobile/android
+        run: |
+          ./gradlew bundleRelease \
+            -PversionCode=${{ inputs.version_code }} \
+            -PversionName=${{ inputs.version_name }} \
+            --no-daemon
+
+      # Guards against a debug-signed artifact reaching Play, which would be
+      # rejected on upload. The signer must not be the Android debug key.
+      - name: Verify the AAB is not debug-signed
+        run: |
+          AAB=$(find mobile/android/app/build/outputs/bundle -name '*.aab' | head -1)
+          if [ -z "$AAB" ]; then
+            echo "::error::No AAB produced"
+            exit 1
+          fi
+          echo "AAB: $AAB"
+          SIGNER=$(keytool -printcert -jarfile "$AAB" | grep -m1 'Owner:' || true)
+          echo "Signer: $SIGNER"
+          if echo "$SIGNER" | grep -q 'CN=Android Debug'; then
+            echo "::error::AAB is signed with the Android debug key"
+            exit 1
+          fi
+          echo "AAB_PATH=$AAB" >> "$GITHUB_ENV"
+
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: rustok-android-release-aab
+          path: ${{ env.AAB_PATH }}
+          if-no-files-found: error
+
+      - name: Upload to Google Play
+        if: ${{ inputs.upload_to_play }}
+        uses: r0adkll/upload-google-play@935ef9c68bb393a8e6116b1575626a7f5be3a7fb # v1.1.3
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.rustok
+          releaseFiles: ${{ env.AAB_PATH }}
+          track: ${{ inputs.track }}
+          status: completed
+
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/rustok-release.keystore" mobile/android/keystore.properties

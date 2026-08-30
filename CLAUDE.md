@@ -112,10 +112,14 @@ adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
 
 ## Устаревшие docs (не выполнять!)
 
-Tauri-слой снят 2026-08-30. Удалены: `COMPONENTS.md`, `LEPTOS-GUIDE.md`, `MOBILE.md`,
-`ANDROID-RELEASE.md`. Перенесены в `docs/_archive/`: `SESSION.md`, `SETUP.md`, `REDESIGN.md`
-и два отчёта по Android-регрессиям от 2026-04-26 — раскладка в `docs/_archive/README.md`.
+Tauri-слой снят 2026-08-30. Удалены: `COMPONENTS.md`, `LEPTOS-GUIDE.md`, `MOBILE.md`.
+Перенесены в `docs/_archive/`: `SESSION.md`, `SETUP.md`, `REDESIGN.md` и два отчёта по
+Android-регрессиям от 2026-04-26 — раскладка в `docs/_archive/README.md`.
 
 - `docs/TECHNICAL.md` — ещё на месте, к Tauri не привязан; судьба отдельно.
-- ⚠️ Мобильного релизного пайплайна сейчас нет: оба Android-воркфлоу собирали Tauri и удалены,
-  iOS-воркфлоу не было никогда. Новый — под React Native, отдельной задачей.
+- `docs/ANDROID-RELEASE.md` — переписан под React Native (был удалён вместе с Tauri, восстановлен).
+- **Android-релиз:** воркфлоу `android-release.yml` собирает подписанный AAB. Загрузка в Play
+  выключена по умолчанию и **не включать до решения об имени пакета** — `applicationId` сейчас
+  `com.rustok`, а листинг в Play `com.rustok.app`, и после первой публикации имя не меняется
+  никогда. Архитектуры: `arm64-v8a` + `x86_64`, 32-бит не поддерживаем.
+- ⚠️ **iOS-пайплайна нет** — воркфлоу не было никогда, отдельной задачей.
