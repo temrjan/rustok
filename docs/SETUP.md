@@ -179,7 +179,7 @@ rustok/
 │
 ├── docs/
 │   ├── VISION.md              # Product vision
-│   ├── RUSTOK_LLM_AGENT_PLAN_RIG.md  # LLM Agent architecture
+│   ├── _archive/             # Superseded docs (agent-wallet era, WebView era)
 │   ├── PHASE1-IMPLEMENTATION.md      # Phase 1 implementation plan
 │   └── SETUP.md               # This file
 │
@@ -334,7 +334,7 @@ cd app && pnpm tauri build
 | Документ | Описание |
 |----------|----------|
 | `docs/VISION.md` | Продуктовое видение |
-| `docs/RUSTOK_LLM_AGENT_PLAN_RIG.md` | Архитектура LLM-агента |
+| `docs/_archive/RUSTOK_LLM_AGENT_PLAN_RIG.md` | Архитектура LLM-агента (архив) |
 | `docs/PHASE1-IMPLEMENTATION.md` | План реализации Phase 1 |
 | `docs/SETUP.md` | Этот файл |
 | `crates/txguard/README.md` | Документация txguard |

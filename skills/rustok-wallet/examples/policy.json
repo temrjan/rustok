@@ -1,8 +1,0 @@
-{
-  "max_single_tx_wei": "100000000000000000",
-  "max_daily_spend_wei": "500000000000000000",
-  "max_gas_fee_gwei": 100,
-  "blocked_addresses": [],
-  "allowed_chain_ids": [1, 10, 42161, 8453],
-  "block_unlimited_approvals": true
-}
