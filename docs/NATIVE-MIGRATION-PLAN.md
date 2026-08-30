@@ -42,8 +42,8 @@
 9. **`docs/_archive/FRONTEND-IMPLEMENTATION-WEBVIEW.md`** — отменённый план (только для понимания контекста; НЕ выполнять)
 
 > ⚠️ **ВНИМАНИЕ — устаревшие источники до Phase 8:**
-> - **`docs/SESSION.md`** — описывает старый стек (Tauri+Leptos), будет обновлён в Phase 8 (cleanup). До этого — **не трактовать как источник истины**, использовать ЭТОТ документ.
-> - **`docs/COMPONENTS.md`, `docs/TECHNICAL.md`, `docs/LEPTOS-GUIDE.md`** — устарели, обновляются/удаляются в Phase 8.
+> - **`docs/_archive/SESSION.md`** — описывает старый стек (Tauri+Leptos). Перенесён в архив 2026-08-30 вместе со снятием Tauri-слоя. Источником истины не является — использовать ЭТОТ документ.
+> - **`docs/COMPONENTS.md`, `docs/LEPTOS-GUIDE.md`** — удалены 2026-08-30 вместе с Tauri-слоем. **`docs/TECHNICAL.md`** — ещё на месте, устарел частично.
 > - **`project_rustok.md` в auto-memory** — может содержать стек "Tauri 2.0 + Leptos". Обновить ПЕРЕД стартом Phase 1.
 
 **Команды для проверки состояния перед работой:**
@@ -796,11 +796,11 @@ Working branch: `feat/phase4-onboarding` (21 commits ahead of main, all pushed).
 
 **Cleanup (1 коммит):**
 - Удалить `app/src/` (Leptos)
-- Удалить `app/src-tauri/` (Tauri) — или сохранить отдельно как `desktop/` если решим вернуться к Tauri-desktop позже
-- Удалить упоминания Trunk/WASM из CI workflows
-- Удалить `LEPTOS-GUIDE.md`
-- Обновить `SESSION.md`, `COMPONENTS.md`, `TECHNICAL.md` под новую архитектуру
-- Обновить `CLAUDE.md` (root) под новый стек
+- ~~Удалить `app/src-tauri/`~~ ✅ 2026-08-30 — снят весь `app/`, десктоп-трек закрыт (не сохраняли как `desktop/`)
+- ~~Удалить упоминания Trunk/WASM из CI workflows~~ ✅ 2026-08-30
+- ~~Удалить `LEPTOS-GUIDE.md`~~ ✅ 2026-08-30 — вместе с `COMPONENTS.md`, `MOBILE.md`, `ANDROID-RELEASE.md`
+- ~~Обновить `SESSION.md`~~ ✅ 2026-08-30 — перенесён в `docs/_archive/`. `TECHNICAL.md` — остаётся, судьба отдельно
+- ~~Обновить `CLAUDE.md` (root) под новый стек~~ ✅ 2026-08-30
 - Bump версии: `package.json` → `0.2.0`
 
 **Hardening (1 коммит):**

@@ -369,4 +369,4 @@ Phase 3 закрыт когда **все** ниже = true:
 - **Mobile root:** `mobile/`
 - **Incident report (M3 visual smoke):** `docs/REANIMATED-WORKLETS-INCIDENT.md` — Reanimated 4 / Worklets native init issue, attempted fixes, M4 restoration checklist
 
-> **Удалены устаревшие refs:** `docs/COMPONENTS.md` (помечен в CLAUDE.md как deprecated, удаляется в Phase 8), `docs/REDESIGN.md` (status неясен — verify в M1 spike перед использованием).
+> **Удалены устаревшие refs:** `docs/COMPONENTS.md` (удалён 2026-08-30 вместе с Tauri-слоем), `docs/REDESIGN.md` (перенесён в `docs/_archive/`).

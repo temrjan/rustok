@@ -129,7 +129,7 @@
 
 **`assertNever` lift в `utils/`** — пока inline в RootNavigator (single use). TODO-comment marks the trigger: 2nd discriminated union (likely Phase 4 onboarding step state).
 
-**`docs/REDESIGN.md` status verification** — design doc § 9 footer flagged этот ref; не делал в Phase 3, но и не использовался. Можно удалить или verify в Phase 8 cleanup.
+**`docs/REDESIGN.md` status verification** — design doc § 9 footer flagged этот ref; не делал в Phase 3, но и не использовался. Закрыто 2026-08-30: документ перенесён в `docs/_archive/REDESIGN.md`.
 
 ---
 

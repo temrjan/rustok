@@ -557,7 +557,7 @@ pub enum FallbackStrategy {
 | NeMo Guardrails (concept) | https://github.com/NVIDIA/NeMo-Guardrails |
 | This document | `docs/PHASE1-IMPLEMENTATION.md` |
 | Architecture | `docs/_archive/RUSTOK_LLM_AGENT_PLAN_RIG.md` |
-| Session status | `docs/SESSION.md` |
+| Session status | `docs/_archive/SESSION.md` (архив) |
 
 ---
 

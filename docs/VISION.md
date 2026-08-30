@@ -3,6 +3,11 @@
 > Open-source Rust Ethereum wallet with chain abstraction, AI routing, and transaction protection.
 > "ETH — это просто ETH. Без слоёв, без бриджей, без непонятных транзакций."
 
+> **Обновлено 2026-08-30.** Стек в «Технический стек», «Форматы продукта» и «Архитектура
+> приложения» приведён к React Native (переход состоялся 2026-04-28, Tauri-слой снят).
+> **Desktop снят с форматов продукта** — решение Капитана от 2026-08-30.
+> Раздел «Фазы» намеренно не тронут: он фиксирует, что было сделано, включая Phase 2 на Tauri.
+
 ---
 
 ## Проблема
@@ -89,8 +94,8 @@ Ethereum в 2026 — это десятки L2/L3 сетей. Для пользо
 | Core | Rust | Безопасность, производительность, целевая аудитория |
 | Ethereum primitives | alloy-rs | Стандарт индустрии, заменил ethers-rs |
 | EVM simulation | revm | Локальная симуляция транзакций |
-| App shell | Tauri 2.0 | Один Rust core → iOS, Android, Desktop |
-| UI | Leptos 0.7 (Rust → WASM) | Full Rust stack, shared types с core без маппинга |
+| App shell | React Native 0.85 + uniffi | Один Rust core → iOS, Android |
+| UI | React Native (TypeScript) | Нативные компоненты, Rust core через uniffi-биндинги |
 | CLI | clap | Для разработчиков |
 | Key storage | BIP39 seed + AES-256-GCM + Argon2id (Phase 5: Passkey + MPC) | Совместимо с MetaMask, UX-мастер вокруг фразы |
 | Cross-chain | Phase 4: Across Protocol (intents) | Open source, intent-based |
@@ -99,10 +104,13 @@ Ethereum в 2026 — это десятки L2/L3 сетей. Для пользо
 
 ## Форматы продукта
 
-1. **Мобильное приложение** — iOS + Android через Tauri 2.0. Основной продукт.
-2. **Desktop** — macOS, Windows, Linux. Бесплатно через тот же Tauri build.
-3. **txguard** — open-source Rust crate. Библиотека защиты транзакций. Самостоятельный продукт.
-4. **CLI** — `rustok analyze 0x...` для разработчиков и исследователей.
+1. **Мобильное приложение** — iOS + Android на React Native + Rust core. Основной продукт.
+2. **txguard** — open-source Rust crate. Библиотека защиты транзакций. Самостоятельный продукт.
+3. **CLI** — `rustok analyze 0x...` для разработчиков и исследователей.
+
+> Desktop-версия из форматов продукта **снята 2026-08-30**. Она держалась на том, что Tauri
+> отдавал её тем же билдом; после перехода на React Native этого «бесплатно» больше нет, а
+> отдельного основания для десктопа мы не нашли. Реализация удалена, обещание снято.
 
 ---
 
@@ -135,7 +143,7 @@ Open Core:
 | Open source | Да (JS) | Да (JS) | Нет | **Да (Rust)** |
 | UX вокруг seed-фразы | Голая фраза | Голая фраза | Без фразы (MPC) | **BIP39 + wizard (ack → phrase → quiz → password), Phase 5 Passkey/MPC** |
 | Rust | Нет | Нет | Нет | **Да** |
-| Нативное мобильное | Нет | Нет | Да | **Да (Tauri)** |
+| Нативное мобильное | Нет | Нет | Да | **Да (React Native + Rust)** |
 | Verified microkernel | Нет | Нет | Нет | **Phase 6 (seL4)** |
 
 **Ниша свободна:** нет open-source Rust Ethereum wallet с chain abstraction, нативным мобильным приложением и формально верифицированным runtime.
@@ -200,14 +208,13 @@ rustok/
 ├── crates/
 │   ├── txguard/    — движок безопасности (самостоятельный crate)
 │   ├── core/       — wallet core (keyring, provider, router, explainer, explorer)
-│   ├── types/      — shared DTO для core ↔ frontend (без U256 в WASM)
+│   ├── types/      — shared DTO для core ↔ frontend
 │   ├── cli/        — CLI для разработчиков
-│   └── api/        — HTTP API (Phase 3, stub)
-├── app/
-│   ├── src-tauri/  — Tauri backend (tauri::command → core)
-│   └── src/        — Leptos 0.7 UI (Rust → WASM, вызывает core через invoke())
+│   ├── api/        — HTTP API (Phase 3, stub)
+│   └── rustok-mobile-bindings/ — uniffi-биндинги для мобильного клиента
+└── mobile/         — React Native клиент (iOS + Android)
 ```
 
-Leptos UI компилируется в WASM и работает в Tauri webview.
-Бизнес-логика вызывается через `tauri::command` (invoke) — без HTTP.
+UI на React Native вызывает Rust core через uniffi-биндинги
+(`react-native-rustok-bridge`) — без HTTP и без WebView.
 Один и тот же Rust core работает на всех платформах.

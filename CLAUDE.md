@@ -112,5 +112,10 @@ adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
 
 ## Устаревшие docs (не выполнять!)
 
-- `docs/SESSION.md` — старый стек Tauri+Leptos
-- `docs/COMPONENTS.md`, `docs/TECHNICAL.md`, `docs/LEPTOS-GUIDE.md` — удаляются в Phase 8
+Tauri-слой снят 2026-08-30. Удалены: `COMPONENTS.md`, `LEPTOS-GUIDE.md`, `MOBILE.md`,
+`ANDROID-RELEASE.md`. Перенесены в `docs/_archive/`: `SESSION.md`, `SETUP.md`, `REDESIGN.md`
+и два отчёта по Android-регрессиям от 2026-04-26 — раскладка в `docs/_archive/README.md`.
+
+- `docs/TECHNICAL.md` — ещё на месте, к Tauri не привязан; судьба отдельно.
+- ⚠️ Мобильного релизного пайплайна сейчас нет: оба Android-воркфлоу собирали Tauri и удалены,
+  iOS-воркфлоу не было никогда. Новый — под React Native, отдельной задачей.
