@@ -556,7 +556,7 @@ pub enum FallbackStrategy {
 | ubrn docs | https://github.com/jhugman/uniffi-bindgen-react-native |
 | NeMo Guardrails (concept) | https://github.com/NVIDIA/NeMo-Guardrails |
 | This document | `docs/PHASE1-IMPLEMENTATION.md` |
-| Architecture | `docs/RUSTOK_LLM_AGENT_PLAN_RIG.md` |
+| Architecture | `docs/_archive/RUSTOK_LLM_AGENT_PLAN_RIG.md` |
 | Session status | `docs/SESSION.md` |
 
 ---
