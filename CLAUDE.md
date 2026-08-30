@@ -112,9 +112,9 @@ adb install -r mobile/android/app/build/outputs/apk/debug/app-debug.apk
 
 ## Устаревшие docs (не выполнять!)
 
-Tauri-слой снят 2026-08-30. `docs/COMPONENTS.md`, `docs/LEPTOS-GUIDE.md`, `docs/MOBILE.md`,
-`docs/ANDROID-RELEASE.md` — удалены. `docs/SESSION.md`, `docs/REDESIGN.md` и отчёты по
-Android-регрессиям от 2026-04-26 — в `docs/_archive/` (там же README с раскладкой).
+Tauri-слой снят 2026-08-30. Удалены: `COMPONENTS.md`, `LEPTOS-GUIDE.md`, `MOBILE.md`,
+`ANDROID-RELEASE.md`. Перенесены в `docs/_archive/`: `SESSION.md`, `SETUP.md`, `REDESIGN.md`
+и два отчёта по Android-регрессиям от 2026-04-26 — раскладка в `docs/_archive/README.md`.
 
 - `docs/TECHNICAL.md` — ещё на месте, к Tauri не привязан; судьба отдельно.
 - ⚠️ Мобильного релизного пайплайна сейчас нет: оба Android-воркфлоу собирали Tauri и удалены,
