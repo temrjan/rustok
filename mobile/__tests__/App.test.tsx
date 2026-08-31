@@ -197,4 +197,49 @@ describe('App', () => {
     expect(mockLockWallet).not.toHaveBeenCalled();
     dateSpy.mockRestore();
   });
+
+  // Regression: the Rust side keeps the selected chain in memory only, and
+  // `unlockWallet` drops it. `networkStore.hydrate()` is what pushes the
+  // persisted chain back into Rust, but it used to run once on mount —
+  // before the PIN screen — so every unlock left Rust without a chain and
+  // `previewSend` failed with a routing error while the badge still read
+  // "Sepolia". Confirmed on device 2026-08-31; see the smoke report.
+  it('re-syncs the network into Rust when the wallet becomes unlocked', async () => {
+    mockPhase = 'locked';
+    let tree: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      tree = renderer.create(<App />);
+    });
+
+    // Mount-time hydration is a separate concern; only the unlock
+    // transition is under test here.
+    mockHydrateNetwork.mockClear();
+
+    mockPhase = 'unlocked';
+    await act(async () => {
+      tree?.update(<App />);
+    });
+
+    expect(mockHydrateNetwork).toHaveBeenCalledTimes(1);
+  });
+
+  // Counterpart to the test above: the phase must actually CHANGE here,
+  // otherwise the effect never re-runs and the assertion holds no matter
+  // what the effect body does. Verified by mutation — dropping the
+  // `phase !== 'unlocked'` guard turns this red.
+  it('does not re-sync the network on a transition to a locked phase', async () => {
+    mockPhase = 'loading';
+    let tree: renderer.ReactTestRenderer | undefined;
+    await act(async () => {
+      tree = renderer.create(<App />);
+    });
+    mockHydrateNetwork.mockClear();
+
+    mockPhase = 'locked';
+    await act(async () => {
+      tree?.update(<App />);
+    });
+
+    expect(mockHydrateNetwork).not.toHaveBeenCalled();
+  });
 });
