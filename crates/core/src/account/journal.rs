@@ -7,9 +7,12 @@
 //! later `wallet_getCallsStatus` for dApps (EIP-5792).
 //!
 //! Idempotency: every operation carries a `dedupe_key` —
-//! `keccak256(chain_id ‖ from ‖ calls_json)` over public fields only — with a
-//! UNIQUE constraint. Re-submitting the same operation returns the existing
-//! entry instead of broadcasting twice.
+//! `keccak256(chain_id ‖ from ‖ calls_json)` over public fields only. The
+//! journal only deduplicates operations that have not reached a terminal
+//! status (`Confirmed`, `Failed`, or `Dropped`). Re-submitting the same
+//! `(chain_id, from, calls)` while a `Draft` or `Broadcast` entry exists
+//! returns the existing entry; once an operation is terminal, a new
+//! identical send becomes a new operation.
 //!
 //! Threading: `rusqlite::Connection` is `Send` but not `Sync`, so it sits
 //! behind a `std::sync::Mutex`. Journal operations are sub-millisecond local
@@ -29,7 +32,55 @@ use super::{Call, Operation, OperationStatus, SubmissionPath};
 
 /// Current schema version, stored in `PRAGMA user_version` for future
 /// migrations.
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
+
+/// SQL to create the `operations` table (schema v2).
+const CREATE_OPERATIONS_TABLE_SQL: &str = "
+    CREATE TABLE IF NOT EXISTS operations (
+        id           TEXT PRIMARY KEY,
+        dedupe_key   TEXT NOT NULL,
+        chain_id     INTEGER NOT NULL,
+        from_address TEXT NOT NULL,
+        calls_json   TEXT NOT NULL,
+        path         TEXT NOT NULL,
+        status       TEXT NOT NULL,
+        tx_hash      TEXT,
+        block_number INTEGER,
+        error        TEXT,
+        created_at   INTEGER NOT NULL,
+        updated_at   INTEGER NOT NULL
+    );
+";
+
+/// Partial unique index enforcing at most one active (non-terminal) operation
+/// per `dedupe_key`. Terminal operations (`Confirmed`/`Failed`/`Dropped`)
+/// intentionally allow duplicates so a new identical send starts fresh.
+const ACTIVE_DEDUPE_INDEX_SQL: &str = "
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_operations_dedupe_active
+    ON operations(dedupe_key)
+    WHERE status NOT IN ('confirmed', 'failed', 'dropped');
+";
+
+/// Non-unique index so terminal-row lookups by `dedupe_key` do not scan the
+/// table (the partial unique index above only covers active rows).
+const DEDUPE_INDEX_SQL: &str = "
+    CREATE INDEX IF NOT EXISTS idx_operations_dedupe ON operations(dedupe_key);
+";
+
+/// Stable strings for terminal statuses used in the partial index and queries.
+/// Derived from [`OperationStatus::is_terminal`] so the two cannot drift.
+fn terminal_statuses() -> [&'static str; 3] {
+    let mut out = [""; 3];
+    let mut i = 0;
+    for status in OperationStatus::ALL {
+        if status.is_terminal() {
+            out[i] = status.as_str();
+            i += 1;
+        }
+    }
+    debug_assert_eq!(i, 3, "expected exactly three terminal statuses");
+    out
+}
 
 /// Errors from journal operations.
 #[derive(Debug, Error)]
@@ -100,10 +151,40 @@ impl Journal {
         // WAL: better concurrent read/write behaviour for the file-backed
         // journal. On an in-memory database this pragma is a no-op.
         conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS operations (
+
+        let version: u32 = conn
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(JournalError::Sqlite)?;
+        match version {
+            0 => Self::create_schema(&conn)?,
+            1 => Self::migrate_v1_to_v2(&conn)?,
+            SCHEMA_VERSION => {}
+            _ => {
+                return Err(JournalError::CorruptRow(format!(
+                    "unknown journal schema version {version}"
+                )));
+            }
+        }
+
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
+    }
+
+    fn create_schema(conn: &Connection) -> Result<(), JournalError> {
+        conn.execute_batch(&format!(
+            "{CREATE_OPERATIONS_TABLE_SQL}{ACTIVE_DEDUPE_INDEX_SQL}{DEDUPE_INDEX_SQL}"
+        ))?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+        Ok(())
+    }
+
+    fn migrate_v1_to_v2(conn: &Connection) -> Result<(), JournalError> {
+        conn.execute_batch(&format!(
+            "BEGIN;
+             CREATE TABLE operations_v2 (
                 id           TEXT PRIMARY KEY,
-                dedupe_key   TEXT NOT NULL UNIQUE,
+                dedupe_key   TEXT NOT NULL,
                 chain_id     INTEGER NOT NULL,
                 from_address TEXT NOT NULL,
                 calls_json   TEXT NOT NULL,
@@ -114,12 +195,19 @@ impl Journal {
                 error        TEXT,
                 created_at   INTEGER NOT NULL,
                 updated_at   INTEGER NOT NULL
-            );",
-        )?;
-        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-        Ok(Self {
-            conn: Mutex::new(conn),
-        })
+             );
+             INSERT INTO operations_v2
+                SELECT id, dedupe_key, chain_id, from_address, calls_json, path, status,
+                       tx_hash, block_number, error, created_at, updated_at
+                FROM operations;
+             DROP TABLE operations;
+             ALTER TABLE operations_v2 RENAME TO operations;
+             {ACTIVE_DEDUPE_INDEX_SQL}
+             {DEDUPE_INDEX_SQL}
+             PRAGMA user_version = 2;
+             COMMIT;"
+        ))?;
+        Ok(())
     }
 
     fn lock(&self) -> Result<MutexGuard<'_, Connection>, JournalError> {
@@ -128,9 +216,11 @@ impl Journal {
 
     /// Record a new operation in `Draft` status and return it.
     ///
-    /// Idempotent: if an operation with the same `(chain_id, from, calls)`
-    /// already exists, the existing entry is returned unchanged — no second
-    /// row, no second broadcast downstream.
+    /// Idempotent for non-terminal operations: if a `Draft` or `Broadcast`
+    /// operation with the same `(chain_id, from, calls)` already exists, the
+    /// existing entry is returned unchanged — no second row, no second
+    /// broadcast downstream. Once an operation is terminal (`Confirmed`,
+    /// `Failed`, or `Dropped`), a new identical operation is created instead.
     ///
     /// # Errors
     ///
@@ -149,6 +239,9 @@ impl Journal {
         let chain_id_i64 = to_i64(chain_id, "chain_id")?;
 
         let conn = self.lock()?;
+        // The partial unique index blocks this insert only while an active
+        // (non-terminal) row with the same dedupe_key exists. A terminal row
+        // leaves the insert free to create a fresh operation.
         conn.execute(
             "INSERT OR IGNORE INTO operations
                 (id, dedupe_key, chain_id, from_address, calls_json, path, status,
@@ -165,11 +258,17 @@ impl Journal {
                 now,
             ],
         )?;
-        // Either the row we just inserted or the pre-existing one (idempotent
-        // replay) — the UNIQUE(dedupe_key) constraint decides.
-        let op = Self::row_by_dedupe(&conn, &dedupe_key)?
-            .ok_or_else(|| JournalError::CorruptRow("inserted row missing".into()))?;
-        Ok(op)
+
+        if conn.changes() == 1 {
+            // A fresh row was inserted — return it by id to stay correct even if
+            // the system clock jumps backwards between insert and lookup.
+            Self::row_by_id(&conn, &id)?
+                .ok_or_else(|| JournalError::CorruptRow("freshly inserted row missing".into()))
+        } else {
+            // An active row with the same dedupe_key already exists — replay it.
+            Self::row_by_dedupe_active(&conn, &dedupe_key)?
+                .ok_or_else(|| JournalError::CorruptRow("active dedupe row missing".into()))
+        }
     }
 
     /// Fetch an operation by id.
@@ -183,6 +282,10 @@ impl Journal {
     }
 
     /// Fetch an operation by its dedupe key.
+    ///
+    /// Returns the active (non-terminal) operation with this key if one
+    /// exists; otherwise returns the most recent terminal operation. This
+    /// mirrors the semantics of [`Self::insert_draft`].
     ///
     /// # Errors
     ///
@@ -348,16 +451,50 @@ impl Journal {
         conn: &Connection,
         dedupe_key: &str,
     ) -> Result<Option<Operation>, JournalError> {
-        conn.query_row(
+        // Prefer the active (non-terminal) operation, if any; otherwise return
+        // the most recent terminal one. The partial unique index guarantees at
+        // most one active row per dedupe_key.
+        if let Some(op) = Self::row_by_dedupe_active(conn, dedupe_key)? {
+            return Ok(Some(op));
+        }
+        Self::row_by_dedupe_latest_terminal(conn, dedupe_key)
+    }
+
+    fn row_by_dedupe_active(
+        conn: &Connection,
+        dedupe_key: &str,
+    ) -> Result<Option<Operation>, JournalError> {
+        let terminal = terminal_statuses().join("', '");
+        let sql = format!(
             "SELECT id, dedupe_key, chain_id, from_address, calls_json, path, status,
                     tx_hash, block_number, error, created_at, updated_at
-             FROM operations WHERE dedupe_key = ?1",
-            params![dedupe_key],
-            row_to_raw,
-        )
-        .optional()?
-        .map(raw_to_operation)
-        .transpose()
+             FROM operations
+             WHERE dedupe_key = ?1 AND status NOT IN ('{terminal}')
+             LIMIT 1"
+        );
+        conn.query_row(&sql, params![dedupe_key], row_to_raw)
+            .optional()?
+            .map(raw_to_operation)
+            .transpose()
+    }
+
+    fn row_by_dedupe_latest_terminal(
+        conn: &Connection,
+        dedupe_key: &str,
+    ) -> Result<Option<Operation>, JournalError> {
+        let terminal = terminal_statuses().join("', '");
+        let sql = format!(
+            "SELECT id, dedupe_key, chain_id, from_address, calls_json, path, status,
+                    tx_hash, block_number, error, created_at, updated_at
+             FROM operations
+             WHERE dedupe_key = ?1 AND status IN ('{terminal}')
+             ORDER BY updated_at DESC, created_at DESC, rowid DESC
+             LIMIT 1"
+        );
+        conn.query_row(&sql, params![dedupe_key], row_to_raw)
+            .optional()?
+            .map(raw_to_operation)
+            .transpose()
     }
 }
 
@@ -515,6 +652,152 @@ mod tests {
 
         assert_eq!(first.id, second.id, "same operation must reuse the id");
         assert_eq!(journal.list_by_chain(1, 100).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn insert_after_broadcast_replays_same_operation() {
+        let journal = Journal::open_in_memory().unwrap();
+        let op = insert_one(&journal);
+        let hash = b256!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        journal.mark_broadcast(&op.id, hash).unwrap();
+
+        let replay = insert_one(&journal);
+
+        assert_eq!(op.id, replay.id, "broadcast operation must be replayed");
+        assert_eq!(replay.status, OperationStatus::Broadcast);
+        assert_eq!(replay.tx_hash, Some(hash));
+        assert_eq!(journal.list_by_chain(1, 100).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn insert_after_confirmed_creates_new_operation() {
+        let journal = Journal::open_in_memory().unwrap();
+        let op = insert_one(&journal);
+        let hash = b256!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        journal.mark_broadcast(&op.id, hash).unwrap();
+        journal.mark_confirmed(&op.id, 1).unwrap();
+
+        let replay = insert_one(&journal);
+
+        assert_ne!(
+            op.id, replay.id,
+            "replay after confirmed must create a new operation"
+        );
+        assert_eq!(replay.status, OperationStatus::Draft);
+        assert_eq!(journal.list_by_chain(1, 100).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn insert_after_failed_creates_new_operation() {
+        let journal = Journal::open_in_memory().unwrap();
+        let op = insert_one(&journal);
+        journal.mark_failed(&op.id, "rpc down").unwrap();
+
+        let replay = insert_one(&journal);
+
+        assert_ne!(
+            op.id, replay.id,
+            "replay after failed must create a new operation"
+        );
+        assert_eq!(replay.status, OperationStatus::Draft);
+        assert_eq!(journal.list_by_chain(1, 100).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn multiple_terminal_rows_return_latest_by_dedupe() {
+        let journal = Journal::open_in_memory().unwrap();
+        let first = insert_one(&journal);
+        let hash1 = b256!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        journal.mark_broadcast(&first.id, hash1).unwrap();
+        journal.mark_confirmed(&first.id, 1).unwrap();
+
+        // A new identical operation after the first one is terminal.
+        let second = journal
+            .insert_draft(1, from_addr(), &[sample_call()], SubmissionPath::DirectEoa)
+            .unwrap();
+        assert_ne!(first.id, second.id);
+        let hash2 = b256!("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+        journal.mark_broadcast(&second.id, hash2).unwrap();
+        journal.mark_confirmed(&second.id, 2).unwrap();
+
+        let calls_json = serde_json::to_string(&[sample_call()]).unwrap();
+        let dedupe = dedupe_key(1, from_addr(), &calls_json);
+        let fetched = journal.find_by_dedupe(&dedupe).unwrap().unwrap();
+        assert_eq!(
+            fetched.id, second.id,
+            "latest terminal row must be returned"
+        );
+        assert_eq!(fetched.tx_hash, Some(hash2));
+    }
+
+    #[test]
+    fn migration_from_v1_allows_terminal_replay() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal-v1.db");
+
+        // Manually create a v1 schema database with one confirmed operation.
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE operations (
+                    id           TEXT PRIMARY KEY,
+                    dedupe_key   TEXT NOT NULL UNIQUE,
+                    chain_id     INTEGER NOT NULL,
+                    from_address TEXT NOT NULL,
+                    calls_json   TEXT NOT NULL,
+                    path         TEXT NOT NULL,
+                    status       TEXT NOT NULL,
+                    tx_hash      TEXT,
+                    block_number INTEGER,
+                    error        TEXT,
+                    created_at   INTEGER NOT NULL,
+                    updated_at   INTEGER NOT NULL
+                );
+                PRAGMA user_version = 1;",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO operations
+                    (id, dedupe_key, chain_id, from_address, calls_json, path, status,
+                     tx_hash, block_number, error, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, NULL, ?10, ?10)",
+                params![
+                    "0xoldoperationid000000000000000000000000000000000000000000000000",
+                    "dedupe1",
+                    1i64,
+                    from_addr().to_string(),
+                    serde_json::to_string(&[sample_call()]).unwrap(),
+                    SubmissionPath::DirectEoa.as_str(),
+                    OperationStatus::Confirmed.as_str(),
+                    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    1i64,
+                    1000i64,
+                ],
+            )
+            .unwrap();
+        }
+
+        let journal = Journal::open(&path).unwrap();
+        let replay = journal
+            .insert_draft(1, from_addr(), &[sample_call()], SubmissionPath::DirectEoa)
+            .unwrap();
+
+        assert_ne!(
+            replay.id,
+            "0xoldoperationid000000000000000000000000000000000000000000000000"
+        );
+        assert_eq!(replay.status, OperationStatus::Draft);
+        assert_eq!(journal.list_by_chain(1, 100).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn terminal_statuses_derived_from_operation_status() {
+        let expected: Vec<_> = OperationStatus::ALL
+            .into_iter()
+            .filter(|s| s.is_terminal())
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(terminal_statuses().to_vec(), expected);
     }
 
     #[test]

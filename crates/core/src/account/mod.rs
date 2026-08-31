@@ -98,6 +98,15 @@ pub enum OperationStatus {
 }
 
 impl OperationStatus {
+    /// All statuses in their canonical order.
+    pub const ALL: [Self; 5] = [
+        Self::Draft,
+        Self::Broadcast,
+        Self::Confirmed,
+        Self::Failed,
+        Self::Dropped,
+    ];
+
     /// Stable string representation for database storage.
     pub const fn as_str(&self) -> &'static str {
         match self {
@@ -107,6 +116,14 @@ impl OperationStatus {
             Self::Failed => "failed",
             Self::Dropped => "dropped",
         }
+    }
+
+    /// Returns `true` for terminal statuses that end the operation lifecycle.
+    ///
+    /// A terminal operation no longer blocks a new identical operation in the
+    /// journal: the same `(chain_id, from, calls)` can start a fresh entry.
+    pub const fn is_terminal(&self) -> bool {
+        matches!(self, Self::Confirmed | Self::Failed | Self::Dropped)
     }
 
     /// Parse a stored [`Self::as_str`] value. Returns `None` on unknown input.
@@ -240,11 +257,13 @@ impl<'a> Executor<'a> {
 
     /// Record and broadcast an operation. Returns its journal entry.
     ///
-    /// Idempotent: a repeated call with the same `(chain_id, from, calls)`
-    /// returns the existing journal entry instead of broadcasting twice.
-    /// An entry already past `Draft` (broadcast/confirmed/failed) is returned
-    /// as-is — resubmitting a broadcast attempt whose outcome is unknown could
-    /// double-spend, so the caller must inspect the status instead.
+    /// Idempotent for non-terminal operations: a repeated call with the same
+    /// `(chain_id, from, calls)` while a matching `Draft` or `Broadcast`
+    /// operation exists returns that journal entry instead of broadcasting
+    /// twice. Once an operation is terminal (`Confirmed`, `Failed`, or
+    /// `Dropped`), a new identical call creates a new operation and a new
+    /// broadcast. Resubmitting a `Broadcast` entry whose outcome is unknown
+    /// still returns the existing entry; the caller must inspect the status.
     ///
     /// Path selection: a single call always goes `DirectEoa` (ADR-001 §8.2).
     /// A multi-call operation reads the on-chain delegation state first

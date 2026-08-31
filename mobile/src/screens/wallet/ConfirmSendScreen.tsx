@@ -267,11 +267,13 @@ function ConfirmSendScreen() {
       const op = await handle.executeOperation(chainId, [
         { to, valueWei: amountWei, data: '0x' },
       ]);
-      // Idempotent replay (same chain/from/calls after a failed attempt)
-      // returns the existing journal entry as-is — which can already be
-      // Failed. A failed operation must NEVER reach the success path:
-      // error toast only, stay on this screen (the finally re-enables
-      // the button for retry with changed inputs).
+      // Idempotent replay (same chain/from/calls) applies only to operations
+      // still in Draft or Broadcast. Terminal Confirmed/Failed/Dropped
+      // operations create a fresh journal entry, so `op.status === 'failed'`
+      // here means a previous in-flight Broadcast resolved to failed before
+      // this polling loop saw it. A failed operation must NEVER reach the
+      // success path: error toast only, stay on this screen (the finally
+      // re-enables the button for retry with changed inputs).
       if (op.status === 'failed') {
         toast.error(op.error ?? 'Transaction failed');
         return;
