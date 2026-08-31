@@ -18,7 +18,12 @@
 import React from 'react';
 import renderer, { act } from 'react-test-renderer';
 import { Linking } from 'react-native';
-import { ActionDto } from 'react-native-rustok-bridge';
+import {
+  ActionDto,
+  BindingsError,
+  RpcErrorKind,
+  SendErrorKind,
+} from 'react-native-rustok-bridge';
 import ConfirmSendScreen from '../ConfirmSendScreen';
 import { mount as sharedMount } from '../../../testing/mount';
 import { getWalletHandle } from '../../../lib/walletHandle';
@@ -155,6 +160,71 @@ describe('ConfirmSendScreen', () => {
     const tree = await mount();
     expect(() => findByA11y(tree, 'Preview error')).not.toThrow();
     expect(() => findByA11y(tree, 'Retry preview')).not.toThrow();
+  });
+
+  // Every string rendered inside the error container, joined. The Retry
+  // button label lands here too, which is fine — assertions below are
+  // `toContain` / `not.toContain`, never equality.
+  function errorText(tree: renderer.ReactTestRenderer): string {
+    return findByA11y(tree, 'Preview error')
+      .findAll((n) => typeof n.props.children === 'string')
+      .map((n) => String(n.props.children))
+      .join(' ');
+  }
+
+  // Regression: the uniffi runtime builds an error message as
+  // `${enumName}.${variantName}` and never appends the Rust Display string
+  // (uniffi-bindgen-react-native/typescript/src/errors.ts:26), so taking
+  // `e.message` verbatim put the literal "BindingsError.Send" on screen —
+  // observed on device 2026-08-31. The discriminating `kind` is carried in
+  // `inner.kind` and was being dropped.
+  it.each([
+    [SendErrorKind.Blocked, 'blocked'],
+    [SendErrorKind.Routing, 'balance'],
+    [SendErrorKind.Transaction, 'build'],
+  ])('renders a readable message for send error kind %s', async (kind, word) => {
+    mountWithBridge({
+      previewSend: jest
+        .fn()
+        .mockRejectedValue(new BindingsError.Send({ kind })),
+    });
+    const tree = await mount();
+    const text = errorText(tree);
+    expect(text).not.toContain('BindingsError');
+    expect(text.toLowerCase()).toContain(word);
+  });
+
+  it.each([
+    [RpcErrorKind.Connection, 'reach'],
+    [RpcErrorKind.GasEstimate, 'fee'],
+  ])('renders a readable message for rpc error kind %s', async (kind, word) => {
+    mountWithBridge({
+      previewSend: jest.fn().mockRejectedValue(new BindingsError.Rpc({ kind })),
+    });
+    const tree = await mount();
+    const text = errorText(tree);
+    expect(text).not.toContain('BindingsError');
+    expect(text.toLowerCase()).toContain(word);
+  });
+
+  it('names the failing kind so support can act on it', async () => {
+    mountWithBridge({
+      previewSend: jest
+        .fn()
+        .mockRejectedValue(
+          new BindingsError.Send({ kind: SendErrorKind.Routing }),
+        ),
+    });
+    const tree = await mount();
+    expect(errorText(tree)).toContain('send/routing');
+  });
+
+  it('keeps the message of a plain non-bridge error', async () => {
+    mountWithBridge({
+      previewSend: jest.fn().mockRejectedValue(new Error('rpc 503')),
+    });
+    const tree = await mount();
+    expect(errorText(tree)).toContain('rpc 503');
   });
 
   it('keeps Confirm disabled while preview is loading', async () => {

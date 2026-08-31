@@ -67,6 +67,24 @@ function App() {
       .catch(() => undefined);
   }, []);
 
+  // The Rust side keeps the selected chain in memory only, and
+  // `unlockWallet` drops it. The mount hydration above is the only other
+  // place that pushes the persisted chain back into Rust — and it runs
+  // before the PIN screen, so without this every unlock left Rust without
+  // a chain: `previewSend` failed with a routing error while the badge
+  // still read the chain the user had picked. Re-pushing on the phase
+  // transition covers every unlock path (PIN, biometric, onboarding) in
+  // one place rather than per-screen. `hydrate()` is idempotent, so the
+  // overlap with the mount call on an already-unlocked boot is harmless.
+  const phase = useWalletStore((s) => s.phase);
+  useEffect(() => {
+    if (phase !== 'unlocked') return;
+    useNetworkStore
+      .getState()
+      .hydrate()
+      .catch(() => undefined);
+  }, [phase]);
+
   // Phase 7: background auto-lock. Save timestamp on background only when
   // wallet is unlocked; check elapsed time on foreground and lock if past
   // the user-selected timeout.

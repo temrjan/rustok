@@ -68,6 +68,51 @@ export type VerdictDto = {
   description: string;
 };
 
+// Mirrors `enum SendErrorKind` / `enum RpcErrorKind` from the generated
+// bindings (`packages/.../src/generated/rustok_mobile_bindings.ts:2469`
+// and the RpcErrorKind block below it). Numeric enums, declaration order
+// matches `crates/rustok-mobile-bindings/src/error.rs:119` and `:133`.
+export enum SendErrorKind {
+  Blocked,
+  Routing,
+  Transaction,
+}
+
+export enum RpcErrorKind {
+  Connection,
+  GasEstimate,
+  Nonce,
+  Decode,
+}
+
+// Mirrors the generated `BindingsError` (`rustok_mobile_bindings.ts:1736`,
+// frozen object at `:2095`). Each variant is a class extending Error whose
+// payload lives in `inner` and whose message is built by the uniffi runtime
+// as `${enumName}.${variantName}` with no Rust Display string appended —
+// see `uniffi-bindgen-react-native/typescript/src/errors.ts:26`. Reproducing
+// that exact message matters: it is the string the screen used to render
+// verbatim, observed on device 2026-08-31.
+class SendError_ extends Error {
+  readonly inner: Readonly<{ kind: SendErrorKind }>;
+  constructor(inner: { kind: SendErrorKind }) {
+    super('BindingsError.Send');
+    this.inner = Object.freeze(inner);
+  }
+}
+
+class RpcError_ extends Error {
+  readonly inner: Readonly<{ kind: RpcErrorKind }>;
+  constructor(inner: { kind: RpcErrorKind }) {
+    super('BindingsError.Rpc');
+    this.inner = Object.freeze(inner);
+  }
+}
+
+export const BindingsError = Object.freeze({
+  Send: SendError_,
+  Rpc: RpcError_,
+});
+
 export class WalletHandle {
   // Mirrors the real signature `(dataDir: string)` — underscore prefix
   // marks the param as intentionally unused in the mock.

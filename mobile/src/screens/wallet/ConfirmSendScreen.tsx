@@ -71,7 +71,13 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useShallow } from 'zustand/react/shallow';
-import { ActionDto, type SendPreview } from 'react-native-rustok-bridge';
+import {
+  ActionDto,
+  BindingsError,
+  RpcErrorKind,
+  SendErrorKind,
+  type SendPreview,
+} from 'react-native-rustok-bridge';
 import { Button } from '../../components/Button';
 import { PageHeader } from '../../components/PageHeader';
 import { Spinner } from '../../components/Spinner';
@@ -100,6 +106,50 @@ type PreviewState =
 function isAbortError(e: unknown): boolean {
   if (!(e instanceof Error)) return false;
   return e.name === 'AbortError' || ('code' in e && e.code === 'ABORT_ERR');
+}
+
+/**
+ * Human text for a failed preview.
+ *
+ * The uniffi runtime builds an error message as `${enumName}.${variantName}`
+ * and never appends the Rust `Display` string — see
+ * `uniffi-bindgen-react-native/typescript/src/errors.ts:26`. So `e.message`
+ * on a bridge error is the literal `"BindingsError.Send"`, which is what the
+ * screen used to render (observed on device 2026-08-31). The variant that
+ * says what actually broke lives in `inner.kind`.
+ *
+ * The short marker in parentheses keeps that variant visible: during the
+ * 2026-08-31 smoke neither the user nor the engineer could tell a txguard
+ * block from an unroutable transfer, because the screen named neither.
+ */
+function previewErrorMessage(e: unknown): string {
+  if (isAbortError(e)) return 'Network too slow — pull to retry';
+
+  if (e instanceof BindingsError.Send) {
+    switch (e.inner.kind) {
+      case SendErrorKind.Blocked:
+        return 'TxGuard blocked this transaction. (send/blocked)';
+      case SendErrorKind.Routing:
+        return 'No network has enough balance to cover this amount and fee. (send/routing)';
+      case SendErrorKind.Transaction:
+        return 'Could not build the transaction. (send/transaction)';
+    }
+  }
+
+  if (e instanceof BindingsError.Rpc) {
+    switch (e.inner.kind) {
+      case RpcErrorKind.Connection:
+        return 'Could not reach the network. Check your connection and retry. (rpc/connection)';
+      case RpcErrorKind.GasEstimate:
+        return 'Could not estimate the network fee. (rpc/gas-estimate)';
+      case RpcErrorKind.Nonce:
+        return 'Could not read the account state. (rpc/nonce)';
+      case RpcErrorKind.Decode:
+        return 'The network returned a response we could not read. (rpc/decode)';
+    }
+  }
+
+  return e instanceof Error ? e.message : 'Could not load preview';
 }
 
 function truncateAddress(address: string): string {
@@ -184,12 +234,7 @@ function ConfirmSendScreen() {
       });
       setPreview({ status: 'ready', preview: result });
     } catch (e: unknown) {
-      const message = isAbortError(e)
-        ? 'Network too slow — pull to retry'
-        : e instanceof Error
-          ? e.message
-          : 'Could not load preview';
-      setPreview({ status: 'error', message });
+      setPreview({ status: 'error', message: previewErrorMessage(e) });
     } finally {
       clearTimeout(timeoutHandle);
     }
@@ -222,11 +267,13 @@ function ConfirmSendScreen() {
       const op = await handle.executeOperation(chainId, [
         { to, valueWei: amountWei, data: '0x' },
       ]);
-      // Idempotent replay (same chain/from/calls after a failed attempt)
-      // returns the existing journal entry as-is — which can already be
-      // Failed. A failed operation must NEVER reach the success path:
-      // error toast only, stay on this screen (the finally re-enables
-      // the button for retry with changed inputs).
+      // Idempotent replay (same chain/from/calls) applies only to operations
+      // still in Draft or Broadcast. Terminal Confirmed/Failed/Dropped
+      // operations create a fresh journal entry, so `op.status === 'failed'`
+      // here means a previous in-flight Broadcast resolved to failed before
+      // this polling loop saw it. A failed operation must NEVER reach the
+      // success path: error toast only, stay on this screen (the finally
+      // re-enables the button for retry with changed inputs).
       if (op.status === 'failed') {
         toast.error(op.error ?? 'Transaction failed');
         return;
