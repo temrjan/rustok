@@ -111,7 +111,9 @@ describe('DelegationConsentScreen', () => {
   });
 
   it('confirm tap authorizes, polls to ours, toasts success and goes back', async () => {
-    jest.useFakeTimers({ doNotFake: ['Date'] });
+    jest.useFakeTimers({
+      doNotFake: ['Date', 'setImmediate', 'queueMicrotask', 'nextTick'],
+    });
     try {
       const { authorizeDelegation, getDelegationStatus } = mountWithBridge({});
       const tree = await mount();
@@ -170,7 +172,9 @@ describe('DelegationConsentScreen', () => {
   });
 
   it('double-tap on confirm issues a single authorization', async () => {
-    jest.useFakeTimers({ doNotFake: ['Date'] });
+    jest.useFakeTimers({
+      doNotFake: ['Date', 'setImmediate', 'queueMicrotask', 'nextTick'],
+    });
     try {
       // authorize never resolves within the test — the second tap must be
       // a no-op while the first is in flight.

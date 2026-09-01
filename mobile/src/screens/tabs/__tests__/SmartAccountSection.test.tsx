@@ -199,7 +199,9 @@ describe('SmartAccountSection', () => {
       authorizeDelegation: jest.fn(),
     } as unknown as ReturnType<typeof getWalletHandle>);
 
-    jest.useFakeTimers({ doNotFake: ['Date'] });
+    jest.useFakeTimers({
+      doNotFake: ['Date', 'setImmediate', 'queueMicrotask', 'nextTick'],
+    });
     try {
       await act(async () => {
         confirm?.onPress?.();

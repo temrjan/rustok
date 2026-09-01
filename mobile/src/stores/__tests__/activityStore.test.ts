@@ -290,7 +290,9 @@ describe('activityStore', () => {
   });
 
   it('fetch() RPC_TIMEOUT_MS (12s) → error "Network too slow"', async () => {
-    jest.useFakeTimers({ doNotFake: ['Date'] });
+    jest.useFakeTimers({
+      doNotFake: ['Date', 'setImmediate', 'queueMicrotask', 'nextTick'],
+    });
     try {
       mockNetworkChainId.mockReturnValue(11155111n);
       mockHandle.getTransactionHistory.mockImplementation(

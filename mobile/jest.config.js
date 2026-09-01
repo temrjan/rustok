@@ -11,17 +11,33 @@ module.exports = {
   // and JS-only fallbacks load instead. Required since Reanimated 4 mock
   // transitively imports worklets at module load.
   resolver: 'react-native-worklets/jest/resolver',
-  // Jest's default budget is 5 s of REAL time, and here it is not the test
-  // body that spends it: 13 of 321 tests run longer than 5 s (slowest measured
-  // 20.4 s) while loading and transforming the React Native module graph —
-  // their own bodies take 3-166 ms (measured across the file that failed CI,
-  // where every test passes in isolation). On a cold cache the
-  // budget therefore expires before a test starts asserting, and one such
-  // timeout is what turned CI red on 2026-09-01 without a single broken
-  // assertion. 60 s keeps the guard meaningful: the whole 51-file suite runs
-  // in ~34 s on CI, so a single test past 60 s is a hang, not slow work.
-  // The job's own `timeout-minutes: 35` remains the outer bound.
+  // Jest's default budget is 5 s of REAL time, and the test bodies are not
+  // what spends it: several suites need 5-20 s to load and transform the React
+  // Native module graph, while their own bodies take 3-166 ms.
+  //
+  // This budget is NOT what made CI red on 2026-09-01 — that was a hang, fixed
+  // by the `fakeTimers` entry below, and no budget would have helped. What this
+  // guards is the developer machine: a full parallel run there (one worker per
+  // core, all competing for RAM) fails a dozen tests on the 5 s default, none
+  // of them for a broken assertion. CI runs a single worker and stays well
+  // inside it — the whole 51-file suite takes ~32 s there.
+  //
+  // 60 s keeps the guard meaningful: a single test past 60 s is a hang, not
+  // slow work. The job's own `timeout-minutes: 35` remains the outer bound.
   testTimeout: 60000,
+  // React schedules the continuation of a render through setImmediate and the
+  // microtask queue. Faking those freezes the very loop that
+  // `await act(async () => renderer.create(<App />))` is waiting on, and the
+  // test then hangs for as long as it is allowed to — no timeout budget helps,
+  // because nothing is slow: the wait never ends. Reproduced under Node 20 and
+  // 22 (the CI runtime), where it hung a test that passes in 8 ms under
+  // Node 24; why the runtimes differ is not established.
+  //
+  // NOTE: a `jest.useFakeTimers({ ... })` call that passes its own object
+  // REPLACES this list rather than extending it. The four such call sites
+  // (DelegationConsentScreen x2, SmartAccountSection, activityStore) repeat
+  // these three entries next to their own `'Date'` for that reason.
+  fakeTimers: { doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] },
   moduleNameMapper: {
     '\\.css$': '<rootDir>/__mocks__/styleMock.js',
   },
