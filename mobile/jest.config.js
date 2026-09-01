@@ -11,6 +11,20 @@ module.exports = {
   // and JS-only fallbacks load instead. Required since Reanimated 4 mock
   // transitively imports worklets at module load.
   resolver: 'react-native-worklets/jest/resolver',
+  // Jest's default budget is 5 s of REAL time, and the test bodies are not
+  // what spends it: several suites need 5-20 s to load and transform the React
+  // Native module graph, while their own bodies take 3-166 ms.
+  //
+  // This budget is NOT what made CI red on 2026-09-01 — that was a hang, fixed
+  // by the `fakeTimers` entry below, and no budget would have helped. What this
+  // guards is the developer machine: a full parallel run there (one worker per
+  // core, all competing for RAM) fails a dozen tests on the 5 s default, none
+  // of them for a broken assertion. CI runs a single worker and stays well
+  // inside it — the whole 51-file suite takes ~32 s there.
+  //
+  // 60 s keeps the guard meaningful: a single test past 60 s is a hang, not
+  // slow work. The job's own `timeout-minutes: 35` remains the outer bound.
+  testTimeout: 60000,
   // React schedules the continuation of a render through setImmediate and the
   // microtask queue. Faking those freezes the very loop that
   // `await act(async () => renderer.create(<App />))` is waiting on, and the
