@@ -11,6 +11,17 @@ module.exports = {
   // and JS-only fallbacks load instead. Required since Reanimated 4 mock
   // transitively imports worklets at module load.
   resolver: 'react-native-worklets/jest/resolver',
+  // Jest's default budget is 5 s of REAL time, and here it is not the test
+  // body that spends it: 13 of 321 tests run longer than 5 s (slowest measured
+  // 20.4 s) while loading and transforming the React Native module graph —
+  // their own bodies take 3-166 ms (measured across the file that failed CI,
+  // where every test passes in isolation). On a cold cache the
+  // budget therefore expires before a test starts asserting, and one such
+  // timeout is what turned CI red on 2026-09-01 without a single broken
+  // assertion. 60 s keeps the guard meaningful: the whole 51-file suite runs
+  // in ~34 s on CI, so a single test past 60 s is a hang, not slow work.
+  // The job's own `timeout-minutes: 35` remains the outer bound.
+  testTimeout: 60000,
   moduleNameMapper: {
     '\\.css$': '<rootDir>/__mocks__/styleMock.js',
   },
