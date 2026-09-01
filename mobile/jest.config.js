@@ -11,6 +11,19 @@ module.exports = {
   // and JS-only fallbacks load instead. Required since Reanimated 4 mock
   // transitively imports worklets at module load.
   resolver: 'react-native-worklets/jest/resolver',
+  // React schedules the continuation of a render through setImmediate and the
+  // microtask queue. Faking those freezes the very loop that
+  // `await act(async () => renderer.create(<App />))` is waiting on, and the
+  // test then hangs for as long as it is allowed to — no timeout budget helps,
+  // because nothing is slow: the wait never ends. Reproduced under Node 20 and
+  // 22 (the CI runtime), where it hung a test that passes in 8 ms under
+  // Node 24; why the runtimes differ is not established.
+  //
+  // NOTE: a `jest.useFakeTimers({ ... })` call that passes its own object
+  // REPLACES this list rather than extending it. The four such call sites
+  // (DelegationConsentScreen x2, SmartAccountSection, activityStore) repeat
+  // these three entries next to their own `'Date'` for that reason.
+  fakeTimers: { doNotFake: ['setImmediate', 'queueMicrotask', 'nextTick'] },
   moduleNameMapper: {
     '\\.css$': '<rootDir>/__mocks__/styleMock.js',
   },
