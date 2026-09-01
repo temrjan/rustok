@@ -30,6 +30,12 @@ jest.mock('../../../lib/pinHash', () => ({
 }));
 
 const mockRetrieveUnlockSecret = jest.fn();
+/**
+ * Finding #11: the PIN path now goes through `unlockSecretViaPin`, which
+ * reads the PIN-sealed record and shows NO system dialog. The biometric path
+ * still uses `retrieveUnlockSecret` — that record IS the biometric factor.
+ */
+const mockUnlockSecretViaPin = jest.fn();
 jest.mock('../../../lib/unlockSecret', () => {
   // Parameter properties (`constructor(readonly x: string)`) trip Babel
   // под `erasableSyntaxOnly` — declare fields explicitly + assign в body.
@@ -55,6 +61,8 @@ jest.mock('../../../lib/unlockSecret', () => {
   return {
     retrieveUnlockSecret: (...args: unknown[]) =>
       mockRetrieveUnlockSecret(...args),
+    unlockSecretViaPin: (...args: unknown[]) =>
+      mockUnlockSecretViaPin(...args),
     UnlockSecretException: MockUnlockSecretException,
   };
 });
@@ -99,11 +107,17 @@ jest.mock('../../../stores/pinAttemptsStore', () => ({
 }));
 
 let mockPinHash: string | null = '$argon2id$v=19$m=65536,t=3,p=4$YWJj$ZGVm';
+/** Biometric consent (finding #11). `null` = never asked — do not auto-start. */
+let mockBiometricOptIn: boolean | null = null;
 jest.mock('../../../stores/pinSetupStore', () => ({
   usePinSetupStore: Object.assign(
-    (selector: (s: unknown) => unknown) => selector({ pinHash: mockPinHash }),
+    (selector: (s: unknown) => unknown) =>
+      selector({ pinHash: mockPinHash, biometricOptIn: mockBiometricOptIn }),
     {
-      getState: () => ({ pinHash: mockPinHash }),
+      getState: () => ({
+        pinHash: mockPinHash,
+        biometricOptIn: mockBiometricOptIn,
+      }),
     },
   ),
 }));
@@ -198,6 +212,7 @@ describe('UnlockPinScreen', () => {
     mockLockoutUntil = null;
     mockPinHash = '$argon2id$v=19$m=65536,t=3,p=4$YWJj$ZGVm';
     mockRetrieveUnlockSecret.mockResolvedValue(SECRET_HEX);
+    mockUnlockSecretViaPin.mockResolvedValue(SECRET_HEX);
     mockUnlockWallet.mockResolvedValue(undefined);
     mockLockWallet.mockResolvedValue(undefined);
     mockRefresh.mockResolvedValue(undefined);
@@ -245,7 +260,11 @@ describe('UnlockPinScreen', () => {
       await drain();
     });
     expect(mockResetAttempts).toHaveBeenCalledTimes(1);
-    expect(mockRetrieveUnlockSecret).toHaveBeenCalledTimes(1);
+    expect(mockUnlockSecretViaPin).toHaveBeenCalledTimes(1);
+    // The whole point of finding #11: a correct PIN must not touch the
+    // biometric record, because touching it is what raised the second,
+    // system-level dialog.
+    expect(mockRetrieveUnlockSecret).not.toHaveBeenCalled();
     expect(mockUnlockWallet).toHaveBeenCalledTimes(1);
     expect(mockRefresh).toHaveBeenCalledTimes(1);
     // Match path must NOT flash PinDots error.
@@ -262,7 +281,7 @@ describe('UnlockPinScreen', () => {
 
     // Ordering: invocationCallOrder — monotonic global counter per jest.
     const orderReset = mockResetAttempts.mock.invocationCallOrder[0];
-    const orderRetrieve = mockRetrieveUnlockSecret.mock.invocationCallOrder[0];
+    const orderRetrieve = mockUnlockSecretViaPin.mock.invocationCallOrder[0];
     const orderUnlock = mockUnlockWallet.mock.invocationCallOrder[0];
     const orderRefresh = mockRefresh.mock.invocationCallOrder[0];
     expect(orderReset).toBeDefined();
@@ -276,7 +295,7 @@ describe('UnlockPinScreen', () => {
 
   it('KeyPermanentlyInvalidated → Recovery banner с accessibilityRole="alert" rendered', async () => {
     mockVerifyPin.mockResolvedValue(true);
-    mockRetrieveUnlockSecret.mockRejectedValue(
+    mockUnlockSecretViaPin.mockRejectedValue(
       new MockedException(
         'crypto_failed',
         'E_CRYPTO_FAILED',
@@ -324,6 +343,60 @@ describe('UnlockPinScreen', () => {
     // NativeWind css-interop may wrap, yielding duplicate matches; just
     // assert at least one host node rendered the countdown text.
     expect(countdownMatches.length).toBeGreaterThan(0);
+  });
+
+  describe('biometric auto-start (finding #11)', () => {
+    afterEach(() => {
+      mockBiometricOptIn = null;
+    });
+
+    it('starts biometry on mount when the owner opted in', async () => {
+      mockBiometricOptIn = true;
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue(Keychain.BIOMETRY_TYPE.FINGERPRINT);
+      mockRetrieveUnlockSecret.mockResolvedValue(SECRET_HEX);
+      await act(async () => {
+        renderer.create(<UnlockPinScreen />);
+        await flush();
+      });
+      expect(mockRetrieveUnlockSecret).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT start biometry when consent was never given', async () => {
+      mockBiometricOptIn = null;
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue(Keychain.BIOMETRY_TYPE.FINGERPRINT);
+      await act(async () => {
+        renderer.create(<UnlockPinScreen />);
+        await flush();
+      });
+      expect(mockRetrieveUnlockSecret).not.toHaveBeenCalled();
+    });
+
+    it('does NOT start biometry when the owner declined', async () => {
+      mockBiometricOptIn = false;
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue(Keychain.BIOMETRY_TYPE.FINGERPRINT);
+      await act(async () => {
+        renderer.create(<UnlockPinScreen />);
+        await flush();
+      });
+      expect(mockRetrieveUnlockSecret).not.toHaveBeenCalled();
+    });
+
+    it('does NOT start biometry when the device has none', async () => {
+      mockBiometricOptIn = true;
+      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue(null);
+      await act(async () => {
+        renderer.create(<UnlockPinScreen />);
+        await flush();
+      });
+      expect(mockRetrieveUnlockSecret).not.toHaveBeenCalled();
+    });
+
   });
 
   describe('biometric CTA', () => {

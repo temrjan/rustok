@@ -25,6 +25,8 @@
 
 import { Platform } from 'react-native';
 import * as Keychain from 'react-native-keychain';
+import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
+import { deriveKek, generateKekSaltHex } from './pinKek';
 
 /** Stable service identifier — DO NOT change without a migration plan. */
 const SERVICE = 'com.rustok.unlock';
@@ -167,7 +169,13 @@ function mapKeychainError(e: unknown): UnlockSecretException {
   return new UnlockSecretException(androidCodeToKind(code), code, message, e);
 }
 
-function generateSecretHex(): string {
+/**
+ * Random bytes from the platform CSPRNG, refusing to proceed if the F-C2
+ * polyfill is missing. Every caller here produces key material — a silent
+ * fallback to a weak source would be worse than a crash, so the check is
+ * mandatory rather than defensive.
+ */
+function randomBytes(count: number): Uint8Array {
   type CryptoLike = { getRandomValues?: (b: Uint8Array) => Uint8Array };
   const cryptoObj = (globalThis as { crypto?: CryptoLike }).crypto;
   const fn = cryptoObj?.getRandomValues;
@@ -179,9 +187,15 @@ function generateSecretHex(): string {
       undefined,
     );
   }
-  const buf = new Uint8Array(SECRET_BYTES);
+  const buf = new Uint8Array(count);
   fn.call(cryptoObj, buf);
-  return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+  return buf;
+}
+
+function generateSecretHex(): string {
+  return Array.from(randomBytes(SECRET_BYTES), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
 }
 
 /**
@@ -306,4 +320,243 @@ export async function hasUnlockSecret(): Promise<boolean> {
   return Keychain.hasGenericPassword(HAS_OPTIONS).catch((e: unknown): never => {
     throw mapKeychainError(e);
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * PIN record — finding #11
+ *
+ * A second copy of the same secret, sealed with a key derived from the PIN
+ * (see `pinKek.ts`). It lives under its OWN service so that the biometric
+ * record above stays untouched: the two paths never need each other's
+ * factor, and a failed migration always leaves the old path working.
+ *
+ * No `accessControl` here — that is the whole point: a correct PIN must
+ * open the wallet without a second, system-level dialog. What replaces the
+ * system lock is the seal itself: without the PIN the ciphertext is inert.
+ * ------------------------------------------------------------------ */
+
+/** Own service — the biometric record keeps `SERVICE` untouched. */
+const PIN_SERVICE = 'com.rustok.unlock.pin';
+
+const PIN_USERNAME = 'rustok-unlock-pin-user';
+
+/**
+ * `WHEN_UNLOCKED_THIS_DEVICE_ONLY`: readable only while the screen is
+ * unlocked, and never leaves the device (no cloud backup, no transfer to a
+ * new phone — recovery there is the mnemonic, as it already is today).
+ *
+ * NOT `WHEN_PASSCODE_SET_THIS_DEVICE_ONLY` (which the biometric record uses):
+ * that one requires a device passcode to be set, and would break the
+ * ratified "PIN alone is enough" path on devices without one.
+ */
+const PIN_SET_OPTIONS = {
+  service: PIN_SERVICE,
+  accessible: Keychain.ACCESSIBLE.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+} as const;
+
+const PIN_GET_OPTIONS = { service: PIN_SERVICE } as const;
+const PIN_HAS_OPTIONS = { service: PIN_SERVICE } as const;
+const PIN_RESET_OPTIONS = { service: PIN_SERVICE } as const;
+
+/** XChaCha20-Poly1305 nonce size. */
+const NONCE_BYTES = 24;
+
+/**
+ * Record layout: `v1.<saltHex>.<nonceHex>.<sealedHex>`.
+ *
+ * The version prefix exists so a future parameter change does not have to
+ * guess how an existing record was produced.
+ */
+const RECORD_VERSION = 'v1';
+
+function toHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function fromHex(hex: string): Uint8Array {
+  // Reject malformed input rather than letting `parseInt` turn it into NaN →
+  // 0 bytes: a record silently reinterpreted as zeros is harder to diagnose
+  // than an explicit failure, and this parses data read back from storage.
+  if (hex.length % 2 !== 0 || !/^[0-9a-f]*$/.test(hex)) {
+    throw new UnlockSecretException(
+      'unknown',
+      undefined,
+      'pin record: malformed hex segment',
+      undefined,
+    );
+  }
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i += 1) {
+    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+/**
+ * Seal the secret with a key derived from `pin`. Returns the record string
+ * to persist. A fresh salt and nonce are generated per call.
+ */
+export async function sealSecretWithPin(
+  secretHex: string,
+  pin: string,
+): Promise<string> {
+  const saltHex = generateKekSaltHex();
+  const key = await deriveKek(pin, saltHex);
+  // Same guarded source as the secret itself: a nonce from a weak RNG would
+  // silently undermine the seal, and XChaCha's safety rests on it being unique.
+  const nonce = randomBytes(NONCE_BYTES);
+  const sealed = xchacha20poly1305(key, nonce).encrypt(
+    new TextEncoder().encode(secretHex),
+  );
+  return `${RECORD_VERSION}.${saltHex}.${toHex(nonce)}.${toHex(sealed)}`;
+}
+
+/**
+ * Open a record produced by {@link sealSecretWithPin}.
+ *
+ * A wrong PIN fails the Poly1305 tag and throws — the caller treats that as
+ * "wrong PIN", not as a corrupted wallet. Tampering with the ciphertext
+ * fails the same way, which is exactly why an AEAD was chosen over a
+ * non-authenticated cipher: a forged record is rejected instead of
+ * decrypting into garbage.
+ */
+export async function openSecretWithPin(
+  record: string,
+  pin: string,
+): Promise<string> {
+  const parts = record.split('.');
+  if (parts.length !== 4 || parts[0] !== RECORD_VERSION) {
+    throw new UnlockSecretException(
+      'unknown',
+      undefined,
+      'pin record: unrecognised layout',
+      undefined,
+    );
+  }
+  const [, saltHex, nonceHex, sealedHex] = parts as [
+    string,
+    string,
+    string,
+    string,
+  ];
+  const key = await deriveKek(pin, saltHex);
+  const opened = xchacha20poly1305(key, fromHex(nonceHex)).decrypt(
+    fromHex(sealedHex),
+  );
+  return new TextDecoder().decode(opened);
+}
+
+/** Persist a sealed record for `secretHex` under the PIN service. */
+export async function storePinRecord(
+  secretHex: string,
+  pin: string,
+): Promise<void> {
+  const record = await sealSecretWithPin(secretHex, pin);
+  await Keychain.setGenericPassword(PIN_USERNAME, record, PIN_SET_OPTIONS).catch(
+    (e: unknown): never => {
+      throw mapKeychainError(e);
+    },
+  );
+}
+
+/** True when a PIN record exists — i.e. migration has already run. */
+export async function hasPinRecord(): Promise<boolean> {
+  return Keychain.hasGenericPassword(PIN_HAS_OPTIONS).catch(
+    (e: unknown): never => {
+      throw mapKeychainError(e);
+    },
+  );
+}
+
+/** Remove the PIN record. Used to roll back a migration that failed its check. */
+export async function wipePinRecord(): Promise<void> {
+  await Keychain.resetGenericPassword(PIN_RESET_OPTIONS).catch(
+    (e: unknown): never => {
+      throw mapKeychainError(e);
+    },
+  );
+}
+
+/**
+ * Read the secret via the PIN path — no system dialog on this path.
+ *
+ * Throws when no record exists (caller should fall back to the legacy path)
+ * or when the PIN is wrong (tag mismatch).
+ */
+export async function retrieveSecretWithPin(pin: string): Promise<string> {
+  const result = await Keychain.getGenericPassword(PIN_GET_OPTIONS).catch(
+    (e: unknown): never => {
+      throw mapKeychainError(e);
+    },
+  );
+  if (result === false) {
+    throw new UnlockSecretException(
+      'unknown',
+      undefined,
+      'no pin record stored',
+      undefined,
+    );
+  }
+  const secretHex = await openSecretWithPin(result.password, pin);
+  // Same trust-boundary check as the legacy path: never hand a malformed
+  // password to the Rust crypto APIs.
+  if (secretHex.length !== SECRET_BYTES * 2 || !/^[0-9a-f]+$/.test(secretHex)) {
+    throw new UnlockSecretException(
+      'unknown',
+      undefined,
+      `pin record opened to an unexpected shape (length=${secretHex.length})`,
+      undefined,
+    );
+  }
+  return secretHex;
+}
+
+/**
+ * One-way migration: legacy record → PIN record.
+ *
+ * Order is deliberate — read, write, VERIFY, only then report success:
+ *
+ *   1. read the legacy secret (this is the one and only system prompt left;
+ *      the old record cannot be opened any other way),
+ *   2. seal it under the PIN and store it beside the old one,
+ *   3. read the new record back and compare it to the original,
+ *   4. on mismatch, delete the new record and stay on the legacy path.
+ *
+ * The legacy record is never touched, so an interruption at any step leaves
+ * a working wallet: the next unlock simply tries again. Callers must treat a
+ * `false` return as "not migrated yet", never as an error worth blocking on.
+ */
+/**
+ * The PIN unlock path — this is what finding #11 exists to fix.
+ *
+ * Once a PIN record exists, the secret comes from it and **no system dialog
+ * appears**: the PIN itself is the factor. Before that (first unlock after
+ * the update) it falls back to the legacy record — which does prompt, once —
+ * and migrates in the same breath.
+ *
+ * Migration failure is deliberately swallowed: the caller already holds the
+ * secret and the wallet must open. A failed migration means "try again next
+ * unlock", not "refuse to let the owner in".
+ */
+export async function unlockSecretViaPin(pin: string): Promise<string> {
+  if (await hasPinRecord()) {
+    return retrieveSecretWithPin(pin);
+  }
+  const legacySecret = await retrieveUnlockSecret();
+  await migrateToPinRecord(pin).catch(() => false);
+  return legacySecret;
+}
+
+export async function migrateToPinRecord(pin: string): Promise<boolean> {
+  const legacySecret = await retrieveUnlockSecret();
+  await storePinRecord(legacySecret, pin);
+  const roundTripped = await retrieveSecretWithPin(pin).catch(
+    () => undefined,
+  );
+  if (roundTripped !== legacySecret) {
+    // Leave nothing half-built behind: the legacy path is still intact.
+    await wipePinRecord().catch(() => undefined);
+    return false;
+  }
+  return true;
 }

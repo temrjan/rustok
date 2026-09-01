@@ -67,7 +67,10 @@ import { PinPad } from '../../components/PinPad';
 import { PinDots, PASSCODE_LENGTH } from '../../components/PinDots';
 import { verifyPin } from '../../lib/pinHash';
 import {
+  // Biometric path keeps the legacy record — that record IS the biometric
+  // factor, and finding #11 deliberately leaves it untouched.
   retrieveUnlockSecret,
+  unlockSecretViaPin,
   UnlockSecretException,
 } from '../../lib/unlockSecret';
 import { getWalletHandle } from '../../lib/walletHandle';
@@ -115,6 +118,7 @@ function UnlockPinScreen() {
   const pinHash = usePinSetupStore((s) => s.pinHash);
   const lockoutUntil = usePinAttemptsStore((s) => s.lockoutUntil);
   const forcePhase = useWalletStore((s) => s._qaForcePhase);
+  const biometricOptIn = usePinSetupStore((s) => s.biometricOptIn);
 
   const [digits, setDigits] = useState('');
   const [showError, setShowError] = useState(false);
@@ -128,6 +132,8 @@ function UnlockPinScreen() {
   // Defends against React strict-mode double-fire and re-render races —
   // once а verify cycle is in-flight для these digits we never re-enter.
   const verifyInFlight = useRef(false);
+  /** Guards the once-per-lock-cycle biometric auto-start — see the effect below. */
+  const autoPromptFired = useRef(false);
 
   // Detect available biometric type on mount (skip on simulator where
   // biometry is unavailable).
@@ -136,6 +142,30 @@ function UnlockPinScreen() {
       .then((type) => setBiometryType(type))
       .catch(() => setBiometryType(null));
   }, []);
+
+  /**
+   * Auto-start biometry once per lock cycle (finding #11).
+   *
+   * The screen mounts on every transition into `locked`, so "once per mount"
+   * IS "once per lock cycle". A cancelled prompt does NOT re-arm: the effect
+   * depends only on `[biometryType, biometricOptIn]`, neither of which a
+   * cancellation changes, so nothing re-runs and the PIN pad stays reachable.
+   * The owner then types the PIN or taps the button.
+   *
+   * The ref guards the remaining case the dependency list cannot: React's
+   * double-invocation of effects under StrictMode. That path is NOT covered
+   * by a test — it does not reproduce under the jest renderer, and a test
+   * asserting it would pass with the guard removed (verified by mutation),
+   * which would make it a decoration rather than a check.
+   */
+  useEffect(() => {
+    if (autoPromptFired.current) return;
+    if (biometryType === null) return;
+    if (biometricOptIn !== true) return;
+    autoPromptFired.current = true;
+    handleBiometricUnlock().catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleBiometricUnlock lives in the component closure; including it would re-run this effect on every render, which is exactly the re-prompt loop the ref guards against.
+  }, [biometryType, biometricOptIn]);
 
   // Cleanup all timers on unmount.
   useEffect(() => {
@@ -190,7 +220,7 @@ function UnlockPinScreen() {
       try {
         const match = await verifyPin(pinHash, digits);
         if (cancelled) return;
-        await handleVerifyResult(match);
+        await handleVerifyResult(match, digits);
       } catch {
         if (cancelled) return;
         cleanupSpinner();
@@ -216,7 +246,10 @@ function UnlockPinScreen() {
     setIsVerifying(false);
   }
 
-  async function handleVerifyResult(match: boolean): Promise<void> {
+  async function handleVerifyResult(
+    match: boolean,
+    enteredPin: string,
+  ): Promise<void> {
     cleanupSpinner();
     if (!match) {
       // PinDots's `error` prop drives BOTH the red-color flash AND the
@@ -235,7 +268,7 @@ function UnlockPinScreen() {
     // and the rate-limit should not punish them on the next attempt.
     usePinAttemptsStore.getState().resetAttempts();
     try {
-      const secret = await retrieveUnlockSecret();
+      const secret = await unlockSecretViaPin(enteredPin);
       await getWalletHandle().unlockWallet(secret);
       await useWalletStore.getState().refresh();
       // RootNavigator now switches phase='unlocked' → Tabs. Component

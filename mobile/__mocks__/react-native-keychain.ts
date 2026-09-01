@@ -72,18 +72,39 @@ interface QueuedError {
 }
 
 const store = new Map<string, { username: string; password: string }>();
+
+/** Last options seen by `setGenericPassword`, per service — see `__getLastSetOptions`. */
+const lastSetOptions = new Map<string, Record<string, unknown>>();
 const getCallCounter = new Map<string, number>();
 const errorQueue: QueuedError[] = [];
 let nextSetReturnFalse = false;
+
+/** Calls to let through before the error queue applies — see `__skipCallsBeforeError`. */
+let skipCallsBeforeError = 0;
 
 function svc(options: ServiceOptions | undefined): string {
   return options?.service ?? DEFAULT_SERVICE;
 }
 
 function maybeThrowQueuedError(): void {
+  if (skipCallsBeforeError > 0) {
+    skipCallsBeforeError -= 1;
+    return;
+  }
   const wrapped = errorQueue.shift();
   if (wrapped === undefined) return;
   throw wrapped.value;
+}
+
+/**
+ * Let the next `count` calls through untouched, then start honouring the
+ * error queue. Needed to target a specific step inside a multi-call flow —
+ * e.g. failing only the verification read of a migration, while its earlier
+ * read and write succeed. Without it such a failure branch is unreachable
+ * from tests.
+ */
+export function __skipCallsBeforeError(count: number): void {
+  skipCallsBeforeError = count;
 }
 
 function bumpGetCallCounter(service: string): void {
@@ -103,6 +124,10 @@ export const SECURITY_LEVEL = {
 
 export const ACCESSIBLE = {
   WHEN_PASSCODE_SET_THIS_DEVICE_ONLY: 'AccessibleWhenPasscodeSetThisDeviceOnly',
+  // Used by the PIN record (finding #11): readable while the screen is
+  // unlocked, never leaves the device. Values mirror the real enum so a test
+  // asserting on the stored option catches a wrong constant.
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'AccessibleWhenUnlockedThisDeviceOnly',
 } as const;
 
 export const BIOMETRY_TYPE = {
@@ -125,7 +150,18 @@ export async function setGenericPassword(
   }
   const service = svc(options);
   store.set(service, { username, password });
+  // Record the options verbatim so tests can assert on what was requested —
+  // in particular the ABSENCE of `accessControl` on the PIN record, which is
+  // the difference between "no system dialog" and the bug we are fixing.
+  lastSetOptions.set(service, { ...(options ?? {}) } as Record<string, unknown>);
   return { service, username, password, storage: 'mock' };
+}
+
+/** Options passed to the most recent `setGenericPassword` for `service`. */
+export function __getLastSetOptions(
+  service: string,
+): Record<string, unknown> | undefined {
+  return lastSetOptions.get(service);
 }
 
 export async function getGenericPassword(
@@ -178,10 +214,12 @@ export function __setNextBiometryType(type: string | null): void {
 
 export function __resetKeychainMock(): void {
   store.clear();
+  lastSetOptions.clear();
   getCallCounter.clear();
   errorQueue.length = 0;
   nextSetReturnFalse = false;
   nextBiometryType = null;
+  skipCallsBeforeError = 0;
 }
 
 export function __simulateNextRawError(value: unknown): void {
