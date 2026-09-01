@@ -38,6 +38,14 @@
  * transition; this is а known architectural seam — manual smoke
  * verification в M4.5 confirms end-to-end behavior.
  *
+ * **Biometric unlock is a standalone auth path:** tapping "Unlock with
+ * Fingerprint" authenticates directly against the device Keystore-bound
+ * secret. The app PIN is not required on this path. This is an intentional
+ * security model ratified by the Captain — device biometry is treated as a
+ * sufficient factor, not as a shortcut after PIN entry. If the device has
+ * no enrolled biometry, the CTA is hidden and the PIN path remains the only
+ * unlock option.
+ *
  * **DEV panel:** `_qaForcePhase` buttons preserved для QA — stripped
  * в M4.4 prod build.
  *
@@ -269,6 +277,9 @@ function UnlockPinScreen() {
   async function handleBiometricUnlock(): Promise<void> {
     if (isVerifying || lockoutRemaining !== null) return;
     setIsVerifying(true);
+    // Standalone unlock path: no PIN verification here. The secret is
+    // protected by BIOMETRY_CURRENT_SET_OR_DEVICE_PASSCODE + SECURE_HARDWARE
+    // in unlockSecret.ts. Device biometry is treated as a sufficient factor.
     try {
       const secret = await retrieveUnlockSecret();
       await getWalletHandle().unlockWallet(secret);

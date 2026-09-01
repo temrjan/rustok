@@ -66,7 +66,12 @@ jest.mock('../../../components', () => ({
   NetworkPicker: () => null,
   Switch: (_props: Record<string, unknown>) => null,
   ThemeSwitcher: () => null,
-  toast: { info: jest.fn(), success: jest.fn(), error: jest.fn(), hide: jest.fn() },
+  toast: {
+    info: jest.fn(),
+    success: jest.fn(),
+    error: jest.fn(),
+    hide: jest.fn(),
+  },
 }));
 
 import { Linking } from 'react-native';
@@ -106,13 +111,13 @@ describe('SettingsScreen', () => {
       tr = renderer.create(<SettingsScreen />);
       await flush();
     });
-    const buttons = tr.root.findAll(
-      (n) => n.props?.accessibilityLabel?.startsWith('Set lock timeout to'),
+    const buttons = tr.root.findAll(n =>
+      n.props?.accessibilityLabel?.startsWith('Set lock timeout to'),
     );
     expect(buttons.length).toBeGreaterThan(0);
 
     const neverButton = buttons.find(
-      (n) => n.props.accessibilityLabel === 'Set lock timeout to Never',
+      n => n.props.accessibilityLabel === 'Set lock timeout to Never',
     );
     expect(neverButton).toBeDefined();
     act(() => {
@@ -130,7 +135,7 @@ describe('SettingsScreen', () => {
       await flush();
     });
     const lockNow = tr.root.find(
-      (n) => n.props?.accessibilityLabel === 'Lock wallet now',
+      n => n.props?.accessibilityLabel === 'Lock wallet now',
     );
     expect(lockNow).toBeDefined();
     await act(async () => {
@@ -140,6 +145,25 @@ describe('SettingsScreen', () => {
     expect(mockRefresh).toHaveBeenCalledTimes(1);
   });
 
+  it('renders biometric unlock disclosure', async () => {
+    let tr!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tr = renderer.create(<SettingsScreen />);
+      await flush();
+    });
+    const texts = tr.root.findAllByType(
+      'Text' as unknown as React.ComponentType,
+    );
+    const disclosure = texts.find(
+      n =>
+        typeof n.props.children === 'string' &&
+        n.props.children.includes(
+          'If your device supports biometrics, you can unlock without entering your PIN.',
+        ),
+    );
+    expect(disclosure).toBeDefined();
+  });
+
   it('proxy toggle calls setProxyEnabled', async () => {
     let tr!: renderer.ReactTestRenderer;
     await act(async () => {
@@ -147,7 +171,7 @@ describe('SettingsScreen', () => {
       await flush();
     });
     const toggle = tr.root.find(
-      (n) => n.props?.accessibilityLabel === 'Toggle proxy routing',
+      n => n.props?.accessibilityLabel === 'Toggle proxy routing',
     );
     expect(toggle).toBeDefined();
     act(() => {
@@ -163,7 +187,7 @@ describe('SettingsScreen', () => {
       await flush();
     });
     const link = tr.root.find(
-      (n) => n.props?.accessibilityLabel === 'Open privacy policy',
+      n => n.props?.accessibilityLabel === 'Open privacy policy',
     );
     expect(link).toBeDefined();
     act(() => {
