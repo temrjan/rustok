@@ -160,12 +160,9 @@ function App() {
       const elapsed = Math.max(0, Date.now() - lastInteractionAtRef.current);
       if (elapsed < lockTimeoutSec * 1000) return;
 
-      // Stop the interval immediately to avoid spamming lockWallet while
-      // refresh() transitions the phase to 'locked'.
-      if (intervalRef.current !== null) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
-      }
+      // Reset the timestamp to avoid spamming lockWallet if the phase stays
+      // 'unlocked' (e.g. lockWallet rejected). The cleanup effect stops the
+      // interval once the phase transitions to 'locked'.
       lastInteractionAtRef.current = Date.now();
 
       getWalletHandle()
