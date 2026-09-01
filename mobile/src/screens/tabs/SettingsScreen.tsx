@@ -116,6 +116,10 @@ function SettingsScreen() {
         >
           Lock now
         </Button>
+        <Text className="text-ink-muted text-xs mt-3">
+          If your device supports biometrics, you can unlock without entering
+          your PIN.
+        </Text>
       </Section>
 
       {/* Network */}

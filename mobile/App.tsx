@@ -26,8 +26,14 @@
 import 'react-native-gesture-handler';
 import './global.css';
 
-import React, { useEffect, useRef } from 'react';
-import { AppState, StatusBar, StyleSheet, useColorScheme } from 'react-native';
+import React, { useCallback, useEffect, useRef } from 'react';
+import {
+  AppState,
+  StatusBar,
+  StyleSheet,
+  useColorScheme,
+  View,
+} from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -122,19 +128,87 @@ function App() {
     return () => subscription.remove();
   }, []);
 
+  // Phase 7 continuation: foreground inactivity auto-lock. The setting is
+  // labelled "Auto-lock after inactivity", so the wallet must also lock when
+  // left open on the foreground without any user interaction. A 1-second
+  // interval is cheap and accurate enough for timeouts ≥ 30 s.
+  const lockTimeoutSec = useSettingsStore(s => s.lockTimeoutSec);
+  const lastInteractionAtRef = useRef<number>(Date.now());
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const resetInactivityTimer = useCallback(() => {
+    lastInteractionAtRef.current = Date.now();
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'unlocked' || lockTimeoutSec === 0) {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    // Reset on every transition into the unlocked state so that a biometric
+    // unlock that never touches the RN view tree does not immediately re-lock.
+    resetInactivityTimer();
+
+    intervalRef.current = setInterval(() => {
+      if (AppState.currentState !== 'active') return;
+      if (useWalletStore.getState().phase !== 'unlocked') return;
+
+      const elapsed = Math.max(0, Date.now() - lastInteractionAtRef.current);
+      if (elapsed < lockTimeoutSec * 1000) return;
+
+      // Stop the interval immediately to avoid spamming lockWallet while
+      // refresh() transitions the phase to 'locked'.
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      lastInteractionAtRef.current = Date.now();
+
+      getWalletHandle()
+        .lockWallet()
+        .catch(() => undefined)
+        .then(() => {
+          useWalletStore
+            .getState()
+            .refresh()
+            .catch(() => undefined);
+        });
+    }, 1000);
+
+    return () => {
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [phase, lockTimeoutSec, resetInactivityTimer]);
+
   return (
     <ThemeProvider>
-      <GestureHandlerRootView style={styles.rootFlex}>
-        <BottomSheetModalProvider>
-          <SafeAreaProvider>
-            <StatusBar
-              barStyle={isDarkMode ? 'light-content' : 'dark-content'}
-            />
-            <AppShell />
-            <ToastProvider />
-          </SafeAreaProvider>
-        </BottomSheetModalProvider>
-      </GestureHandlerRootView>
+      <View
+        testID="inactivity-root"
+        style={styles.rootFlex}
+        onStartShouldSetResponderCapture={() => {
+          resetInactivityTimer();
+          return false;
+        }}
+      >
+        <GestureHandlerRootView style={styles.rootFlex}>
+          <BottomSheetModalProvider>
+            <SafeAreaProvider>
+              <StatusBar
+                barStyle={isDarkMode ? 'light-content' : 'dark-content'}
+              />
+              <AppShell />
+              <ToastProvider />
+            </SafeAreaProvider>
+          </BottomSheetModalProvider>
+        </GestureHandlerRootView>
+      </View>
     </ThemeProvider>
   );
 }

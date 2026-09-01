@@ -101,8 +101,7 @@ jest.mock('../../../stores/pinAttemptsStore', () => ({
 let mockPinHash: string | null = '$argon2id$v=19$m=65536,t=3,p=4$YWJj$ZGVm';
 jest.mock('../../../stores/pinSetupStore', () => ({
   usePinSetupStore: Object.assign(
-    (selector: (s: unknown) => unknown) =>
-      selector({ pinHash: mockPinHash }),
+    (selector: (s: unknown) => unknown) => selector({ pinHash: mockPinHash }),
     {
       getState: () => ({ pinHash: mockPinHash }),
     },
@@ -294,12 +293,10 @@ describe('UnlockPinScreen', () => {
     await act(async () => {
       await drain();
     });
-    const alerts = tr.root.findAll(
-      (n) => n.props?.accessibilityRole === 'alert',
-    );
+    const alerts = tr.root.findAll(n => n.props?.accessibilityRole === 'alert');
     expect(alerts.length).toBeGreaterThan(0);
     const recoveryCta = tr.root.findAll(
-      (n) => n.props?.accessibilityLabel === 'Use recovery phrase',
+      n => n.props?.accessibilityLabel === 'Use recovery phrase',
     );
     expect(recoveryCta.length).toBeGreaterThan(0);
     // Recovery branch must NOT cascade к unlockWallet / refresh.
@@ -320,7 +317,7 @@ describe('UnlockPinScreen', () => {
     });
     expect(pinPadProps.disabled).toBe(true);
     const countdownMatches = tr.root.findAll(
-      (n) =>
+      n =>
         typeof n.props?.accessibilityLabel === 'string' &&
         (n.props.accessibilityLabel as string).startsWith('Lockout — wait '),
     );
@@ -338,7 +335,7 @@ describe('UnlockPinScreen', () => {
         await flush();
       });
       const buttons = tr.root.findAll(
-        (n) =>
+        n =>
           typeof n.props?.accessibilityLabel === 'string' &&
           (n.props.accessibilityLabel as string).startsWith('Unlock with'),
       );
@@ -346,20 +343,24 @@ describe('UnlockPinScreen', () => {
     });
 
     it('renders Face ID label when Face ID is available', async () => {
-      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue('FaceID' as any);
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue('FaceID' as any);
       let tr!: renderer.ReactTestRenderer;
       await act(async () => {
         tr = renderer.create(<UnlockPinScreen />);
         await drain();
       });
       const btn = tr.root.find(
-        (n) => n.props?.accessibilityLabel === 'Unlock with Face ID',
+        n => n.props?.accessibilityLabel === 'Unlock with Face ID',
       );
       expect(btn).toBeDefined();
     });
 
     it('tap → retrieveSecret → unlockWallet → refresh on success', async () => {
-      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue('FaceID' as any);
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue('FaceID' as any);
       mockRetrieveUnlockSecret.mockResolvedValue(SECRET_HEX);
       let tr!: renderer.ReactTestRenderer;
       await act(async () => {
@@ -367,7 +368,7 @@ describe('UnlockPinScreen', () => {
         await drain();
       });
       const btn = tr.root.find(
-        (n) => n.props?.accessibilityLabel === 'Unlock with Face ID',
+        n => n.props?.accessibilityLabel === 'Unlock with Face ID',
       );
       await act(async () => {
         btn.props.onPress();
@@ -378,8 +379,33 @@ describe('UnlockPinScreen', () => {
       expect(mockRefresh).toHaveBeenCalledTimes(1);
     });
 
+    it('does not verify PIN on biometric unlock', async () => {
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue('FaceID' as any);
+      mockRetrieveUnlockSecret.mockResolvedValue(SECRET_HEX);
+      mockVerifyPin.mockReset();
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<UnlockPinScreen />);
+        await drain();
+      });
+      const btn = tr.root.find(
+        n => n.props?.accessibilityLabel === 'Unlock with Face ID',
+      );
+      await act(async () => {
+        btn.props.onPress();
+        await drain();
+      });
+      expect(mockVerifyPin).not.toHaveBeenCalled();
+      expect(mockRetrieveUnlockSecret).toHaveBeenCalledTimes(1);
+      expect(mockUnlockWallet).toHaveBeenCalledTimes(1);
+    });
+
     it('tap → KeyPermanentlyInvalidated → recovery banner', async () => {
-      jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue('Fingerprint' as any);
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue('Fingerprint' as any);
       mockRetrieveUnlockSecret.mockRejectedValue(
         new MockedException(
           'crypto_failed',
@@ -394,14 +420,14 @@ describe('UnlockPinScreen', () => {
         await drain();
       });
       const btn = tr.root.find(
-        (n) => n.props?.accessibilityLabel === 'Unlock with Fingerprint',
+        n => n.props?.accessibilityLabel === 'Unlock with Fingerprint',
       );
       await act(async () => {
         btn.props.onPress();
         await drain();
       });
       const alerts = tr.root.findAll(
-        (n) => n.props?.accessibilityRole === 'alert',
+        n => n.props?.accessibilityRole === 'alert',
       );
       expect(alerts.length).toBeGreaterThan(0);
       expect(mockUnlockWallet).not.toHaveBeenCalled();
