@@ -407,7 +407,13 @@ function UnlockPinScreen() {
           onPressBackspace={handlePressBackspace}
           disabled={padDisabled}
         />
-        {biometryType !== null && (
+        {/*
+          Hidden after an explicit refusal (finding #11, acceptance criterion 3):
+          offering the button to someone who just declined ignores their answer.
+          `null` — never asked — keeps it visible, so behaviour before the
+          consent prompt exists is unchanged.
+        */}
+        {biometryType !== null && biometricOptIn !== false && (
           <View className="mt-4">
             <Button
               variant="ghost"

@@ -400,6 +400,25 @@ describe('UnlockPinScreen', () => {
   });
 
   describe('biometric CTA', () => {
+    it('is hidden after an explicit refusal', async () => {
+      mockBiometricOptIn = false;
+      jest
+        .spyOn(Keychain, 'getSupportedBiometryType')
+        .mockResolvedValue(Keychain.BIOMETRY_TYPE.FINGERPRINT);
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<UnlockPinScreen />);
+        await flush();
+      });
+      const buttons = tr.root.findAll(
+        (n) =>
+          typeof n.props?.accessibilityLabel === 'string' &&
+          (n.props.accessibilityLabel as string).startsWith('Unlock with'),
+      );
+      expect(buttons.length).toBe(0);
+      mockBiometricOptIn = null;
+    });
+
     it('does not render when biometry is unavailable', async () => {
       jest.spyOn(Keychain, 'getSupportedBiometryType').mockResolvedValue(null);
       let tr!: renderer.ReactTestRenderer;

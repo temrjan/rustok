@@ -304,6 +304,16 @@ export async function wipeUnlockSecret(): Promise<void> {
   await Keychain.resetGenericPassword(RESET_OPTIONS).catch((e: unknown): never => {
     throw mapKeychainError(e);
   });
+  // The wallet secret now lives in TWO records (finding #11). Wiping only the
+  // biometric one leaves the PIN record behind, and a wallet created afterwards
+  // would find that stale record, fail to open it with the new PIN, and lock
+  // its owner out permanently. Anything that wipes the secret must wipe both —
+  // which is why this lives here rather than at each call site.
+  await Keychain.resetGenericPassword(PIN_RESET_OPTIONS).catch(
+    (e: unknown): never => {
+      throw mapKeychainError(e);
+    },
+  );
 }
 
 /**
@@ -402,6 +412,20 @@ export async function sealSecretWithPin(
 ): Promise<string> {
   const saltHex = generateKekSaltHex();
   const key = await deriveKek(pin, saltHex);
+  return sealWithKey(secretHex, saltHex, key);
+}
+
+/**
+ * Seal with an already-derived key. Separate from {@link sealSecretWithPin} so
+ * migration can verify its own work without paying for Argon2id a second time
+ * — the derivation is the expensive part, and re-running it there bought
+ * nothing but delay.
+ */
+function sealWithKey(
+  secretHex: string,
+  saltHex: string,
+  key: Uint8Array,
+): string {
   // Same guarded source as the secret itself: a nonce from a weak RNG would
   // silently undermine the seal, and XChaCha's safety rests on it being unique.
   const nonce = randomBytes(NONCE_BYTES);
@@ -411,19 +435,12 @@ export async function sealSecretWithPin(
   return `${RECORD_VERSION}.${saltHex}.${toHex(nonce)}.${toHex(sealed)}`;
 }
 
-/**
- * Open a record produced by {@link sealSecretWithPin}.
- *
- * A wrong PIN fails the Poly1305 tag and throws — the caller treats that as
- * "wrong PIN", not as a corrupted wallet. Tampering with the ciphertext
- * fails the same way, which is exactly why an AEAD was chosen over a
- * non-authenticated cipher: a forged record is rejected instead of
- * decrypting into garbage.
- */
-export async function openSecretWithPin(
-  record: string,
-  pin: string,
-): Promise<string> {
+/** Parse a record into its parts, rejecting anything unrecognised. */
+function parseRecord(record: string): {
+  saltHex: string;
+  nonceHex: string;
+  sealedHex: string;
+} {
   const parts = record.split('.');
   if (parts.length !== 4 || parts[0] !== RECORD_VERSION) {
     throw new UnlockSecretException(
@@ -439,11 +456,34 @@ export async function openSecretWithPin(
     string,
     string,
   ];
-  const key = await deriveKek(pin, saltHex);
+  return { saltHex, nonceHex, sealedHex };
+}
+
+/** Open with an already-derived key — the cheap half of {@link openSecretWithPin}. */
+function openWithKey(record: string, key: Uint8Array): string {
+  const { nonceHex, sealedHex } = parseRecord(record);
   const opened = xchacha20poly1305(key, fromHex(nonceHex)).decrypt(
     fromHex(sealedHex),
   );
   return new TextDecoder().decode(opened);
+}
+
+/**
+ * Open a record produced by {@link sealSecretWithPin}.
+ *
+ * A wrong PIN fails the Poly1305 tag and throws — the caller treats that as
+ * "wrong PIN", not as a corrupted wallet. Tampering with the ciphertext
+ * fails the same way, which is exactly why an AEAD was chosen over a
+ * non-authenticated cipher: a forged record is rejected instead of
+ * decrypting into garbage.
+ */
+export async function openSecretWithPin(
+  record: string,
+  pin: string,
+): Promise<string> {
+  const { saltHex } = parseRecord(record);
+  const key = await deriveKek(pin, saltHex);
+  return openWithKey(record, key);
 }
 
 /** Persist a sealed record for `secretHex` under the PIN service. */
@@ -529,6 +569,11 @@ export async function retrieveSecretWithPin(pin: string): Promise<string> {
 /**
  * The PIN unlock path — this is what finding #11 exists to fix.
  *
+ * Migration contract (order matters): read the legacy secret once, seal it,
+ * store it beside the old record, read it back and compare — only then report
+ * success. The legacy record is never touched, so an interruption at any step
+ * leaves a working wallet and the next unlock retries.
+ *
  * Once a PIN record exists, the secret comes from it and **no system dialog
  * appears**: the PIN itself is the factor. Before that (first unlock after
  * the update) it falls back to the legacy record — which does prompt, once —
@@ -542,17 +587,44 @@ export async function unlockSecretViaPin(pin: string): Promise<string> {
   if (await hasPinRecord()) {
     return retrieveSecretWithPin(pin);
   }
+  // ONE system prompt, and only here: the legacy record is read once and the
+  // very same secret is handed to the migration. Reading it again inside the
+  // migration raised a second dialog, and cancelling that one — the natural
+  // reaction right after the first — aborted the migration silently, so both
+  // dialogs came back on every single unlock, forever.
   const legacySecret = await retrieveUnlockSecret();
-  await migrateToPinRecord(pin).catch(() => false);
+  await migrateToPinRecord(pin, legacySecret).catch(() => false);
   return legacySecret;
 }
 
-export async function migrateToPinRecord(pin: string): Promise<boolean> {
-  const legacySecret = await retrieveUnlockSecret();
-  await storePinRecord(legacySecret, pin);
-  const roundTripped = await retrieveSecretWithPin(pin).catch(
-    () => undefined,
+export async function migrateToPinRecord(
+  pin: string,
+  legacySecret: string,
+): Promise<boolean> {
+  const saltHex = generateKekSaltHex();
+  // ONE derivation for the whole migration: sealing and the verification that
+  // follows reuse this key. Re-deriving to verify cost a second Argon2id run
+  // and proved nothing extra.
+  const key = await deriveKek(pin, saltHex);
+  const record = sealWithKey(legacySecret, saltHex, key);
+  await Keychain.setGenericPassword(PIN_USERNAME, record, PIN_SET_OPTIONS).catch(
+    (e: unknown): never => {
+      throw mapKeychainError(e);
+    },
   );
+  const stored = await Keychain.getGenericPassword(PIN_GET_OPTIONS).catch(
+    () => false as const,
+  );
+  const roundTripped =
+    stored === false
+      ? undefined
+      : ((): string | undefined => {
+          try {
+            return openWithKey(stored.password, key);
+          } catch {
+            return undefined;
+          }
+        })();
   if (roundTripped !== legacySecret) {
     // Leave nothing half-built behind: the legacy path is still intact.
     await wipePinRecord().catch(() => undefined);
@@ -560,3 +632,4 @@ export async function migrateToPinRecord(pin: string): Promise<boolean> {
   }
   return true;
 }
+

@@ -156,6 +156,23 @@ describe('SettingsScreen', () => {
       expect(sw.props.value).toBe(false);
     });
 
+    it('records a refusal when switched off', async () => {
+      mockBiometricOptIn = true;
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<SettingsScreen />);
+        await flush();
+      });
+      const sw = tr.root.find(
+        (n) => n.props?.accessibilityLabel === 'Unlock with biometrics',
+      );
+      expect(sw.props.value).toBe(true);
+      await act(async () => {
+        sw.props.onValueChange(false);
+      });
+      expect(mockSetBiometricOptIn).toHaveBeenCalledWith(false);
+    });
+
     it('records consent when switched on', async () => {
       let tr!: renderer.ReactTestRenderer;
       await act(async () => {

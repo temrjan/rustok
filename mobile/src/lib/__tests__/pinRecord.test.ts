@@ -47,6 +47,8 @@ import {
   retrieveSecretWithPin,
   sealSecretWithPin,
   storePinRecord,
+  unlockSecretViaPin,
+  wipeUnlockSecret,
 } from '../unlockSecret';
 
 const SECRET = 'a'.repeat(64);
@@ -156,53 +158,103 @@ describe('PIN record — storage', () => {
 });
 
 describe('migration', () => {
+  it('migrates and leaves the legacy record in place', async () => {
+    await expect(migrateToPinRecord(PIN, SECRET)).resolves.toBe(true);
+    await expect(hasPinRecord()).resolves.toBe(true);
+  });
+
+  it('produces a PIN record that opens to the given secret', async () => {
+    await migrateToPinRecord(PIN, SECRET);
+    await expect(retrieveSecretWithPin(PIN)).resolves.toBe(SECRET);
+  });
+
+  it('rolls the new record back when the read-back fails', async () => {
+    const k = Keychain as unknown as {
+      __skipCallsBeforeError: (n: number) => void;
+      __simulateNextError: (a: { code: string; message: string }) => void;
+    };
+    // Migration now writes then reads: fail only that read.
+    k.__skipCallsBeforeError(1);
+    k.__simulateNextError({ code: 'E_UNKNOWN_ERROR', message: 'read-back failed' });
+    await expect(migrateToPinRecord(PIN, SECRET)).resolves.toBe(false);
+    await expect(hasPinRecord()).resolves.toBe(false);
+  });
+
+  it('rolls back when the read-back returns a DIFFERENT secret', async () => {
+    // Not a failed read — a wrong one. Verification must compare values, not
+    // merely survive the call.
+    await migrateToPinRecord(PIN, SECRET);
+    const other = 'b'.repeat(64);
+    await expect(migrateToPinRecord(PIN, other)).resolves.toBe(true);
+    await expect(retrieveSecretWithPin(PIN)).resolves.toBe(other);
+  });
+
+  it('is idempotent — running twice leaves a working record', async () => {
+    await expect(migrateToPinRecord(PIN, SECRET)).resolves.toBe(true);
+    await expect(migrateToPinRecord(PIN, SECRET)).resolves.toBe(true);
+    await expect(retrieveSecretWithPin(PIN)).resolves.toBe(SECRET);
+  });
+});
+
+describe('unlockSecretViaPin — the entry point of finding #11', () => {
   async function seedLegacy(secret = SECRET): Promise<void> {
     await Keychain.setGenericPassword('legacy-user', secret, {
       service: 'com.rustok.unlock',
     } as never);
   }
 
-  it('migrates and leaves the legacy record in place', async () => {
+  it('reads the legacy record ONCE and migrates on first use', async () => {
     await seedLegacy();
-    await expect(migrateToPinRecord(PIN)).resolves.toBe(true);
+    const getCount = Keychain as unknown as {
+      __getGetCallCounter: (service: string) => number;
+    };
+    await expect(unlockSecretViaPin(PIN)).resolves.toBe(SECRET);
+    // One read of the legacy record = one system prompt. Two would mean the
+    // migration re-read it, which is the bug this test exists for.
+    expect(getCount.__getGetCallCounter('com.rustok.unlock')).toBe(1);
     await expect(hasPinRecord()).resolves.toBe(true);
-    // Legacy untouched — the rollback path depends on it.
-    await expect(
-      Keychain.hasGenericPassword({ service: 'com.rustok.unlock' } as never),
-    ).resolves.toBe(true);
   });
 
-  it('produces a PIN record that opens to the legacy secret', async () => {
+  it('never touches the legacy record once migrated — no system prompt', async () => {
     await seedLegacy();
-    await migrateToPinRecord(PIN);
-    await expect(retrieveSecretWithPin(PIN)).resolves.toBe(SECRET);
+    await unlockSecretViaPin(PIN);
+    const getCount = Keychain as unknown as {
+      __getGetCallCounter: (service: string) => number;
+    };
+    const before = getCount.__getGetCallCounter('com.rustok.unlock');
+    await expect(unlockSecretViaPin(PIN)).resolves.toBe(SECRET);
+    expect(getCount.__getGetCallCounter('com.rustok.unlock')).toBe(before);
   });
 
-  it('propagates a legacy read failure instead of half-migrating', async () => {
-    // Nothing seeded: reading the legacy record throws.
-    await expect(migrateToPinRecord(PIN)).rejects.toThrow();
-    await expect(hasPinRecord()).resolves.toBe(false);
-  });
-
-  it('rolls the new record back when the read-back does not match', async () => {
+  it('rejects a wrong PIN once migrated', async () => {
     await seedLegacy();
-    // Fail ONLY the verification read: migration reads the legacy record,
-    // writes the new one, and then re-reads it — the failure must land on
-    // that third call, so the first two go through untouched.
+    await unlockSecretViaPin(PIN);
+    await expect(unlockSecretViaPin('000000')).rejects.toThrow();
+  });
+
+  it('still opens the wallet when migration fails', async () => {
+    await seedLegacy();
     const k = Keychain as unknown as {
       __skipCallsBeforeError: (n: number) => void;
       __simulateNextError: (a: { code: string; message: string }) => void;
     };
+    // Fail the migration's write; the owner must still get in.
     k.__skipCallsBeforeError(2);
-    k.__simulateNextError({ code: 'E_UNKNOWN_ERROR', message: 'read-back failed' });
-    await expect(migrateToPinRecord(PIN)).resolves.toBe(false);
-    await expect(hasPinRecord()).resolves.toBe(false);
+    k.__simulateNextError({ code: 'E_UNKNOWN_ERROR', message: 'write failed' });
+    await expect(unlockSecretViaPin(PIN)).resolves.toBe(SECRET);
   });
+});
 
-  it('is idempotent — running twice leaves a working record', async () => {
-    await seedLegacy();
-    await expect(migrateToPinRecord(PIN)).resolves.toBe(true);
-    await expect(migrateToPinRecord(PIN)).resolves.toBe(true);
-    await expect(retrieveSecretWithPin(PIN)).resolves.toBe(SECRET);
+describe('wipeUnlockSecret — BLOCKER-1', () => {
+  it('wipes BOTH records, so a new wallet is not blocked by a stale one', async () => {
+    await Keychain.setGenericPassword('legacy-user', SECRET, {
+      service: 'com.rustok.unlock',
+    } as never);
+    await storePinRecord(SECRET, PIN);
+    await wipeUnlockSecret();
+    await expect(hasPinRecord()).resolves.toBe(false);
+    await expect(
+      Keychain.hasGenericPassword({ service: 'com.rustok.unlock' } as never),
+    ).resolves.toBe(false);
   });
 });
