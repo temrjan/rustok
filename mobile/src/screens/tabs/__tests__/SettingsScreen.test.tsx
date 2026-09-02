@@ -57,6 +57,29 @@ jest.mock('../../../stores/settingsStore', () => ({
   ),
 }));
 
+let mockBiometricOptIn: boolean | null = null;
+const mockSetBiometricOptIn = jest.fn();
+jest.mock('../../../stores/pinSetupStore', () => ({
+  usePinSetupStore: Object.assign(
+    (selector: (s: unknown) => unknown) =>
+      selector({
+        biometricOptIn: mockBiometricOptIn,
+        setBiometricOptIn: mockSetBiometricOptIn,
+      }),
+    {
+      getState: () => ({
+        biometricOptIn: mockBiometricOptIn,
+        setBiometricOptIn: mockSetBiometricOptIn,
+      }),
+    },
+  ),
+}));
+
+let mockBiometryType: string | null = 'Fingerprint';
+jest.mock('react-native-keychain', () => ({
+  getSupportedBiometryType: () => Promise.resolve(mockBiometryType),
+}));
+
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
@@ -64,7 +87,10 @@ jest.mock('react-native-safe-area-context', () => ({
 jest.mock('../../../components', () => ({
   Button: (_props: Record<string, unknown>) => null,
   NetworkPicker: () => null,
-  Switch: (_props: Record<string, unknown>) => null,
+  // Rendered as a host element so tests can find it and read its props —
+  // the biometric consent switch (finding #11) is asserted through this.
+  Switch: (props: Record<string, unknown>) =>
+    require('react').createElement('MockSwitch', props),
   ThemeSwitcher: () => null,
   toast: {
     info: jest.fn(),
@@ -95,6 +121,72 @@ describe('SettingsScreen', () => {
     mockOpenURL.mockClear();
     jest.spyOn(Linking, 'openURL').mockImplementation(mockOpenURL);
     // jest.resetModules(); // disabled — triggers Jest teardown race with react-native-css-interop
+  });
+
+  describe('biometric consent (finding #11)', () => {
+    afterEach(() => {
+      mockBiometryType = 'Fingerprint';
+      mockBiometricOptIn = null;
+      mockSetBiometricOptIn.mockClear();
+    });
+
+    it('does not offer the switch when the device has no biometry', async () => {
+      mockBiometryType = null;
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<SettingsScreen />);
+        await flush();
+      });
+      const switches = tr.root.findAll(
+        (n) => n.props?.accessibilityLabel === 'Unlock with biometrics',
+      );
+      expect(switches.length).toBe(0);
+    });
+
+    it('offers the switch, off, when consent was never given', async () => {
+      mockBiometricOptIn = null;
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<SettingsScreen />);
+        await flush();
+      });
+      const sw = tr.root.find(
+        (n) => n.props?.accessibilityLabel === 'Unlock with biometrics',
+      );
+      expect(sw.props.value).toBe(false);
+    });
+
+    it('records a refusal when switched off', async () => {
+      mockBiometricOptIn = true;
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<SettingsScreen />);
+        await flush();
+      });
+      const sw = tr.root.find(
+        (n) => n.props?.accessibilityLabel === 'Unlock with biometrics',
+      );
+      expect(sw.props.value).toBe(true);
+      await act(async () => {
+        sw.props.onValueChange(false);
+      });
+      expect(mockSetBiometricOptIn).toHaveBeenCalledWith(false);
+    });
+
+    it('records consent when switched on', async () => {
+      let tr!: renderer.ReactTestRenderer;
+      await act(async () => {
+        tr = renderer.create(<SettingsScreen />);
+        await flush();
+      });
+      const sw = tr.root.find(
+        (n) => n.props?.accessibilityLabel === 'Unlock with biometrics',
+      );
+      await act(async () => {
+        sw.props.onValueChange(true);
+      });
+      expect(mockSetBiometricOptIn).toHaveBeenCalledWith(true);
+    });
   });
 
   afterEach(() => {
