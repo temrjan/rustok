@@ -6,46 +6,20 @@ all-features = true
 
 [advisories]
 ignore = [
-    { id = "RUSTSEC-2024-0436", reason = "paste — transitive dep via revm" },
-    # Tauri transitive deps: GTK/GLib/ATK bindings marked "unmaintained".
-    # Not security vulnerabilities. Tauri team aware.
-    { id = "RUSTSEC-2024-0370", reason = "Tauri transitive dep (proc-macro-error)" },
-    { id = "RUSTSEC-2024-0411", reason = "Tauri transitive dep (gio)" },
-    { id = "RUSTSEC-2024-0412", reason = "Tauri transitive dep (gdk)" },
-    { id = "RUSTSEC-2024-0413", reason = "Tauri transitive dep (atk)" },
-    { id = "RUSTSEC-2024-0414", reason = "Tauri transitive dep (pango)" },
-    { id = "RUSTSEC-2024-0415", reason = "Tauri transitive dep (glib)" },
-    { id = "RUSTSEC-2024-0416", reason = "Tauri transitive dep (atk-sys)" },
-    { id = "RUSTSEC-2024-0417", reason = "Tauri transitive dep (gio-sys)" },
-    { id = "RUSTSEC-2024-0418", reason = "Tauri transitive dep (gdk-sys)" },
-    { id = "RUSTSEC-2024-0419", reason = "Tauri transitive dep (gtk-sys)" },
-    { id = "RUSTSEC-2024-0420", reason = "Tauri transitive dep (gtk)" },
-    { id = "RUSTSEC-2025-0057", reason = "Tauri transitive dep (fxhash)" },
-    { id = "RUSTSEC-2025-0075", reason = "Tauri transitive dep (gdk-pixbuf)" },
-    { id = "RUSTSEC-2025-0080", reason = "Tauri transitive dep (cairo)" },
-    { id = "RUSTSEC-2025-0081", reason = "Tauri transitive dep (pango-sys)" },
-    { id = "RUSTSEC-2025-0098", reason = "Tauri transitive dep (gobject-sys)" },
-    { id = "RUSTSEC-2025-0100", reason = "Tauri transitive dep (glib-sys)" },
-    # rand 0.8 unsoundness — requires custom logger + thread_rng; we use neither.
-    # Still triggered by fresh cargo-deny advisory DB even if not in local lockfile.
-    { id = "RUSTSEC-2026-0097", reason = "rand 0.8 unsoundness requires custom logger + thread_rng — we use neither" },
-    # quick-xml NsReader DoS requires parsing untrusted XML at runtime.
-    # wayland-scanner (Tauri desktop clipboard chain) only uses quick-xml
-    # to parse Wayland protocol XML files bundled in the crate at build
-    # time — no untrusted-input code path exists. Fix requires quick-xml
-    # >=0.41, which needs a wayland-scanner major bump not yet available
-    # within the current semver range.
-    { id = "RUSTSEC-2026-0195", reason = "wayland-scanner uses quick-xml only for build-time parsing of bundled protocol XML — no untrusted-input path" },
-    # Same quick-xml quadratic-runtime advisory hits two versions in the
-    # lockfile: 0.38.4 via `plist` (Tauri's macOS Info.plist bundling —
-    # build-time, local files) and 0.39.2 via wayland-scanner (see above).
-    # Neither path parses untrusted/network-sourced XML.
-    { id = "RUSTSEC-2026-0194", reason = "quick-xml quadratic-runtime — both consumers (plist/Tauri bundling, wayland-scanner) parse only local build-time XML, not untrusted input" },
+    # paste (via alloy-primitives, ark-ff, and syn-solidity) is an unmaintained
+    # compile-time proc-macro; alloy-primitives 1.x still requires paste ^1.0.
+    { id = "RUSTSEC-2024-0436", reason = "paste — unmaintained compile-time proc-macro via alloy-primitives, ark-ff, and syn-solidity; no upstream upgrade available" },
     # proc-macro-error2 (via alloy-sol-macro -> txguard) executes only at
     # compile time on our own source; a proc-macro has no runtime attack
-    # surface. Same "unmaintained, not a live vulnerability" category as
-    # the Tauri GTK/GLib entries above.
+    # surface.
     { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 is a compile-time-only proc-macro dep (via alloy-sol-macro) — unmaintained, no runtime attack surface" },
+    # crypto-bigint 0.5.5 timing variability affects k256 0.13.4 scalar
+    # arithmetic (via alloy 1.8 and revm 36). Fixed crypto-bigint >= 0.7.6
+    # requires elliptic-curve/k256 0.14, which neither alloy 1.x nor 2.x has
+    # adopted yet. Exploitation needs a local side-channel observer and many
+    # signatures with the same key, while the wallet signs only on explicit
+    # user action; remove when alloy-signer moves to k256 0.14.
+    { id = "RUSTSEC-2026-0387", reason = "affected ops are on the k256 scalar path; accepted — no upstream fix in alloy 1.x/2.x; exploitation needs a local side-channel observer and many signatures; remove when alloy-signer moves to k256 0.14" },
 ]
 
 [licenses]
