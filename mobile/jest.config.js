@@ -45,8 +45,10 @@ module.exports = {
   // and `@react-native` only; `nativewind` and its bundled `react-native-css-interop`
   // ship JSX (and `.native.js` files) under node_modules that need Babel
   // transformation, otherwise Jest sees raw `<jsx>` and throws SyntaxError.
+  // `@noble/ciphers` (finding #11) ships ESM only — Jest sees a bare `import`
+  // and throws SyntaxError unless it is transformed like the others below.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|nativewind|react-native-css-interop))',
+    'node_modules/(?!((jest-)?react-native|@react-native|@react-navigation|nativewind|react-native-css-interop|@noble))',
   ],
   // App.test.tsx restored in M4 C4 — `__mocks__/react-native-rustok-bridge.ts`
   // and `__mocks__/react-native-fs.ts` stand in for the native packages so

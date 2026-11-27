@@ -8,7 +8,7 @@
  * switcher). DEV-only routes preserved under `{__DEV__}` guards.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Linking,
   ScrollView,
@@ -16,6 +16,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import * as Keychain from 'react-native-keychain';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -23,6 +24,7 @@ import { Button, NetworkPicker, Switch, ThemeSwitcher, toast } from '../../compo
 import { SmartAccountSection } from './SmartAccountSection';
 import { useWalletStore } from '../../stores/walletStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { usePinSetupStore } from '../../stores/pinSetupStore';
 import { getWalletHandle } from '../../lib/walletHandle';
 import type { SettingsStackParamList } from '../../navigation/types';
 
@@ -44,6 +46,19 @@ function SettingsScreen() {
 
   const { lockTimeoutSec, setLockTimeoutSec, proxyEnabled, setProxyEnabled } =
     useSettingsStore();
+
+  // Biometric consent (finding #11). The switch appears only when the device
+  // actually has enrolled biometry — `null` means "not asked yet", which
+  // reads as Off here and keeps the unlock screen from auto-starting.
+  const biometricOptIn = usePinSetupStore((s) => s.biometricOptIn);
+  const setBiometricOptIn = usePinSetupStore((s) => s.setBiometricOptIn);
+  const [biometryAvailable, setBiometryAvailable] = useState(false);
+
+  useEffect(() => {
+    Keychain.getSupportedBiometryType()
+      .then((type) => setBiometryAvailable(type !== null))
+      .catch(() => setBiometryAvailable(false));
+  }, []);
 
   const handleLockNow = useCallback(async () => {
     try {
@@ -120,6 +135,24 @@ function SettingsScreen() {
           If your device supports biometrics, you can unlock without entering
           your PIN.
         </Text>
+
+        {/*
+          Biometric consent (finding #11). Rendered only where the device can
+          actually do it — offering a switch that cannot work is worse than
+          offering nothing. Turning it on makes the unlock screen start
+          biometry by itself; turning it off leaves PIN-only entry, which
+          works on its own and shows no system dialog.
+        */}
+        {biometryAvailable && (
+          <View className="mt-4 flex-row items-center justify-between">
+            <Text className="text-ink text-sm">Unlock with biometrics</Text>
+            <Switch
+              value={biometricOptIn === true}
+              onValueChange={setBiometricOptIn}
+              accessibilityLabel="Unlock with biometrics"
+            />
+          </View>
+        )}
       </Section>
 
       {/* Network */}

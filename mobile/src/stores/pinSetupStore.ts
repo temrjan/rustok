@@ -28,6 +28,13 @@ import { create } from 'zustand';
 const KEY_HASH = 'pinSetup.pinHash';
 const KEY_BACKUP_PENDING = 'pinSetup.phraseBackupPending';
 const KEY_VERSION = 'pinSetup.version';
+/**
+ * Biometric opt-in (finding #11). `null` = never asked — the caller shows the
+ * consent prompt. `true` / `false` = the user answered, and we do not ask
+ * again. Kept here rather than derived from `getSupportedBiometryType()`
+ * because "the device can" and "the owner agreed" are different questions.
+ */
+const KEY_BIOMETRIC_OPT_IN = 'pinSetup.biometricOptIn';
 
 /** Reserved для future schema migrations; no consumer in v1. */
 const SCHEMA_VERSION = 1;
@@ -37,14 +44,18 @@ const mmkv = createMMKV();
 interface PinSetupState {
   pinHash: string | null;
   phraseBackupPending: boolean;
+  /** `null` until the owner has been asked — see `KEY_BIOMETRIC_OPT_IN`. */
+  biometricOptIn: boolean | null;
   setPinHash: (phcString: string) => void;
   setPhraseBackupPending: (value: boolean) => void;
+  setBiometricOptIn: (value: boolean) => void;
   clearAll: () => void;
 }
 
 export const usePinSetupStore = create<PinSetupState>((set) => ({
   pinHash: mmkv.getString(KEY_HASH) ?? null,
   phraseBackupPending: mmkv.getBoolean(KEY_BACKUP_PENDING) ?? false,
+  biometricOptIn: mmkv.getBoolean(KEY_BIOMETRIC_OPT_IN) ?? null,
   setPinHash: (phcString) => {
     mmkv.set(KEY_HASH, phcString);
     mmkv.set(KEY_VERSION, SCHEMA_VERSION);
@@ -55,10 +66,16 @@ export const usePinSetupStore = create<PinSetupState>((set) => ({
     mmkv.set(KEY_VERSION, SCHEMA_VERSION);
     set({ phraseBackupPending: value });
   },
+  setBiometricOptIn: (value) => {
+    mmkv.set(KEY_BIOMETRIC_OPT_IN, value);
+    mmkv.set(KEY_VERSION, SCHEMA_VERSION);
+    set({ biometricOptIn: value });
+  },
   clearAll: () => {
     mmkv.remove(KEY_HASH);
     mmkv.remove(KEY_BACKUP_PENDING);
     mmkv.remove(KEY_VERSION);
-    set({ pinHash: null, phraseBackupPending: false });
+    mmkv.remove(KEY_BIOMETRIC_OPT_IN);
+    set({ pinHash: null, phraseBackupPending: false, biometricOptIn: null });
   },
 }));

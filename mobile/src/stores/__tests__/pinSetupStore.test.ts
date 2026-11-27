@@ -107,4 +107,42 @@ describe('pinSetupStore', () => {
     expect(usePinSetupStore.getState().pinHash).toBeNull();
     expect(usePinSetupStore.getState().phraseBackupPending).toBe(false);
   });
+
+  describe('biometric consent (finding #11)', () => {
+    it('starts as null — never asked is not the same as declined', () => {
+      const { usePinSetupStore } =
+        require('../pinSetupStore') as typeof import('../pinSetupStore');
+      expect(usePinSetupStore.getState().biometricOptIn).toBeNull();
+    });
+
+    it('persists a refusal across reload — otherwise we would ask forever', () => {
+      const a = (require('../pinSetupStore') as typeof import('../pinSetupStore'))
+        .usePinSetupStore;
+      a.getState().setBiometricOptIn(false);
+
+      jest.resetModules();
+      const b = (require('../pinSetupStore') as typeof import('../pinSetupStore'))
+        .usePinSetupStore;
+      expect(b.getState().biometricOptIn).toBe(false);
+    });
+
+    it('persists consent across reload', () => {
+      const a = (require('../pinSetupStore') as typeof import('../pinSetupStore'))
+        .usePinSetupStore;
+      a.getState().setBiometricOptIn(true);
+
+      jest.resetModules();
+      const b = (require('../pinSetupStore') as typeof import('../pinSetupStore'))
+        .usePinSetupStore;
+      expect(b.getState().biometricOptIn).toBe(true);
+    });
+
+    it('clearAll resets consent to "never asked", not to "declined"', () => {
+      const { usePinSetupStore } =
+        require('../pinSetupStore') as typeof import('../pinSetupStore');
+      usePinSetupStore.getState().setBiometricOptIn(true);
+      usePinSetupStore.getState().clearAll();
+      expect(usePinSetupStore.getState().biometricOptIn).toBeNull();
+    });
+  });
 });
