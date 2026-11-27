@@ -4,7 +4,7 @@ Ethereum wallet with chain abstraction and transaction security engine.
 
 **Status:** Production — Phase 7 DONE — Android verified on Sepolia; iOS supported. React Native app with real on-chain transactions, full onboarding, and txguard live analysis.
 
-**Website:** [rustok.uz](https://rustok.uz) | **API:** [api.rustok.uz](https://api.rustok.uz/health) | **X:** [@rustokwallet](https://x.com/rustokwallet)
+**Website:** [rustokwallet.com](https://rustokwallet.com) | **X:** [@rustokwallet](https://x.com/rustokwallet) | **Agent editions:** [github.com/rustok-org](https://github.com/rustok-org)
 
 ---
 
@@ -16,6 +16,8 @@ Rustok is a self-custody Ethereum wallet built around two ideas:
 2. **Trust but verify** — every transaction is analyzed by `txguard` before signing. It decodes calldata, runs security rules, simulates execution via `revm`, and enriches findings with threat intelligence.
 
 The mobile app (Android + iOS) is the primary interface. A public HTTP API and CLI are available for headless txguard analysis.
+
+**2026 evolution:** the same self-custody core now ships as **a wallet for AI agents** — MCP tools with fail-closed capability gating (read / preview / execute) and a three-rung trust ladder (autonomous agent → console-approved → phone-signed). See [rustokwallet.com](https://rustokwallet.com) and the [rustok-org](https://github.com/rustok-org) repositories (`mcp`, `console`, `mobile`, `paraswap-mcp`, `uniswap`).
 
 ---
 
@@ -66,8 +68,8 @@ The mobile app (Android + iOS) is the primary interface. A public HTTP API and C
 │  │ • router    │  │ • simulator │  │  /check-address     │ │
 │  │ • send      │  │ • enrichment│  │  /decode            │ │
 │  │ • explorer  │  │             │  │                     │ │
-│  │ • explainer │  │ 8 security  │  │  Live:              │ │
-│  │ • convert   │  │ rules       │  │  api.rustok.uz      │ │
+│  │ • explainer │  │ 8 security  │  │  Self-hosted        │ │
+│  │ • convert   │  │ rules       │  │  (see deploy/)      │ │
 │  └─────────────┘  └─────────────┘  └─────────────────────┘ │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
 │  │ rustok-cli  │  │ rustok-types│  │rustok-mobile-bindings│ │
@@ -211,7 +213,7 @@ rustok wallet send --keystore wallet.json --password "pwd" --to 0xd8dA...6045 --
 
 ## txguard API
 
-Public API for transaction security analysis. Live at `api.rustok.uz`.
+Public API for transaction security analysis (`rustok-api`, Axum). Self-hosted — see `deploy/`.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -221,12 +223,12 @@ Public API for transaction security analysis. Live at `api.rustok.uz`.
 
 ```bash
 # Check address
-curl -X POST https://api.rustok.uz/check-address \
+curl -X POST https://your-rustok-api-host/check-address \
   -H "Content-Type: application/json" \
   -d '{"address": "0xdAC17F958D2ee523a2206206994597C13D831ec7"}'
 
 # Decode transaction
-curl -X POST https://api.rustok.uz/decode \
+curl -X POST https://your-rustok-api-host/decode \
   -H "Content-Type: application/json" \
   -d '{"to": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "data": "0x095ea7b3000000000000000000000000000000000000000000000000000000000000dead00000000000000000000000000000000000000000000000000000000000f4240"}'
 ```
