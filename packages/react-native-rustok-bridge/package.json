@@ -20,7 +20,9 @@
   ],
   "scripts": {
     "ubrn:android": "ubrn build android --and-generate --config ubrn.config.yaml",
+    "ubrn:android:release": "ubrn build android --release --and-generate --config ubrn.config.yaml",
     "ubrn:ios": "ubrn build ios --and-generate --config ubrn.config.yaml",
+    "ubrn:ios:release": "ubrn build ios --release --and-generate --config ubrn.config.yaml",
     "ubrn:clean": "rimraf cpp android/CMakeLists.txt android/src/main/java android/src/main/jniLibs android/.cxx ios src/Native* src/index.tsx src/generated"
   },
   "peerDependencies": {

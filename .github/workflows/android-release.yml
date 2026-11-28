@@ -125,8 +125,8 @@ jobs:
       - name: Install workspace deps
         run: npm ci
 
-      - name: Build + generate uniffi React Native bindings
-        run: npm run ubrn:android -w packages/react-native-rustok-bridge
+      - name: Build + generate uniffi React Native bindings (release profile)
+        run: npm run ubrn:android:release -w packages/react-native-rustok-bridge
 
       # The previous run left no logs at all — the runner ran out of disk before
       # they could be uploaded, so the failure was only readable from a job
