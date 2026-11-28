@@ -6,8 +6,8 @@
  * Aligned с Phase 3 testing pattern (Button / ThemeSwitcher / etc): no
  * interaction simulation. NativeWind's css-interop wrapper resolves к
  * `null` в Jest, making `.toMatchSnapshot()` and Press-event-based tests
- * fake assertions. CTA wiring + tap behaviour verified manually via
- * `_ComponentsScreen` + М4.5 manual smoke matrix on JFLFG6MZSSL7WCF6.
+ * fake assertions. CTA wiring + tap behaviour are verified manually via
+ * `_ComponentsScreen` and physical-device smoke testing.
  *
  * `useNavigation` is mocked at file scope — без а `NavigationContainer`
  * parent the hook throws on cold mount. Returning а static

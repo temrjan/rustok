@@ -51,13 +51,15 @@ jobs:
           echo "After:"; df -h /
 
       - name: Reject a versionCode that is not a positive integer
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
         run: |
-          case "${{ inputs.version_code }}" in
+          case "$VERSION_CODE" in
             ''|*[!0-9]*)
-              echo "::error::version_code must be digits only, got '${{ inputs.version_code }}'"
+              echo "::error::version_code must be digits only, got '$VERSION_CODE'"
               exit 1 ;;
           esac
-          if [ "${{ inputs.version_code }}" -lt 1 ] || [ "${{ inputs.version_code }}" -gt 2100000000 ]; then
+          if [ "$VERSION_CODE" -lt 1 ] || [ "$VERSION_CODE" -gt 2100000000 ]; then
             echo "::error::version_code must be between 1 and 2100000000"
             exit 1
           fi
@@ -101,12 +103,15 @@ jobs:
 
       - name: Build unsigned arm64-v8a release APK
         working-directory: mobile/android
+        env:
+          VERSION_CODE: ${{ inputs.version_code }}
+          VERSION_NAME: ${{ inputs.version_name }}
         run: |
           ./gradlew assembleRelease \
             -PreactNativeArchitectures=arm64-v8a \
             -PallowUnsignedRelease=true \
-            -PversionCode=${{ inputs.version_code }} \
-            -PversionName=${{ inputs.version_name }} \
+            -PversionCode="$VERSION_CODE" \
+            -PversionName="$VERSION_NAME" \
             --no-daemon
 
       - name: Disk space after Gradle

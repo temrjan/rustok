@@ -17,7 +17,6 @@
  * accepts per design § 2 line 150.
  *
  * @see mobile/src/components/PinDots.tsx (sibling implementation)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.6 (Animation row)
  */
 
 import { useCallback, useEffect, useState } from 'react';

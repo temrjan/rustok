@@ -3,9 +3,8 @@
  *
  * Thin wrapper over react-native-toast-message singleton.
  *
- * Default visual config (white background, status icons) is NOT
- * theme-aware in M2 — theme-aware customization is deferred to M5+
- * (see PHASE3-DESIGN-APPSHELL.md §M2).
+ * Default visual config (white background, status icons) uses the
+ * library defaults; theme-aware customization is deferred.
  *
  * Mount <ToastProvider /> once at the app root (after AppContent in
  * the SafeAreaProvider tree, see App.tsx).

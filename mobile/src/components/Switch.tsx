@@ -28,9 +28,7 @@ export function Switch({
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
-      // Track and thumb colors are theme-agnostic for M2.
-      // M5+ may differentiate light/dark per accessibility studies
-      // (see PHASE3-DESIGN-APPSHELL.md §M2).
+      // Track and thumb colors are currently theme-agnostic.
       trackColor={{
         false: palette.light.ink.muted,
         true: palette.light.accent.periwinkle,

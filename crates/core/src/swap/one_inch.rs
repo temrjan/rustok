@@ -2,8 +2,7 @@
 //!
 //! Demonstrates [`SwapProvider`] extensibility without exercising the
 //! 1inch HTTP API. Returns [`SwapError::ProviderUnavailable`] for every
-//! call. Full implementation is deferred per
-//! `docs/SWAP-INTEGRATION-PLAN.md` §6.2.
+//! call until a full 1inch client is implemented.
 
 use crate::swap::SwapProvider;
 use crate::swap::types::{QuoteParams, SwapError, SwapQuote};

@@ -3,8 +3,8 @@
  *
  * NativeWind css-interop strips className output в jest, making
  * Press-event simulation fragile. Render-smoke proves component
- * mounts без runtime exception. Manual interaction smoke deferred
- * к M4.5 manual matrix on JFLFG6MZSSL7WCF6.
+ * mounts без runtime exception. Manual interaction smoke is covered
+ * on physical Android hardware.
  */
 
 import React from 'react';

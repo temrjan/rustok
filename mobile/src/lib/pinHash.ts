@@ -27,9 +27,6 @@
  * verify would yield a false negative. v1 pins params; future
  * schema-version bump in pinSetupStore would extend this with
  * params-from-PHC parsing.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.1 (Argon2id params + PHC format)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 line 151 (M2.4 deliverable)
  */
 
 import 'react-native-get-random-values';

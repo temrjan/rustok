@@ -11,8 +11,8 @@
  * journal (asserted via `executeOperation` call args).
  *
  * All state-changing interactions wrapped in `await act(async () => …)`
- * to dodge the "import after teardown" race documented в
- * `docs/JEST-SETUP-INCIDENT.md` (same pattern as SendScreen.test).
+ * to avoid Jest's "import after teardown" microtask race (same pattern
+ * as SendScreen.test).
  */
 
 import React from 'react';

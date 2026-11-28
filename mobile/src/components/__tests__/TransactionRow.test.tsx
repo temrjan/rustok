@@ -1,9 +1,8 @@
 /**
  * TransactionRow — render smoke. Asserting through tree inspection
- * trips the JEST-SETUP-INCIDENT "import after teardown" race (same
- * reason ActionRow.test.tsx uses the smoke-only pattern). The real
- * coverage for label content + tap behaviour is the device smoke
- * matrix on JFLFG6MZSSL7WCF6 documented in the spec section 5.
+ * trips Jest's "import after teardown" race (same reason
+ * ActionRow.test.tsx uses the smoke-only pattern). Label content and
+ * tap behaviour are verified in physical-device smoke testing.
  */
 
 import React from 'react';

@@ -19,11 +19,6 @@
  * union narrowable from а single field without forcing optional widening
  * on the store interface. Consumers do `useOnboarding().state.step` and
  * narrow via switch / discriminated-union pattern.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 line 189-196 (M3.1 deliverable)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.5 (ShowPhrase consumer)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.6 (Quiz consumer)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.5 (reveal_unavailable UX)
  */
 
 import { create } from 'zustand';

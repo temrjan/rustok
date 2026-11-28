@@ -48,12 +48,6 @@
  *
  * **DEV panel:** `_qaForcePhase` buttons preserved для QA — stripped
  * в M4.4 prod build.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.8 (UnlockScreen spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.1 line 483 (Argon2 spinner threshold)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.4 (lockout ladder consumer)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.6 (KeyPermanentlyInvalidated recovery)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.7 (mid-onboarding crash recovery)
  */
 
 import React, { useEffect, useRef, useState } from 'react';

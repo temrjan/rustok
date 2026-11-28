@@ -3,9 +3,9 @@
  *
  * NativeWind css-interop strips className output в jest, making
  * Press-event simulation fragile. Render-smoke proves component
- * mounts without runtime exception. Manual interaction smoke
- * deferred к M4.5 manual matrix on JFLFG6MZSSL7WCF6 (Argon2id
- * latency + spinner UX requires real device).
+ * mounts without runtime exception. Manual interaction smoke is
+ * covered on physical Android hardware (Argon2id latency + spinner UX
+ * require a real device).
  *
  * `useNavigation` and `useRoute` mocked at file scope — без
  * NavigationContainer parent the hooks throw on cold mount.

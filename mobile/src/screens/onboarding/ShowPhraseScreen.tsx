@@ -24,13 +24,7 @@
  * **Clipboard hygiene:**
  *   - `Clipboard.setString(mnemonic)` on copy press.
  *   - 30s `setTimeout` clears clipboard via `setString('')`.
- *   - User-facing hint warns about OEM keyboard clipboard caching (Xiaomi
- *     HyperOS keyboard cache history per Reviewer R2 § 5.5).
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 line 197-202 (M3.2 deliverable)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.5 (ShowPhrase spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.5 line 605-649 (mnemonic lifecycle)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.7 (mid-onboarding crash recovery)
+ *   - User-facing hint warns about OEM keyboard clipboard caching.
  */
 
 import React, { useCallback, useEffect, useRef } from 'react';

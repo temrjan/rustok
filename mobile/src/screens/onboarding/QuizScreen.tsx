@@ -22,9 +22,6 @@
  * `navigation.reset`: `'Tabs'` is not а route in `OnboardingStackParamList`,
  * so dispatching the action through the navigator tree is the
  * type-safe path for jumping out of the onboarding stack entirely.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.6 (Quiz spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.5 line 619-624 (pass actions)
  */
 
 import React, {

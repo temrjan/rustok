@@ -1,6 +1,6 @@
 //! FFI error taxonomy and conversions.
 //!
-//! Per `docs/PHASE-2-CONSTRAINTS.md` C2/C3:
+//! Boundary invariants:
 //! - Sensitive context (entropy fragments, partial keys, derivation paths,
 //!   passwords, mnemonics) NEVER crosses the FFI boundary as String.
 //! - Diagnostic detail stays Rust-side via [`tracing::error!`] before
