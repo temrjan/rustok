@@ -89,6 +89,14 @@ pub struct GasFees {
     pub max_priority_fee_per_gas: u128,
 }
 
+/// Minimal projection of `eth_getTransactionByHash` used to verify whether a
+/// pre-signed transaction hash is already in a node's mempool or chain without
+/// failing deserialization on chain-specific envelope types (e.g. zkSync `0x71`).
+#[derive(Debug, serde::Deserialize)]
+struct TxHashProbe {
+    hash: alloy_primitives::B256,
+}
+
 use crate::http::build_http_client;
 
 impl MultiProvider {
@@ -312,6 +320,23 @@ impl MultiProvider {
         Self::fetch_receipt(chain, tx_hash, &self.http).await
     }
 
+    /// Check whether a transaction with `tx_hash` is already known on `chain_id`
+    /// (pending in mempool or included in a block) via `eth_getTransactionByHash`.
+    ///
+    /// Unlike [`Self::transaction_receipt`], `None` from one endpoint does not
+    /// stop the scan: a lagging replica may not yet see a transaction that
+    /// another configured endpoint already accepted or mined. Returns `Ok(true)`
+    /// only when an endpoint returns a transaction object whose `hash` equals
+    /// `tx_hash`.
+    pub async fn transaction_exists(
+        &self,
+        chain_id: u64,
+        tx_hash: alloy_primitives::B256,
+    ) -> Result<bool, ProviderError> {
+        let chain = self.find_chain(chain_id)?;
+        Self::check_tx_exists(chain, tx_hash, &self.http).await
+    }
+
     /// Fetch the code at an address (`eth_getCode`, latest block) on a
     /// specific chain with RPC fallback.
     ///
@@ -418,6 +443,61 @@ impl MultiProvider {
         }
 
         Err(ProviderError::AllEndpointsFailed { chain_id: chain.id })
+    }
+
+    /// Check whether `tx_hash` is visible via `eth_getTransactionByHash` on any
+    /// configured endpoint of `chain`.
+    async fn check_tx_exists(
+        chain: &Chain,
+        tx_hash: alloy_primitives::B256,
+        http: &reqwest::Client,
+    ) -> Result<bool, ProviderError> {
+        let mut any_responded = false;
+
+        for rpc_url in &chain.rpc_urls {
+            let url = match rpc_url.parse() {
+                Ok(u) => u,
+                Err(_) => continue,
+            };
+
+            let provider = ProviderBuilder::new().connect_reqwest(http.clone(), url);
+
+            match provider
+                .raw_request::<_, Option<TxHashProbe>>(
+                    std::borrow::Cow::Borrowed("eth_getTransactionByHash"),
+                    (tx_hash,),
+                )
+                .await
+            {
+                Ok(Some(probe)) if probe.hash == tx_hash => return Ok(true),
+                Ok(Some(probe)) => {
+                    tracing::warn!(
+                        chain_id = chain.id,
+                        rpc = %rpc_url,
+                        expected = %tx_hash,
+                        got = %probe.hash,
+                        "eth_getTransactionByHash returned mismatched hash, ignoring"
+                    );
+                }
+                Ok(None) => {
+                    any_responded = true;
+                }
+                Err(e) => {
+                    tracing::debug!(
+                        chain_id = chain.id,
+                        rpc = %rpc_url,
+                        error = %e,
+                        "eth_getTransactionByHash failed, trying next"
+                    );
+                }
+            }
+        }
+
+        if any_responded {
+            Ok(false)
+        } else {
+            Err(ProviderError::AllEndpointsFailed { chain_id: chain.id })
+        }
     }
 
     /// Broadcast raw transaction with RPC fallback.

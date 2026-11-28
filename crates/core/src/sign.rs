@@ -280,9 +280,24 @@ fn is_provider_refusal_error(code: i64, message: &str) -> bool {
         || lower.contains("header not found")
 }
 
+/// Whether a JSON-RPC error indicates the signed transaction's nonce has
+/// already been consumed — which on fast L2s (Arbitrum, Base, Optimism) occurs
+/// when an earlier endpoint or an upstream inside the RPC proxy accepted the
+/// broadcast, dropped the HTTP response, and mined the block before retry.
+fn is_nonce_too_low_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("nonce too low") || lower.contains("nonce is too low")
+}
+
 /// Broadcast a pre-signed EIP-2718 transaction across all configured RPC URLs
 /// for `chain_id`, failing over on transport or upstream errors while
 /// preserving the first substantive node rejection if every endpoint fails.
+///
+/// If at least one endpoint failed ambiguously (transport/provider error) or
+/// reported `nonce too low`, queries `eth_getTransactionByHash(expected_hash)`
+/// before returning an error so a transaction that already landed on a fast L2
+/// (or via an upstream inside the RPC proxy) is recognized as broadcast rather
+/// than left in `Draft` for a duplicate re-send.
 pub(crate) async fn broadcast_raw_with_fallback(
     provider: &MultiProvider,
     chain_id: u64,
@@ -303,6 +318,8 @@ pub(crate) async fn broadcast_raw_with_fallback(
 
     let mut first_substantive_err: Option<String> = None;
     let mut last_fallback_err: Option<String> = None;
+    let mut saw_ambiguous_err = false;
+    let mut saw_nonce_too_low = false;
 
     for rpc_url in &chain.rpc_urls {
         let url: reqwest::Url = match rpc_url.parse() {
@@ -339,12 +356,30 @@ pub(crate) async fn broadcast_raw_with_fallback(
                     "broadcast failed on endpoint, trying next"
                 );
                 if is_substantive {
+                    if is_nonce_too_low_error(&msg) {
+                        saw_nonce_too_low = true;
+                    }
                     first_substantive_err.get_or_insert(msg);
                 } else {
+                    saw_ambiguous_err = true;
                     last_fallback_err = Some(msg);
                 }
             }
         }
+    }
+
+    if (saw_ambiguous_err || saw_nonce_too_low)
+        && matches!(
+            provider.transaction_exists(chain_id, expected_hash).await,
+            Ok(true)
+        )
+    {
+        tracing::info!(
+            chain_id,
+            %expected_hash,
+            "recovered already-accepted broadcast via eth_getTransactionByHash"
+        );
+        return Ok(expected_hash);
     }
 
     Err(SendError::Transaction(
@@ -564,5 +599,210 @@ mod tests {
             .expect("backup endpoint seeing already-known tx must return expected_hash");
 
         assert_eq!(got, expected);
+    }
+
+    async fn spawn_method_routing_rpc_server(
+        send_raw_resp: Option<(&'static str, String)>,
+        get_tx_resp: Option<(&'static str, String)>,
+        call_counter: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock routing RPC listener");
+        let addr = listener.local_addr().expect("mock listener local_addr");
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                call_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                let mut buf = [0u8; 4096];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]);
+                let chosen = if req.contains("eth_getTransactionByHash") {
+                    get_tx_resp.clone()
+                } else {
+                    send_raw_resp.clone()
+                };
+                if let Some((status_line, body)) = chosen {
+                    let resp = format!(
+                        "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = socket.write_all(resp.as_bytes()).await;
+                }
+                let _ = socket.shutdown().await;
+            }
+        });
+
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn broadcast_recovers_expected_hash_when_mined_after_primary_drop_and_lagging_replica() {
+        use crate::provider::Chain;
+        use std::sync::{Arc, atomic::AtomicUsize};
+
+        let expected = B256::repeat_byte(0xef);
+
+        // Primary accepts the tx then drops the TCP connection before replying.
+        let rpc_dropped =
+            spawn_method_routing_rpc_server(None, None, Arc::new(AtomicUsize::new(0))).await;
+        // Backup 1 returns `nonce too low` on broadcast, but its read replica lags (`result: null`).
+        let rpc_lagging = spawn_method_routing_rpc_server(
+            Some((
+                "200 OK",
+                r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}"#
+                    .into(),
+            )),
+            Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+            Arc::new(AtomicUsize::new(0)),
+        )
+        .await;
+        // Backup 2 also rejects broadcast with `nonce too low` and confirms the mined tx
+        // (including non-standard L2/zkSync `type: "0x71"` fields).
+        let rpc_mined = spawn_method_routing_rpc_server(
+            Some((
+                "200 OK",
+                r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}"#
+                    .into(),
+            )),
+            Some((
+                "200 OK",
+                format!(
+                    r#"{{"jsonrpc":"2.0","id":1,"result":{{"hash":"{expected}","type":"0x71","customL2Field":"0x01"}}}}"#
+                ),
+            )),
+            Arc::new(AtomicUsize::new(0)),
+        )
+        .await;
+
+        let provider = MultiProvider::new(vec![Chain {
+            id: 42161,
+            name: "Arbitrum One".into(),
+            rpc_urls: vec![rpc_dropped, rpc_lagging, rpc_mined],
+            explorer_url: "https://arbiscan.io".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "arbitrum",
+        }]);
+
+        let got = broadcast_raw_with_fallback(&provider, 42161, &[0x02, 0xf8, 0x00], expected)
+            .await
+            .expect("mined tx after dropped primary response must be recovered");
+        assert_eq!(got, expected);
+    }
+
+    #[tokio::test]
+    async fn broadcast_recovers_expected_hash_in_single_url_proxy_mode_on_nonce_too_low() {
+        use crate::provider::Chain;
+        use std::sync::{Arc, atomic::AtomicUsize};
+
+        let expected = B256::repeat_byte(0x77);
+        let calls = Arc::new(AtomicUsize::new(0));
+        // Simulates Cloudflare Worker proxy mode (`rpc_urls.len() == 1`) where upstream #1
+        // inside the Worker accepted and dropped, and upstream #2 returned HTTP 200 `nonce too low`.
+        let proxy_url = spawn_method_routing_rpc_server(
+            Some((
+                "200 OK",
+                r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low: next nonce 9, tx nonce 8"}}"#.into(),
+            )),
+            Some((
+                "200 OK",
+                format!(r#"{{"jsonrpc":"2.0","id":1,"result":{{"hash":"{expected}"}}}}"#),
+            )),
+            Arc::clone(&calls),
+        )
+        .await;
+
+        let provider = MultiProvider::new(vec![Chain {
+            id: 8453,
+            name: "Base".into(),
+            rpc_urls: vec![proxy_url],
+            explorer_url: "https://basescan.org".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "base",
+        }]);
+
+        let got = broadcast_raw_with_fallback(&provider, 8453, &[0x02, 0xf8, 0x00], expected)
+            .await
+            .expect("proxy-mode nonce-too-low with matching on-chain hash must succeed");
+        assert_eq!(got, expected);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn broadcast_keeps_error_on_mismatched_hash_and_skips_lookup_on_clean_rejection() {
+        use crate::provider::Chain;
+        use std::sync::{Arc, atomic::AtomicUsize};
+
+        let expected = B256::repeat_byte(0x11);
+        let wrong_hash = B256::repeat_byte(0x22);
+
+        // Case A: `nonce too low`, but RPC returns a different hash — must NOT false-green.
+        let spoof_url = spawn_method_routing_rpc_server(
+            Some((
+                "200 OK",
+                r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}"#
+                    .into(),
+            )),
+            Some((
+                "200 OK",
+                format!(r#"{{"jsonrpc":"2.0","id":1,"result":{{"hash":"{wrong_hash}"}}}}"#),
+            )),
+            Arc::new(AtomicUsize::new(0)),
+        )
+        .await;
+        let spoof_provider = MultiProvider::new(vec![Chain {
+            id: 10,
+            name: "Optimism".into(),
+            rpc_urls: vec![spoof_url],
+            explorer_url: "https://optimistic.etherscan.io".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "optimism",
+        }]);
+        let err = broadcast_raw_with_fallback(&spoof_provider, 10, &[0x02, 0xf8, 0x00], expected)
+            .await
+            .expect_err("mismatched tx hash must not be accepted as broadcast");
+        assert!(err.to_string().contains("nonce too low"));
+
+        // Case B: clean `insufficient funds` without ambiguous errors — must NOT issue extra lookup.
+        let clean_calls = Arc::new(AtomicUsize::new(0));
+        let clean_url = spawn_method_routing_rpc_server(
+            Some((
+                "200 OK",
+                r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"insufficient funds for transfer"}}"#.into(),
+            )),
+            Some((
+                "200 OK",
+                format!(r#"{{"jsonrpc":"2.0","id":1,"result":{{"hash":"{expected}"}}}}"#),
+            )),
+            Arc::clone(&clean_calls),
+        )
+        .await;
+        let clean_provider = MultiProvider::new(vec![Chain {
+            id: 1,
+            name: "Ethereum".into(),
+            rpc_urls: vec![clean_url],
+            explorer_url: "https://etherscan.io".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "ethereum",
+        }]);
+        let err = broadcast_raw_with_fallback(&clean_provider, 1, &[0x02, 0xf8, 0x00], expected)
+            .await
+            .expect_err("clean insufficient funds must fail");
+        assert!(err.to_string().contains("insufficient funds"));
+        assert_eq!(
+            clean_calls.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "clean non-nonce substantive rejection must not issue eth_getTransactionByHash"
+        );
     }
 }
