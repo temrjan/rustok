@@ -7,18 +7,12 @@
  *   7 8 9
  *     0 ⌫
  *
- * Bottom-left blank — empty View (not Touchable) per design § 4.3 a11y
- * spec, prevents stray accessibility focus. Future biometric prompt
- * integration (M4.1 UnlockScreen) можно added через prop slot если
- * required — defer per CLAUDE.md «не add features that the task
- * requires».
+ * Bottom-left blank — empty View (not Touchable) to prevent stray
+ * accessibility focus.
  *
- * Disabled state — opacity-50 + pointerEvents='none' (mirrors Phase 3
- * Button precedent for `isDisabled`). Used by CreatePin (isHashing) +
- * ConfirmPin (isCommitting) per design § 4.3 line 326 + § 4.4 line 337.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 line 150 (M2.3 deliverable)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.3 line 325 (a11y spec)
+ * Disabled state — opacity-50 + pointerEvents='none' (mirrors Button
+ * `isDisabled`). Used by CreatePin (`isHashing`) and ConfirmPin
+ * (`isCommitting`).
  */
 
 import React from 'react';
