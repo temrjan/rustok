@@ -7,3 +7,8 @@ android:
     - arm64-v8a
     - x86_64
   apiLevel: 24
+
+# Preserve android/build.gradle across `ubrn build android --and-generate` so
+# custom CMake linker flags (hiding internal Rust staticlib symbols) are kept.
+noOverwrite:
+  - android/build.gradle
