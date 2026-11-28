@@ -239,12 +239,50 @@ pub async fn sign_and_send_transaction_with_signer(
 /// gossiped transaction).
 fn is_already_known_broadcast_error(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
-    lower.contains("already known") || lower.contains("known transaction")
+    if lower.contains("already known") || lower.contains("already imported") {
+        return true;
+    }
+    // Match "known transaction" only at a word boundary so phrases such as
+    // "unknown transaction" or "unknown transaction type" never match.
+    lower
+        .match_indices("known transaction")
+        .any(|(idx, _)| idx == 0 || !lower.as_bytes()[idx - 1].is_ascii_alphabetic())
+}
+
+/// Whether a JSON-RPC error payload represents an upstream/provider refusal
+/// (rate limit, plan quota, missing API key, disabled method, internal gateway
+/// error) rather than a substantive EVM/mempool verdict on the transaction.
+fn is_provider_refusal_error(code: i64, message: &str) -> bool {
+    // EIP-1474 code 3 is an execution revert (e.g. `execution reverted: Unauthorized`).
+    if code == 3 {
+        return false;
+    }
+    if matches!(
+        code,
+        429 | 1008 | -32005 | -32029 | -32046 | -32055 | -32601 | -32603
+    ) {
+        return true;
+    }
+    let lower = message.to_ascii_lowercase();
+    lower.contains("rate limit")
+        || lower.contains("rate exceeded")
+        || lower.contains("too many requests")
+        || lower.contains("usage limit")
+        || lower.contains("request limit")
+        || lower.contains("credits limited")
+        || lower.contains("quota")
+        || lower.contains("api key")
+        || lower.contains("unauthorized")
+        || lower.contains("forbidden")
+        || lower.contains("cannot fulfill request")
+        || lower.contains("service unavailable")
+        || lower.contains("temporarily unavailable")
+        || lower.contains("header not found")
 }
 
 /// Broadcast a pre-signed EIP-2718 transaction across all configured RPC URLs
 /// for `chain_id`, failing over on transport or upstream errors while
-/// preserving the last concrete node error if every endpoint rejects it.
+/// preserving the first substantive node rejection if every endpoint fails.
 pub(crate) async fn broadcast_raw_with_fallback(
     provider: &MultiProvider,
     chain_id: u64,
@@ -263,13 +301,14 @@ pub(crate) async fn broadcast_raw_with_fallback(
         )));
     }
 
-    let mut last_err: Option<String> = None;
+    let mut first_substantive_err: Option<String> = None;
+    let mut last_fallback_err: Option<String> = None;
 
     for rpc_url in &chain.rpc_urls {
         let url: reqwest::Url = match rpc_url.parse() {
             Ok(u) => u,
             Err(e) => {
-                last_err = Some(format!("invalid RPC URL ({rpc_url}): {e}"));
+                last_fallback_err = Some(format!("invalid RPC URL ({rpc_url}): {e}"));
                 continue;
             }
         };
@@ -288,20 +327,31 @@ pub(crate) async fn broadcast_raw_with_fallback(
                 if is_already_known_broadcast_error(&msg) {
                     return Ok(expected_hash);
                 }
+                let is_substantive = e.as_error_resp().is_some_and(|payload| {
+                    !payload.is_retry_err()
+                        && !is_provider_refusal_error(payload.code, &payload.message)
+                });
                 tracing::debug!(
                     chain_id,
                     rpc = %rpc_url,
+                    substantive = is_substantive,
                     error = %msg,
                     "broadcast failed on endpoint, trying next"
                 );
-                last_err = Some(msg);
+                if is_substantive {
+                    first_substantive_err.get_or_insert(msg);
+                } else {
+                    last_fallback_err = Some(msg);
+                }
             }
         }
     }
 
-    Err(SendError::Transaction(last_err.unwrap_or_else(|| {
-        format!("all RPC endpoints failed for chain {chain_id}")
-    })))
+    Err(SendError::Transaction(
+        first_substantive_err
+            .or(last_fallback_err)
+            .unwrap_or_else(|| format!("all RPC endpoints failed for chain {chain_id}")),
+    ))
 }
 
 /// Compute `(estimated_gas_cost_wei, total_cost_wei)` from gas estimate,
@@ -350,9 +400,169 @@ mod tests {
         assert!(is_already_known_broadcast_error(
             "Known transaction: 0x1234"
         ));
+        assert!(is_already_known_broadcast_error(
+            "error code -32000: known transaction: 0xabcd"
+        ));
+        assert!(is_already_known_broadcast_error(
+            "Transaction with the same hash was already imported."
+        ));
+        assert!(!is_already_known_broadcast_error("unknown transaction"));
+        assert!(!is_already_known_broadcast_error(
+            "error code -32000: unknown transaction type"
+        ));
         assert!(!is_already_known_broadcast_error("nonce too low"));
         assert!(!is_already_known_broadcast_error(
             "insufficient funds for gas * price + value"
         ));
+    }
+
+    #[test]
+    fn classifies_provider_refusals_vs_substantive_tx_errors() {
+        assert!(is_provider_refusal_error(
+            -32001,
+            "You've reached the usage limit for your current plan"
+        ));
+        assert!(is_provider_refusal_error(-32005, "rate limit exceeded"));
+        assert!(is_provider_refusal_error(-32046, "Cannot fulfill request"));
+        assert!(is_provider_refusal_error(-32603, "Internal error"));
+        assert!(is_provider_refusal_error(
+            -32000,
+            "missing or invalid API key"
+        ));
+
+        // Substantive EVM / mempool rejections must never be treated as provider refusals.
+        assert!(!is_provider_refusal_error(
+            -32000,
+            "insufficient funds for gas * price + value"
+        ));
+        assert!(!is_provider_refusal_error(-32000, "nonce too low"));
+        assert!(!is_provider_refusal_error(
+            -32000,
+            "replacement transaction underpriced"
+        ));
+        assert!(!is_provider_refusal_error(
+            -32000,
+            "exceeds block gas limit"
+        ));
+        // Contract revert (code 3) with "Unauthorized" is an EVM execution error, not an RPC auth gate.
+        assert!(!is_provider_refusal_error(
+            3,
+            "execution reverted: Unauthorized"
+        ));
+    }
+
+    async fn spawn_mock_rpc_server(status_line: &'static str, body: &'static str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock RPC listener");
+        let addr = listener.local_addr().expect("mock listener local_addr");
+
+        tokio::spawn(async move {
+            if let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = [0u8; 4096];
+                let _ = socket.read(&mut buf).await;
+                let resp = format!(
+                    "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = socket.write_all(resp.as_bytes()).await;
+                let _ = socket.shutdown().await;
+            }
+        });
+
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn broadcast_preserves_first_substantive_error_over_fallback_refusals() {
+        use crate::provider::Chain;
+
+        let rpc_plan_limit_first = spawn_mock_rpc_server(
+            "200 OK",
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"You've reached the usage limit for your current plan"}}"#,
+        )
+        .await;
+        let rpc_first_substantive = spawn_mock_rpc_server(
+            "200 OK",
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"insufficient funds for gas * price + value"}}"#,
+        )
+        .await;
+        let rpc_second_substantive = spawn_mock_rpc_server(
+            "200 OK",
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}"#,
+        )
+        .await;
+        let rpc_http_429 = spawn_mock_rpc_server(
+            "429 Too Many Requests",
+            r#"{"error":"rate limit exceeded"}"#,
+        )
+        .await;
+
+        let provider = MultiProvider::new(vec![Chain {
+            id: 324,
+            name: "zkSync Era".into(),
+            rpc_urls: vec![
+                rpc_plan_limit_first,
+                rpc_first_substantive,
+                rpc_second_substantive,
+                rpc_http_429,
+            ],
+            explorer_url: "https://explorer.zksync.io".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "zksync",
+        }]);
+
+        let expected = B256::repeat_byte(0xab);
+        let err = broadcast_raw_with_fallback(&provider, 324, &[0x02, 0xf8, 0x00], expected)
+            .await
+            .expect_err("all mock endpoints rejected the broadcast");
+
+        let msg = err.to_string();
+        assert!(
+            msg.contains("insufficient funds"),
+            "expected first substantive error to be preserved, got: {msg}"
+        );
+        assert!(
+            !msg.contains("usage limit") && !msg.contains("nonce too low") && !msg.contains("429"),
+            "neither provider refusals nor later rejections may overwrite first substantive error: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn broadcast_fails_over_past_quota_error_to_already_known_on_backup() {
+        use crate::provider::Chain;
+
+        let rpc_plan_limit = spawn_mock_rpc_server(
+            "200 OK",
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32001,"message":"You've reached the usage limit for your current plan"}}"#,
+        )
+        .await;
+        let rpc_already_known = spawn_mock_rpc_server(
+            "200 OK",
+            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"already known"}}"#,
+        )
+        .await;
+
+        let provider = MultiProvider::new(vec![Chain {
+            id: 8453,
+            name: "Base".into(),
+            rpc_urls: vec![rpc_plan_limit, rpc_already_known],
+            explorer_url: "https://basescan.org".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "base",
+        }]);
+
+        let expected = B256::repeat_byte(0xcd);
+        let got = broadcast_raw_with_fallback(&provider, 8453, &[0x02, 0xf8, 0x00], expected)
+            .await
+            .expect("backup endpoint seeing already-known tx must return expected_hash");
+
+        assert_eq!(got, expected);
     }
 }

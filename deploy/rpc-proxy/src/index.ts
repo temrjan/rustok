@@ -15,8 +15,8 @@ type ChainName =
 const RPC_UPSTREAM: Record<ChainName, string[]> = {
   ethereum: [
     "https://ethereum-rpc.publicnode.com",
-    "https://cloudflare-eth.com",
     "https://eth.drpc.org",
+    "https://0xrpc.io/eth",
   ],
   arbitrum: [
     "https://arbitrum-one-rpc.publicnode.com",
@@ -31,11 +31,10 @@ const RPC_UPSTREAM: Record<ChainName, string[]> = {
   zksync: [
     "https://mainnet.era.zksync.io",
     "https://zksync.drpc.org",
-    "https://1rpc.io/zksync2-era",
   ],
   sepolia: [
     "https://ethereum-sepolia-rpc.publicnode.com",
-    "https://1rpc.io/sepolia",
+    "https://0xrpc.io/sep",
     "https://sepolia.gateway.tenderly.co",
   ],
   "arbitrum-sepolia": [
@@ -71,6 +70,18 @@ function isChain(s: string): s is ChainName {
  * immediately.
  */
 function isProviderRefusal(payload: unknown): string | null {
+  if (Array.isArray(payload)) {
+    if (payload.length === 0) {
+      return "empty JSON-RPC batch response";
+    }
+    for (const item of payload) {
+      const refusal = isProviderRefusal(item);
+      if (refusal !== null) {
+        return refusal;
+      }
+    }
+    return null;
+  }
   if (typeof payload !== "object" || payload === null) {
     return "non-object JSON-RPC response";
   }
@@ -81,14 +92,24 @@ function isProviderRefusal(payload: unknown): string | null {
   if ("error" in obj && typeof obj.error === "object" && obj.error !== null) {
     const err = obj.error as Record<string, unknown>;
     const code = typeof err.code === "number" ? err.code : undefined;
+    // EIP-1474 code 3 is a genuine EVM execution revert (e.g. `Unauthorized` custom error).
+    if (code === 3) {
+      return null;
+    }
     const msg = typeof err.message === "string" ? err.message.toLowerCase() : "";
     if (
       code === -32005 ||
       code === -32029 ||
+      code === -32046 ||
+      code === -32601 ||
+      code === -32603 ||
       msg.includes("api key") ||
       msg.includes("unauthorized") ||
       msg.includes("rate limit") ||
-      msg.includes("too many requests")
+      msg.includes("too many requests") ||
+      msg.includes("usage limit") ||
+      msg.includes("quota") ||
+      msg.includes("cannot fulfill request")
     ) {
       return `rpc error ${String(code ?? "")}: ${msg}`;
     }

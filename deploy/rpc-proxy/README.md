@@ -20,7 +20,7 @@ Upstream calls are server-to-server, where Android is not involved.
 
 | Route | Method | Target |
 |-------|--------|--------|
-| `POST /rpc/{chain}` | JSON-RPC | `publicnode` → `drpc` / `cloudflare-eth` |
+| `POST /rpc/{chain}` | JSON-RPC | `publicnode` → `drpc` / `0xrpc` |
 | `GET /explorer/{chain}/api?...` | REST | `blockscout.com` |
 | `GET /health` | — | liveness probe |
 | `GET /` | — | usage payload |
