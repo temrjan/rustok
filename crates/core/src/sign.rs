@@ -168,9 +168,23 @@ pub async fn sign_and_send_transaction(
 pub async fn sign_and_send_transaction_with_signer(
     signer: &alloy_signer_local::PrivateKeySigner,
     provider: &MultiProvider,
-    mut tx: TransactionRequest,
+    tx: TransactionRequest,
     chain_id: u64,
 ) -> Result<B256, SendError> {
+    let (raw_tx, expected_hash) =
+        prepare_and_sign_transaction(signer, provider, tx, chain_id).await?;
+    broadcast_raw_with_fallback(provider, chain_id, &raw_tx, expected_hash).await
+}
+
+/// Run [`preview_transaction`], enforce the txguard [`Action::Block`] backstop,
+/// fill any missing nonce / gas / EIP-1559 fee fields from `provider`, and sign
+/// the transaction into a deterministic EIP-2718 payload `(raw_tx, tx_hash)`.
+pub(crate) async fn prepare_and_sign_transaction(
+    signer: &alloy_signer_local::PrivateKeySigner,
+    provider: &MultiProvider,
+    mut tx: TransactionRequest,
+    chain_id: u64,
+) -> Result<(Vec<u8>, B256), SendError> {
     let signer = signer.clone();
     let from = signer.address();
 
@@ -229,8 +243,9 @@ pub async fn sign_and_send_transaction_with_signer(
         .map_err(|e| SendError::Transaction(format!("sign transaction: {e}")))?;
     let expected_hash = *envelope.tx_hash();
     let raw_tx = envelope.encoded_2718();
+    debug_assert_eq!(alloy_primitives::keccak256(&raw_tx), expected_hash);
 
-    broadcast_raw_with_fallback(provider, chain_id, &raw_tx, expected_hash).await
+    Ok((raw_tx, expected_hash))
 }
 
 /// Whether a JSON-RPC error indicates the signed transaction is already in
@@ -289,6 +304,24 @@ fn is_nonce_too_low_error(message: &str) -> bool {
     lower.contains("nonce too low") || lower.contains("nonce is too low")
 }
 
+/// Classified failure from [`broadcast_raw_classified`] telling journaled
+/// callers whether a persisted pre-signed payload may be safely discarded.
+#[derive(Debug)]
+pub(crate) struct BroadcastFailure {
+    /// Underlying broadcast error to surface to the caller.
+    pub err: SendError,
+    /// `true` on an initial broadcast when every configured endpoint answered
+    /// with a clean non-nonce substantive rejection (e.g. `insufficient funds`
+    /// or `max fee per gas less than block base fee`) and zero endpoints had
+    /// transport or provider-refusal errors — no node accepted `raw_tx`.
+    pub clear_saved_on_initial: bool,
+    /// `true` on a replay of a saved `Draft` when zero endpoints had transport
+    /// or provider-refusal errors and `eth_getTransactionByHash` did not fail
+    /// (confirming `expected_hash` is absent on-chain even if `nonce too low`
+    /// was reported because another wallet consumed the nonce).
+    pub clear_saved_on_replay: bool,
+}
+
 /// Broadcast a pre-signed EIP-2718 transaction across all configured RPC URLs
 /// for `chain_id`, failing over on transport or upstream errors while
 /// preserving the first substantive node rejection if every endpoint fails.
@@ -304,16 +337,36 @@ pub(crate) async fn broadcast_raw_with_fallback(
     raw_tx: &[u8],
     expected_hash: B256,
 ) -> Result<B256, SendError> {
+    broadcast_raw_classified(provider, chain_id, raw_tx, expected_hash)
+        .await
+        .map_err(|f| f.err)
+}
+
+/// Same as [`broadcast_raw_with_fallback`], returning [`BroadcastFailure`] so
+/// [`crate::account::Executor::execute`] knows whether to retain or clear the
+/// journaled `signed_tx` bytes on `Draft`.
+pub(crate) async fn broadcast_raw_classified(
+    provider: &MultiProvider,
+    chain_id: u64,
+    raw_tx: &[u8],
+    expected_hash: B256,
+) -> Result<B256, BroadcastFailure> {
     let chain = provider
         .chains()
         .iter()
         .find(|c| c.id == chain_id)
-        .ok_or_else(|| SendError::Provider(format!("chain {chain_id} not found")))?;
+        .ok_or_else(|| BroadcastFailure {
+            err: SendError::Provider(format!("chain {chain_id} not found")),
+            clear_saved_on_initial: true,
+            clear_saved_on_replay: true,
+        })?;
 
     if chain.rpc_urls.is_empty() {
-        return Err(SendError::Provider(format!(
-            "no RPC URL for chain {chain_id}"
-        )));
+        return Err(BroadcastFailure {
+            err: SendError::Provider(format!("no RPC URL for chain {chain_id}")),
+            clear_saved_on_initial: true,
+            clear_saved_on_replay: true,
+        });
     }
 
     let mut first_substantive_err: Option<String> = None;
@@ -368,12 +421,13 @@ pub(crate) async fn broadcast_raw_with_fallback(
         }
     }
 
-    if (saw_ambiguous_err || saw_nonce_too_low)
-        && matches!(
-            provider.transaction_exists(chain_id, expected_hash).await,
-            Ok(true)
-        )
-    {
+    let lookup_outcome = if saw_ambiguous_err || saw_nonce_too_low {
+        Some(provider.transaction_exists(chain_id, expected_hash).await)
+    } else {
+        None
+    };
+
+    if matches!(lookup_outcome, Some(Ok(true))) {
         tracing::info!(
             chain_id,
             %expected_hash,
@@ -382,11 +436,17 @@ pub(crate) async fn broadcast_raw_with_fallback(
         return Ok(expected_hash);
     }
 
-    Err(SendError::Transaction(
+    let err = SendError::Transaction(
         first_substantive_err
             .or(last_fallback_err)
             .unwrap_or_else(|| format!("all RPC endpoints failed for chain {chain_id}")),
-    ))
+    );
+    Err(BroadcastFailure {
+        err,
+        clear_saved_on_initial: !saw_ambiguous_err && !saw_nonce_too_low,
+        clear_saved_on_replay: !saw_ambiguous_err
+            && matches!(lookup_outcome, None | Some(Ok(false))),
+    })
 }
 
 /// Compute `(estimated_gas_cost_wei, total_cost_wei)` from gas estimate,
