@@ -258,3 +258,44 @@ describe('wipeUnlockSecret — BLOCKER-1', () => {
     ).resolves.toBe(false);
   });
 });
+
+describe('Hermes runtime compatibility — no TextEncoder / TextDecoder', () => {
+  const savedTextEncoder = globalThis.TextEncoder;
+  const savedTextDecoder = globalThis.TextDecoder;
+
+  beforeEach(() => {
+    // React Native 0.85 Hermes (`libhermesvm.so`) ships neither global
+    // TextEncoder nor TextDecoder. Node.js 22 defines both in Jest, which previously
+    // masked the ReferenceError swallowed inside `unlockSecretViaPin`.
+    (globalThis as Record<string, unknown>).TextEncoder = undefined;
+    (globalThis as Record<string, unknown>).TextDecoder = undefined;
+  });
+
+  afterEach(() => {
+    globalThis.TextEncoder = savedTextEncoder;
+    globalThis.TextDecoder = savedTextDecoder;
+  });
+
+  it('seals, stores, and opens a PIN record without TextEncoder or TextDecoder', async () => {
+    await storePinRecord(SECRET, PIN);
+    await expect(retrieveSecretWithPin(PIN)).resolves.toBe(SECRET);
+  });
+
+  it('migrates on first unlock without TextEncoder/TextDecoder so second unlock never touches the biometric record', async () => {
+    await Keychain.setGenericPassword('legacy-user', SECRET, {
+      service: 'com.rustok.unlock',
+    } as never);
+    const getCount = Keychain as unknown as {
+      __getGetCallCounter: (service: string) => number;
+    };
+
+    await expect(unlockSecretViaPin(PIN)).resolves.toBe(SECRET);
+    expect(getCount.__getGetCallCounter('com.rustok.unlock')).toBe(1);
+    await expect(hasPinRecord()).resolves.toBe(true);
+
+    // Second PIN unlock must open from `com.rustok.unlock.pin` with zero reads
+    // of the biometric-gated `com.rustok.unlock` record.
+    await expect(unlockSecretViaPin(PIN)).resolves.toBe(SECRET);
+    expect(getCount.__getGetCallCounter('com.rustok.unlock')).toBe(1);
+  });
+});

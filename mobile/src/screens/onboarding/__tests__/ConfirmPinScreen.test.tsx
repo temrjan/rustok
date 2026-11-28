@@ -41,9 +41,11 @@ jest.mock('../../../lib/pinHash', () => ({
 }));
 
 const mockGetOrCreate = jest.fn();
+const mockStorePinRecord = jest.fn();
 const mockWipe = jest.fn();
 jest.mock('../../../lib/unlockSecret', () => ({
   getOrCreateUnlockSecret: (...args: unknown[]) => mockGetOrCreate(...args),
+  storePinRecord: (...args: unknown[]) => mockStorePinRecord(...args),
   wipeUnlockSecret: (...args: unknown[]) => mockWipe(...args),
 }));
 
@@ -146,6 +148,7 @@ describe('ConfirmPinScreen', () => {
     pinPadProps.disabled = undefined;
     mockWalletPhase = 'unlocked';
     mockGetOrCreate.mockResolvedValue('a'.repeat(64));
+    mockStorePinRecord.mockResolvedValue(undefined);
     mockWipe.mockResolvedValue(undefined);
     mockCreateWallet.mockResolvedValue(undefined);
     mockRefresh.mockResolvedValue(undefined);
@@ -170,6 +173,7 @@ describe('ConfirmPinScreen', () => {
       await flush();
     });
     expect(mockGetOrCreate).toHaveBeenCalledTimes(1);
+    expect(mockStorePinRecord).toHaveBeenCalledWith('a'.repeat(64), PIN);
     expect(mockSetPinHash).toHaveBeenCalledWith(mockExpectedHash);
     expect(mockSetPhraseBackupPending).toHaveBeenCalledWith(true);
     expect(mockCreateWallet).toHaveBeenCalledWith('a'.repeat(64));
@@ -195,6 +199,29 @@ describe('ConfirmPinScreen', () => {
     expect(mockCreateWallet).not.toHaveBeenCalled();
     expect(mockWipe).not.toHaveBeenCalled();
     expect(mockClearAll).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith('CreatePin');
+    expect(mockToastError).toHaveBeenCalledWith(
+      expect.stringContaining('Could not save secure key'),
+    );
+  });
+
+  it('Step 1b fail (storePinRecord throw on create) → wipes unlock secret and resets to CreatePin', async () => {
+    mockVerifyPin.mockResolvedValue(true);
+    mockStorePinRecord.mockRejectedValue(new Error('pin record write failed'));
+    await act(async () => {
+      renderer.create(<ConfirmPinScreen />);
+      await flush();
+    });
+    await enterFullPin();
+    await act(async () => {
+      await flush();
+      await flush();
+    });
+    expect(mockGetOrCreate).toHaveBeenCalledTimes(1);
+    expect(mockStorePinRecord).toHaveBeenCalledWith('a'.repeat(64), PIN);
+    expect(mockWipe).toHaveBeenCalledTimes(1);
+    expect(mockSetPinHash).not.toHaveBeenCalled();
+    expect(mockCreateWallet).not.toHaveBeenCalled();
     expect(mockNavigate).toHaveBeenCalledWith('CreatePin');
     expect(mockToastError).toHaveBeenCalledWith(
       expect.stringContaining('Could not save secure key'),
