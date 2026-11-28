@@ -16,7 +16,6 @@ const RPC_UPSTREAM: Record<ChainName, string[]> = {
   ethereum: [
     "https://ethereum-rpc.publicnode.com",
     "https://eth.drpc.org",
-    "https://0xrpc.io/eth",
   ],
   arbitrum: [
     "https://arbitrum-one-rpc.publicnode.com",
@@ -34,7 +33,6 @@ const RPC_UPSTREAM: Record<ChainName, string[]> = {
   ],
   sepolia: [
     "https://ethereum-sepolia-rpc.publicnode.com",
-    "https://0xrpc.io/sep",
     "https://sepolia.gateway.tenderly.co",
   ],
   "arbitrum-sepolia": [
