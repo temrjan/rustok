@@ -168,32 +168,35 @@ pub async fn execute_send(
             .await?;
 
     // 5. Wait for at least one confirmation with timeout (also using RPC failover).
+    // Transient RPC errors during polling do not abort immediately because the
+    // transaction is already broadcast on-chain; keep polling until the timeout.
     let poll_receipt = async {
         loop {
             match provider.transaction_receipt(route.chain_id, tx_hash).await {
-                Ok(Some(r)) => return Ok(r),
+                Ok(Some(r)) => return r,
                 Ok(None) => tokio::time::sleep(Duration::from_secs(2)).await,
-                Err(e) => return Err(e),
+                Err(e) => {
+                    tracing::debug!(
+                        %tx_hash,
+                        error = %e,
+                        "transient receipt poll error after broadcast, retrying"
+                    );
+                    tokio::time::sleep(Duration::from_secs(2)).await;
+                }
             }
         }
     };
-    let receipt = match timeout(Duration::from_secs(120), poll_receipt).await {
-        Ok(Ok(r)) => r,
-        Ok(Err(e)) => {
-            return Err(SendError::Transaction(format!("receipt: {e}")));
-        }
-        Err(_) => {
-            tracing::warn!(%tx_hash, "receipt timeout — transaction still pending");
-            return Ok(SendResult {
-                tx_hash,
-                chain_id: route.chain_id,
-                chain_name: route.chain_name.clone(),
-                from,
-                to,
-                amount_wei,
-                estimated_gas_cost: route.estimated_cost,
-            });
-        }
+    let Ok(receipt) = timeout(Duration::from_secs(120), poll_receipt).await else {
+        tracing::warn!(%tx_hash, "receipt timeout — transaction still pending");
+        return Ok(SendResult {
+            tx_hash,
+            chain_id: route.chain_id,
+            chain_name: route.chain_name.clone(),
+            from,
+            to,
+            amount_wei,
+            estimated_gas_cost: route.estimated_cost,
+        });
     };
 
     if !receipt.status() {
