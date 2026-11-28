@@ -417,12 +417,21 @@ function sealWithKey(
   saltHex: string,
   key: Uint8Array,
 ): string {
+  // Encode directly from validated hex bytes — React Native 0.85 Hermes does
+  // not provide global TextEncoder / TextDecoder.
+  const plain = fromHex(secretHex);
+  if (plain.length !== SECRET_BYTES) {
+    throw new UnlockSecretException(
+      'unknown',
+      undefined,
+      `pin record: unexpected secret byte length (${plain.length})`,
+      undefined,
+    );
+  }
   // Same guarded source as the secret itself: a nonce from a weak RNG would
   // silently undermine the seal, and XChaCha's safety rests on it being unique.
   const nonce = randomBytes(NONCE_BYTES);
-  const sealed = xchacha20poly1305(key, nonce).encrypt(
-    new TextEncoder().encode(secretHex),
-  );
+  const sealed = xchacha20poly1305(key, nonce).encrypt(plain);
   return `${RECORD_VERSION}.${saltHex}.${toHex(nonce)}.${toHex(sealed)}`;
 }
 
@@ -456,7 +465,15 @@ function openWithKey(record: string, key: Uint8Array): string {
   const opened = xchacha20poly1305(key, fromHex(nonceHex)).decrypt(
     fromHex(sealedHex),
   );
-  return new TextDecoder().decode(opened);
+  if (opened.length !== SECRET_BYTES) {
+    throw new UnlockSecretException(
+      'unknown',
+      undefined,
+      `pin record opened to an unexpected byte length (${opened.length})`,
+      undefined,
+    );
+  }
+  return toHex(opened);
 }
 
 /**

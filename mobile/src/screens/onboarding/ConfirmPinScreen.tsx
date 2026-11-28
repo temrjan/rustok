@@ -43,6 +43,7 @@ import { PinPad } from '../../components/PinPad';
 import { verifyPin } from '../../lib/pinHash';
 import {
   getOrCreateUnlockSecret,
+  storePinRecord,
   wipeUnlockSecret,
 } from '../../lib/unlockSecret';
 import { getWalletHandle } from '../../lib/walletHandle';
@@ -95,7 +96,7 @@ function ConfirmPinScreen() {
         if (cancelled) return;
         setIsVerifying(false);
         if (match) {
-          commitWallet().catch(() => {});
+          commitWallet(digits).catch(() => {});
           return;
         }
         const next = confirmAttempts + 1;
@@ -127,7 +128,7 @@ function ConfirmPinScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- commitWallet is defined inside the component closure; including it would re-run on every render. Re-trigger logic gated by digits.length === 6.
   }, [digits, expectedHash, confirmAttempts, navigation]);
 
-  async function commitWallet(): Promise<void> {
+  async function commitWallet(confirmedPin: string): Promise<void> {
     setIsCommitting(true);
     // M4.3: import flow gates Step 3 (createWallet) — wallet already on
     // disk via importWalletFromMnemonic; calling createWallet would wipe
@@ -136,8 +137,17 @@ function ConfirmPinScreen() {
     let step: 1 | 2 | 3 | 4 = 1;
     try {
       // Step 1: Keychain — secret already in Keychain on import flow;
-      // getOrCreate is idempotent, returns existing.
+      // getOrCreate is idempotent, returns existing. Seal the PIN record
+      // immediately so the very first PIN unlock opens without a system dialog.
       const secret = await getOrCreateUnlockSecret();
+      try {
+        await storePinRecord(secret, confirmedPin);
+      } catch (pinRecordErr) {
+        if (!walletAlreadyCreated) {
+          await wipeUnlockSecret().catch(() => {});
+        }
+        throw pinRecordErr;
+      }
       step = 2;
 
       // Step 2: MMKV writes. Create flow → phraseBackupPending=true (user
