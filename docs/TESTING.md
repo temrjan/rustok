@@ -15,8 +15,8 @@ Each scenario below has two columns (iOS / Android). Target devices:
 
 ### Android
 1. Pixel_8 API 35 emulator running (`emulator -avd Pixel_8_API_35`)
-2. App launched — Metro + `adb reverse` + install debug APK, see `CLAUDE.md` § Android dev
-3. Paste into Emulator: `adb shell input text "0xADDRESS"` (или через Android clipboard)
+2. App launched — Metro + `adb reverse` + install debug APK, see `mobile/README.md`
+3. Paste into Emulator: `adb shell input text "0xADDRESS"` (or via the Android clipboard)
 
 ### Common
 1. Create wallet in the app, copy address
@@ -216,8 +216,8 @@ Biometric unlock requires enrollment in the host Simulator / Emulator before any
 
 | Gap | Impact | Tracked |
 |-----|--------|---------|
-| GoPlus enrichment not in UI | Scam detection is rule-based only | REVIEW.md |
-| Router ignores L2 data fees | Actual L2 cost may be higher than estimated | REVIEW.md |
+| GoPlus enrichment not in UI | Scam detection is rule-based only | Backlog |
+| Router ignores L2 data fees | Actual L2 cost may be higher than estimated | Backlog |
 | No token support | ETH only, no ERC-20 | Phase 4+ |
 | No manual chain selection | Auto-routes to cheapest chain | Design decision |
 | No tx confirmation waiting | Returns tx_hash, doesn't wait for block | Consider |

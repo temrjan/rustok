@@ -270,7 +270,7 @@ Custom fonts (Roboto, SF Pro Display) are **not bundled** in this codebase:
 If `fontFamily: 'Roboto, ...'` were added as a token now, React Native would
 silently fall back to system default — false delivery. Family is deferred to a
 separate infrastructure task (font bundling + Android assets + iOS plist +
-device smoke on JFLFG6MZSSL7WCF6).
+physical-device smoke).
 
 ### 5.3 `surface.card` exists to close a pre-existing visual bug
 
@@ -326,18 +326,15 @@ Tracked separately after this foundation PR:
 ### Imminent (next PRs)
 
 1. **PR `chore(theme): soften palette`** ✅ *(applied — see commit history on
-   `chore/theme-soften`)* — two Captain-approved re-tones now live:
+   `chore/theme-soften`)* — two palette re-tones now live:
    - Dark canvas + dark surfaces → "B graphite" palette (6 values: canvas,
      brand.deep, surface.alt, surface.card, surface.elevated, surface.border)
    - Light canvas + light surface.card + light surface.elevated → off-white
      (3 values: `#F2F3F7`, `#FAFAFB`, `#FCFDFE`; removes pure white from
      light theme)
-   Preview files: `C:\Claude\projects\Дизайн\dark-tone-preview.html` and
-   `hero-block-preview.html`.
 
 2. **PR `feat(mobile): hero block redesign`** ✅ *(applied — see commits on
-   `feat/hero-redesign`)* — visual refactor per target design
-   (`C:\Claude\projects\Дизайн\uploads\Дизайн\Снимок экрана 2026-04-27 112247.png`):
+   `feat/hero-redesign`)* — visual refactor per target design:
    - C1: `shadow.card` token namespace (RN iOS `shadow*` + Android `elevation` —
      see §2.8). Note: `shadow.soft` and `shadow.btn` deferred to backlog (no
      consumers yet); `shadow.card` is the only level shipped in this PR.
@@ -374,10 +371,6 @@ Tracked separately after this foundation PR:
 ## 7. References
 
 - **Canonical source:** [rust-design `src/tokens.rs`](https://github.com/temrjan/rust-design/blob/main/src/tokens.rs) @ commit `75cbb61` (Leptos prototype, design reference only).
-- **Local clone:** `C:\Claude\projects\rust-design\` (read-only reference).
-- **Target visual:** `C:\Claude\projects\Дизайн\uploads\Дизайн\Снимок экрана 2026-04-27 112247.png`.
-- **Phase 3 M1 design doc:** `docs/PHASE3-DESIGN-APPSHELL.md` (foundation establishment).
-- **Phase 3 M1 handoff:** `docs/PHASE3-HANDOFF.md` (commit trail `4b1e641`, `2ccee00`).
 - **NativeWind v4 `.dark:root` quirk:** [nativewind/nativewind#702](https://github.com/nativewind/nativewind/issues/702).
 - **React Native `fontWeight` API:** [reactnative.dev/docs/text-style-props](https://reactnative.dev/docs/text-style-props#fontweight).
 

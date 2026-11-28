@@ -88,7 +88,7 @@ For a series of commits, use an interactive rebase with `--signoff`.
 
 ## Code Quality Expectations
 
-- Follow the Codex standards referenced in `CLAUDE.md`.
+- Ensure all Rust and mobile pre-commit gates pass (`cargo fmt`, `cargo clippy`, `cargo test`, `cargo deny`, and `mobile` `typecheck`/`lint`/`test`).
 - New features must include tests.
 - Changes to security-critical code (`crates/core/keyring`,
   `crates/txguard`) require extra review.

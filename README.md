@@ -2,9 +2,9 @@
 
 Ethereum wallet with chain abstraction and transaction security engine.
 
-**Status:** Production — Phase 7 DONE — Android verified on Sepolia; iOS supported. React Native app with real on-chain transactions, full onboarding, and txguard live analysis.
+**Status:** `v1.0.0` — Android (`arm64-v8a`) + Rust workspace (`rustok-core`, `txguard`, CLI, HTTP API); iOS supported from source.
 
-**Website:** [rustokwallet.com](https://rustokwallet.com) | **X:** [@rustokwallet](https://x.com/rustokwallet) | **Agent editions:** [github.com/rustok-org](https://github.com/rustok-org)
+**Website:** [rustokwallet.com](https://rustokwallet.com) | **Releases:** [GitHub Releases](https://github.com/temrjan/rustok/releases) | **X:** [@rustokwallet](https://x.com/rustokwallet) | **Agent editions:** [github.com/rustok-org](https://github.com/rustok-org)
 
 ---
 
@@ -30,6 +30,18 @@ The mobile app (Android + iOS) is the primary interface. A public HTTP API and C
 - **Onboarding** — create wallet (4-step wizard + phrase quiz), import from seed phrase, or recover from lockout / biometric change
 - **Activity history** — real transaction feed with pending-state tracking and explorer links
 - **Theme** — light / dark / system with design-token consistency across the UI
+
+---
+
+## Download (Android)
+
+Signed standalone `arm64-v8a` APKs (`v2 + v3` APK Signature Scheme) and `SHA256SUMS` are published directly:
+
+- **Direct APK + `SHA256SUMS`:** [GitHub Releases](https://github.com/temrjan/rustok/releases) and [rustokwallet.com](https://rustokwallet.com)
+- **Automatic updates via [Obtainium](https://github.com/ImranR98/Obtainium):** add app source URL `https://github.com/temrjan/rustok`
+- **Zapstore:** package `com.rustok`
+
+See [`docs/ANDROID-RELEASE.md`](docs/ANDROID-RELEASE.md) for reproducible build steps and signature/checksum verification.
 
 ---
 
@@ -233,24 +245,18 @@ curl -X POST https://your-rustok-api-host/decode \
   -d '{"to": "0xdAC17F958D2ee523a2206206994597C13D831ec7", "data": "0x095ea7b3000000000000000000000000000000000000000000000000000000000000dead00000000000000000000000000000000000000000000000000000000000f4240"}'
 ```
 
-Deployed via Docker + Caddy on 185.197.195.191 (`deploy/`).
+Self-hosted deployment configuration via Docker + Caddy is provided in `deploy/`, and the stateless RPC failover worker lives in `deploy/rpc-proxy/`.
 
 ---
 
 ## Tests
 
-```
-517 tests, 0 failures
- - Rust workspace: 231 tests (txguard, core, types, mobile-bindings)
- - Mobile (Jest):   286 tests (components, stores, hooks, screens)
-```
-
-Pre-commit gates:
+Pre-commit gates (enforced in CI across Rust and React Native):
 ```bash
 # Rust
 cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace --all-features
 
 # Mobile
 cd mobile && npm run typecheck && npm run lint && npm run test
@@ -285,8 +291,8 @@ rustok/
 │   ├── cli/                         # CLI binary
 │   └── rustok-mobile-bindings/      # uniffi FFI exports
 │
-├── deploy/                          # Docker + Caddy deployment
-└── docs/                            # Architecture, phase handoffs, incident reports
+├── deploy/                          # Docker + Caddy + Cloudflare RPC proxy
+└── docs/                            # Android release guide, design tokens, E2E checklist, research
 ```
 
 ---
