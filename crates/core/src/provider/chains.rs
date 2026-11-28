@@ -49,6 +49,7 @@ pub fn default_chains() -> Vec<Chain> {
             rpc_urls: vec![
                 "https://arbitrum-one-rpc.publicnode.com".into(),
                 "https://arbitrum.drpc.org".into(),
+                "https://arb1.arbitrum.io/rpc".into(),
             ],
             explorer_url: "https://arbiscan.io".into(),
             native_symbol: "ETH".into(),
@@ -61,7 +62,8 @@ pub fn default_chains() -> Vec<Chain> {
             name: "Base".into(),
             rpc_urls: vec![
                 "https://mainnet.base.org".into(),
-                "https://rpc.ankr.com/base".into(),
+                "https://base-rpc.publicnode.com".into(),
+                "https://base.drpc.org".into(),
             ],
             explorer_url: "https://basescan.org".into(),
             native_symbol: "ETH".into(),
@@ -74,7 +76,8 @@ pub fn default_chains() -> Vec<Chain> {
             name: "Optimism".into(),
             rpc_urls: vec![
                 "https://mainnet.optimism.io".into(),
-                "https://rpc.ankr.com/optimism".into(),
+                "https://optimism-rpc.publicnode.com".into(),
+                "https://optimism.drpc.org".into(),
             ],
             explorer_url: "https://optimistic.etherscan.io".into(),
             native_symbol: "ETH".into(),
@@ -85,7 +88,11 @@ pub fn default_chains() -> Vec<Chain> {
         Chain {
             id: 324,
             name: "zkSync Era".into(),
-            rpc_urls: vec!["https://mainnet.era.zksync.io".into()],
+            rpc_urls: vec![
+                "https://mainnet.era.zksync.io".into(),
+                "https://zksync.drpc.org".into(),
+                "https://1rpc.io/zksync2-era".into(),
+            ],
             explorer_url: "https://explorer.zksync.io".into(),
             native_symbol: "ETH".into(),
             native_decimals: 18,
@@ -97,8 +104,8 @@ pub fn default_chains() -> Vec<Chain> {
             name: "Sepolia".into(),
             rpc_urls: vec![
                 "https://ethereum-sepolia-rpc.publicnode.com".into(),
-                "https://rpc.sepolia.org".into(),
-                "https://sepolia.drpc.org".into(),
+                "https://1rpc.io/sepolia".into(),
+                "https://sepolia.gateway.tenderly.co".into(),
             ],
             explorer_url: "https://sepolia.etherscan.io".into(),
             native_symbol: "ETH".into(),
@@ -157,7 +164,27 @@ mod tests {
     #[test]
     fn default_chains_have_rpc() {
         for chain in default_chains() {
-            assert!(!chain.rpc_urls.is_empty(), "{} has no RPC URLs", chain.name);
+            assert!(
+                chain.rpc_urls.len() >= 2,
+                "{} must configure at least 2 RPC URLs for failover",
+                chain.name
+            );
+            for url in &chain.rpc_urls {
+                assert!(
+                    url.starts_with("https://"),
+                    "{} RPC {} is not HTTPS",
+                    chain.name,
+                    url
+                );
+                assert!(
+                    !url.contains("rpc.ankr.com")
+                        && !url.contains("rpc.sepolia.org")
+                        && !url.contains("sepolia.drpc.org"),
+                    "{} retains dead or key-gated RPC {}",
+                    chain.name,
+                    url
+                );
+            }
             assert!(
                 chain
                     .primary_rpc()

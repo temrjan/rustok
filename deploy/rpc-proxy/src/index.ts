@@ -9,7 +9,8 @@ type ChainName =
   | "base"
   | "optimism"
   | "zksync"
-  | "sepolia";
+  | "sepolia"
+  | "arbitrum-sepolia";
 
 const RPC_UPSTREAM: Record<ChainName, string[]> = {
   ethereum: [
@@ -20,6 +21,7 @@ const RPC_UPSTREAM: Record<ChainName, string[]> = {
   arbitrum: [
     "https://arbitrum-one-rpc.publicnode.com",
     "https://arbitrum.drpc.org",
+    "https://arb1.arbitrum.io/rpc",
   ],
   base: ["https://base-rpc.publicnode.com", "https://base.drpc.org"],
   optimism: [
@@ -29,10 +31,16 @@ const RPC_UPSTREAM: Record<ChainName, string[]> = {
   zksync: [
     "https://mainnet.era.zksync.io",
     "https://zksync.drpc.org",
+    "https://1rpc.io/zksync2-era",
   ],
   sepolia: [
     "https://ethereum-sepolia-rpc.publicnode.com",
-    "https://sepolia.drpc.org",
+    "https://1rpc.io/sepolia",
+    "https://sepolia.gateway.tenderly.co",
+  ],
+  "arbitrum-sepolia": [
+    "https://arbitrum-sepolia-rpc.publicnode.com",
+    "https://sepolia-rollup.arbitrum.io/rpc",
   ],
 };
 
@@ -41,6 +49,7 @@ const EXPLORER_UPSTREAM: Partial<Record<ChainName, string>> = {
   arbitrum: "https://arbitrum.blockscout.com",
   base: "https://base.blockscout.com",
   optimism: "https://optimism.blockscout.com",
+  zksync: "https://zksync.blockscout.com",
   sepolia: "https://eth-sepolia.blockscout.com",
 };
 
@@ -53,6 +62,38 @@ const CORS_HEADERS: Record<string, string> = {
 
 function isChain(s: string): s is ChainName {
   return s in RPC_UPSTREAM;
+}
+
+/**
+ * Detect provider-level JSON-RPC refusals delivered with HTTP 200 (such as
+ * rate-limit or API-key gates) so the proxy fails over to the next upstream
+ * while still returning genuine EVM execution errors (e.g. revert / code 3)
+ * immediately.
+ */
+function isProviderRefusal(payload: unknown): string | null {
+  if (typeof payload !== "object" || payload === null) {
+    return "non-object JSON-RPC response";
+  }
+  const obj = payload as Record<string, unknown>;
+  if (!("result" in obj) && !("error" in obj)) {
+    return "missing JSON-RPC result/error";
+  }
+  if ("error" in obj && typeof obj.error === "object" && obj.error !== null) {
+    const err = obj.error as Record<string, unknown>;
+    const code = typeof err.code === "number" ? err.code : undefined;
+    const msg = typeof err.message === "string" ? err.message.toLowerCase() : "";
+    if (
+      code === -32005 ||
+      code === -32029 ||
+      msg.includes("api key") ||
+      msg.includes("unauthorized") ||
+      msg.includes("rate limit") ||
+      msg.includes("too many requests")
+    ) {
+      return `rpc error ${String(code ?? "")}: ${msg}`;
+    }
+  }
+  return null;
 }
 
 async function proxyRpc(chain: ChainName, req: Request): Promise<Response> {
@@ -68,7 +109,20 @@ async function proxyRpc(chain: ChainName, req: Request): Promise<Response> {
         body,
       });
       if (resp.ok) {
-        return new Response(resp.body, {
+        const text = await resp.text();
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(text);
+        } catch {
+          lastErr = `${upstream} -> invalid JSON`;
+          continue;
+        }
+        const refusal = isProviderRefusal(parsed);
+        if (refusal !== null) {
+          lastErr = `${upstream} -> ${refusal}`;
+          continue;
+        }
+        return new Response(text, {
           status: resp.status,
           headers: {
             "Content-Type":
@@ -170,7 +224,7 @@ export default {
       JSON.stringify({
         service: "rustok-rpc-proxy",
         usage: {
-          rpc: "POST /rpc/{ethereum|arbitrum|base|optimism|zksync|sepolia}",
+          rpc: "POST /rpc/{ethereum|arbitrum|base|optimism|zksync|sepolia|arbitrum-sepolia}",
           explorer: "GET /explorer/{chain}/api?module=...",
           health: "GET /health",
         },

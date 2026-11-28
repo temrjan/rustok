@@ -25,7 +25,7 @@ Upstream calls are server-to-server, where Android is not involved.
 | `GET /health` | — | liveness probe |
 | `GET /` | — | usage payload |
 
-`{chain}` is one of `ethereum`, `arbitrum`, `base`, `optimism`, `zksync`, `sepolia`.
+`{chain}` is one of `ethereum`, `arbitrum`, `base`, `optimism`, `zksync`, `sepolia`, `arbitrum-sepolia`.
 
 ## Local development
 

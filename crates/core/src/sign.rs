@@ -19,7 +19,8 @@
 //! Block check internally as defence-in-depth so a caller that forgets
 //! the UI gating still cannot broadcast a blocked transaction.
 
-use alloy_network::EthereumWallet;
+use alloy_eips::eip2718::Encodable2718;
+use alloy_network::{EthereumWallet, TransactionBuilder};
 use alloy_primitives::{Address, B256, TxKind, U256};
 use alloy_provider::{Provider, ProviderBuilder};
 use alloy_rpc_types_eth::TransactionRequest;
@@ -220,33 +221,87 @@ pub async fn sign_and_send_transaction_with_signer(
         tx.max_priority_fee_per_gas = Some(preview.max_priority_fee_per_gas);
     }
 
+    // Sign once locally so every fallback endpoint receives the exact same
+    // deterministic EIP-2718 payload and transaction hash.
+    let envelope = tx
+        .build(&EthereumWallet::from(signer))
+        .await
+        .map_err(|e| SendError::Transaction(format!("sign transaction: {e}")))?;
+    let expected_hash = *envelope.tx_hash();
+    let raw_tx = envelope.encoded_2718();
+
+    broadcast_raw_with_fallback(provider, chain_id, &raw_tx, expected_hash).await
+}
+
+/// Whether a JSON-RPC error indicates the signed transaction is already in
+/// the node's mempool (for example, when the primary endpoint accepted the
+/// broadcast just before a transport timeout and a fallback endpoint sees the
+/// gossiped transaction).
+fn is_already_known_broadcast_error(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("already known") || lower.contains("known transaction")
+}
+
+/// Broadcast a pre-signed EIP-2718 transaction across all configured RPC URLs
+/// for `chain_id`, failing over on transport or upstream errors while
+/// preserving the last concrete node error if every endpoint rejects it.
+pub(crate) async fn broadcast_raw_with_fallback(
+    provider: &MultiProvider,
+    chain_id: u64,
+    raw_tx: &[u8],
+    expected_hash: B256,
+) -> Result<B256, SendError> {
     let chain = provider
         .chains()
         .iter()
         .find(|c| c.id == chain_id)
         .ok_or_else(|| SendError::Provider(format!("chain {chain_id} not found")))?;
 
-    let rpc_url: reqwest::Url = chain
-        .primary_rpc()
-        .ok_or_else(|| SendError::Provider(format!("no RPC URL for chain {chain_id}")))?
-        .parse()
-        .map_err(|e| SendError::Provider(format!("invalid RPC URL: {e}")))?;
+    if chain.rpc_urls.is_empty() {
+        return Err(SendError::Provider(format!(
+            "no RPC URL for chain {chain_id}"
+        )));
+    }
 
-    // Reuse the shared reqwest::Client from `MultiProvider` via
-    // `connect_reqwest`; `connect_http` here would invoke
-    // `reqwest::Client::new()` and panic on uniffi's JSI worker
-    // thread when no tokio reactor is in scope (Issue #23, sister of
-    // #15).
-    let tx_provider = ProviderBuilder::new()
-        .wallet(EthereumWallet::from(signer))
-        .connect_reqwest(provider.http_client().clone(), rpc_url);
+    let mut last_err: Option<String> = None;
 
-    let pending = tx_provider
-        .send_transaction(tx)
-        .await
-        .map_err(|e| SendError::Transaction(format!("{e}")))?;
+    for rpc_url in &chain.rpc_urls {
+        let url: reqwest::Url = match rpc_url.parse() {
+            Ok(u) => u,
+            Err(e) => {
+                last_err = Some(format!("invalid RPC URL ({rpc_url}): {e}"));
+                continue;
+            }
+        };
 
-    Ok(*pending.tx_hash())
+        // Reuse the shared reqwest::Client from `MultiProvider` via
+        // `connect_reqwest`; `connect_http` here would invoke
+        // `reqwest::Client::new()` and panic on uniffi's JSI worker
+        // thread when no tokio reactor is in scope (Issue #23, sister of #15).
+        let tx_provider =
+            ProviderBuilder::new().connect_reqwest(provider.http_client().clone(), url);
+
+        match tx_provider.send_raw_transaction(raw_tx).await {
+            Ok(pending) => return Ok(*pending.tx_hash()),
+            Err(e) => {
+                let msg = e.to_string();
+                if is_already_known_broadcast_error(&msg) {
+                    return Ok(expected_hash);
+                }
+                tracing::debug!(
+                    chain_id,
+                    rpc = %rpc_url,
+                    error = %msg,
+                    "broadcast failed on endpoint, trying next"
+                );
+                last_err = Some(msg);
+            }
+        }
+    }
+
+    Err(SendError::Transaction(last_err.unwrap_or_else(|| {
+        format!("all RPC endpoints failed for chain {chain_id}")
+    })))
 }
 
 /// Compute `(estimated_gas_cost_wei, total_cost_wei)` from gas estimate,
@@ -285,5 +340,19 @@ mod tests {
         let (gas_cost, total) = compute_costs(50_000, 1_000_000_000, U256::ZERO);
         assert_eq!(gas_cost, U256::from(50_000u128 * 1_000_000_000u128));
         assert_eq!(total, gas_cost);
+    }
+
+    #[test]
+    fn detects_already_known_mempool_errors() {
+        assert!(is_already_known_broadcast_error(
+            "server returned an error response: error code -32000: already known"
+        ));
+        assert!(is_already_known_broadcast_error(
+            "Known transaction: 0x1234"
+        ));
+        assert!(!is_already_known_broadcast_error("nonce too low"));
+        assert!(!is_already_known_broadcast_error(
+            "insufficient funds for gas * price + value"
+        ));
     }
 }

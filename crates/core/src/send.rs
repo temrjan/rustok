@@ -3,9 +3,9 @@
 //! Extracts the send flow from CLI into reusable async functions
 //! that both CLI and Tauri commands can call.
 
+use alloy_eips::eip2718::Encodable2718;
 use alloy_network::TransactionBuilder;
 use alloy_primitives::{Address, Bytes, U256};
-use alloy_provider::Provider;
 use alloy_signer_local::PrivateKeySigner;
 use std::time::Duration;
 use thiserror::Error;
@@ -131,35 +131,21 @@ pub async fn execute_send(
 ) -> Result<SendResult, SendError> {
     let from = signer.address();
 
-    // 1. Find RPC URL for the chain.
-    let chain = provider
-        .chains()
-        .iter()
-        .find(|c| c.id == route.chain_id)
-        .ok_or_else(|| SendError::Provider(format!("chain {} not found", route.chain_id)))?;
+    // 1. Ensure the target chain is configured.
+    if !provider.chains().iter().any(|c| c.id == route.chain_id) {
+        return Err(SendError::Provider(format!(
+            "chain {} not found",
+            route.chain_id
+        )));
+    }
 
-    let rpc_url: reqwest::Url = chain
-        .primary_rpc()
-        .ok_or_else(|| SendError::Provider(format!("no RPC URL for chain {}", chain.id)))?
-        .parse()
-        .map_err(|e| SendError::Provider(format!("invalid RPC URL: {e}")))?;
-
-    // 2. Build provider with wallet (auto-signs). Reuse the shared
-    // reqwest::Client from `MultiProvider` via `connect_reqwest`;
-    // `connect_http` here would invoke `reqwest::Client::new()` and
-    // panic on uniffi's JSI worker thread when no tokio reactor is
-    // in scope (Issue #23, sister of #15).
-    let tx_provider = alloy_provider::ProviderBuilder::new()
-        .wallet(alloy_network::EthereumWallet::from(signer))
-        .connect_reqwest(provider.http_client().clone(), rpc_url);
-
-    // 3. Fetch nonce.
+    // 2. Fetch nonce (uses MultiProvider RPC failover).
     let nonce = provider
         .nonce(route.chain_id, from)
         .await
         .map_err(|e| SendError::Provider(format!("nonce: {e}")))?;
 
-    // 4. Build EIP-1559 transaction.
+    // 3. Build and sign EIP-1559 transaction once locally.
     let tx = alloy_rpc_types_eth::TransactionRequest::default()
         .with_to(to)
         .with_value(amount_wei)
@@ -169,17 +155,29 @@ pub async fn execute_send(
         .with_max_fee_per_gas(route.max_fee_per_gas)
         .with_max_priority_fee_per_gas(route.max_priority_fee_per_gas);
 
-    // 5. Send (sign + broadcast).
-    let pending: alloy_provider::PendingTransactionBuilder<_> = tx_provider
-        .send_transaction(tx)
+    let envelope = tx
+        .build(&alloy_network::EthereumWallet::from(signer))
         .await
-        .map_err(|e| SendError::Transaction(format!("{e}")))?;
+        .map_err(|e| SendError::Transaction(format!("sign transaction: {e}")))?;
+    let expected_hash = *envelope.tx_hash();
+    let raw_tx = envelope.encoded_2718();
 
-    // 6. Capture tx_hash before consuming `pending`.
-    let tx_hash: alloy_primitives::B256 = *pending.tx_hash();
+    // 4. Broadcast across configured RPC endpoints with failover.
+    let tx_hash =
+        crate::sign::broadcast_raw_with_fallback(provider, route.chain_id, &raw_tx, expected_hash)
+            .await?;
 
-    // 7. Wait for at least one confirmation with timeout.
-    let receipt = match timeout(Duration::from_secs(120), pending.get_receipt()).await {
+    // 5. Wait for at least one confirmation with timeout (also using RPC failover).
+    let poll_receipt = async {
+        loop {
+            match provider.transaction_receipt(route.chain_id, tx_hash).await {
+                Ok(Some(r)) => return Ok(r),
+                Ok(None) => tokio::time::sleep(Duration::from_secs(2)).await,
+                Err(e) => return Err(e),
+            }
+        }
+    };
+    let receipt = match timeout(Duration::from_secs(120), poll_receipt).await {
         Ok(Ok(r)) => r,
         Ok(Err(e)) => {
             return Err(SendError::Transaction(format!("receipt: {e}")));
