@@ -855,6 +855,14 @@ mod tests {
         );
         assert_eq!(replay.status, OperationStatus::Draft);
         assert_eq!(journal.list_by_chain(1, 100).unwrap().len(), 2);
+
+        journal
+            .save_signed_draft(&replay.id, &[0x02, 0xf8, 0x02])
+            .expect("v1 -> v2 -> v3 migration must add signed_tx column");
+        assert_eq!(
+            journal.signed_draft(&replay.id).unwrap(),
+            Some(vec![0x02, 0xf8, 0x02])
+        );
     }
 
     #[test]
