@@ -15,8 +15,6 @@
  * Questions are returned sorted by `wordIndex` ascending — questions
  * appear in mnemonic order, which reads more naturally than а random
  * ordering of "Word 7, Word 2, Word 11".
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.6 (QuizScreen spec)
  */
 
 import { BIP39_ENGLISH } from './bip39Wordlist';

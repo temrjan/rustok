@@ -90,9 +90,8 @@ jobs:
           # Lockfile lives at the repo root (npm workspaces).
           cache: 'npm'
           cache-dependency-path: package-lock.json
-      # D4 (CI-MOBILE-BROKEN-INCIDENT § 7): Rust toolchain + cross-compile
-      # targets + cargo-ndk + NDK are required for `npm run ubrn:android`
-      # to regenerate `packages/react-native-rustok-bridge/src/index.tsx`
+      # Rust toolchain + cross-compile targets + cargo-ndk + NDK are required
+      # for `npm run ubrn:android` to regenerate `packages/react-native-rustok-bridge/src/index.tsx`
       # (gitignored, generated artifact). Without this, `tsc --noEmit`
       # below fails with TS2307 «Cannot find module
       # 'react-native-rustok-bridge'».

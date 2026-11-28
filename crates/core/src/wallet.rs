@@ -3,7 +3,7 @@
 //!
 //! # Design
 //!
-//! ## C1-A enforcement (per `docs/PHASE-2-CONSTRAINTS.md`)
+//! ## Onboarding mnemonic boundary
 //!
 //! - [`WalletService::create_wallet`] returns ONLY a [`WalletId`] (Ethereum
 //!   address as EIP-55 mixed-case hex). The raw mnemonic never crosses this

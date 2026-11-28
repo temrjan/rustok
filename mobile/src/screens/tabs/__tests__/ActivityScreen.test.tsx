@@ -1,11 +1,11 @@
 /**
  * ActivityScreen — render smoke. Same pattern as ActionRow.test.tsx
- * (and the spec-noted decision to defer deep tree inspection due to
- * the JEST-SETUP-INCIDENT teardown race). Stores are mocked at the
- * module boundary so the screen mounts without exercising real
- * Zustand state. Real coverage for state-machine + chain-aware copy
- * lives in `stores/__tests__/activityStore.test.ts` (data layer) and
- * the device smoke matrix on JFLFG6MZSSL7WCF6 (spec section 5).
+ * (avoids deep tree inspection that can trigger Jest teardown races).
+ * Stores are mocked at the module boundary so the screen mounts
+ * without exercising real Zustand state. Real coverage for
+ * state-machine + chain-aware copy lives in
+ * `stores/__tests__/activityStore.test.ts` (data layer) and
+ * physical-device smoke testing.
  */
 
 import React from 'react';

@@ -2,8 +2,7 @@
  * pinAttemptsStore — Phase 4 M2.2.
  *
  * Persists app-PIN failed-attempt counter and lockout-expiry timestamp
- * для exponential rate-limiting of PIN entry attempts. Per design doc
- * § 5.4 (Captain ruling 2026-05-08): stepped ladder
+ * for exponential rate-limiting of PIN entry attempts: stepped ladder
  * 0 / 0 / 3s / 5s / 10s / 30s / 60s / 120s / 300s cap.
  *
  * Storage is per-field MMKV (3 keys), mirroring the Phase 3
@@ -19,10 +18,6 @@
  * `lockoutUntil = null` is encoded as MMKV key absence (the MMKV API
  * accepts only `boolean | string | number | ArrayBuffer` — no null).
  * Hydrate via `getNumber(KEY) ?? null` round-trips the null state.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 line 149 (M2.2 deliverable)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.4 (Captain-ruled ladder + persistence)
- * @see docs/PHASE4-LOCKOUT-RESEARCH.md (rationale for 300s cap)
  */
 
 import { createMMKV } from 'react-native-mmkv';
@@ -37,7 +32,7 @@ const SCHEMA_VERSION = 1;
 
 /**
  * Lockout duration (ms) для attempts 1..8 by index. Attempts ≥9 use
- * {@link CAP_MS}. Captain ruling 2026-05-08 — see § 5.4.
+ * {@link CAP_MS}.
  */
 const LADDER_MS = [0, 0, 3_000, 5_000, 10_000, 30_000, 60_000, 120_000] as const;
 const CAP_MS = 300_000;

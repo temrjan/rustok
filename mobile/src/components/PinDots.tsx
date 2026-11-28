@@ -17,9 +17,6 @@
  *     UX semantic.
  *   - Shake (`translateX`) applied to outer row container — affects all
  *     6 dots together, correct error UX.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 line 150 (M2.3 deliverable)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.3 (PinDots a11y consumer)
  */
 
 import React, { useEffect, useState } from 'react';

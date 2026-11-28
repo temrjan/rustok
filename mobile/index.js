@@ -8,9 +8,7 @@
 // (Android SecureRandom / iOS SecRandomCopyBytes). MUST be imported
 // FIRST — before Worklets bridge — so any subsequent module that
 // touches `crypto.getRandomValues` (Argon2id salt generation, unlock
-// secret generation, GCM nonce in Phase 5+) sees a defined, secure
-// implementation. See `docs/PHASE4-DESIGN-ONBOARDING.md` § 5.1 entropy
-// section.
+// secret generation, GCM nonce) sees a defined, secure implementation.
 import 'react-native-get-random-values';
 
 // Phase 3 M4 C1: import Worklets at the entry point (before any

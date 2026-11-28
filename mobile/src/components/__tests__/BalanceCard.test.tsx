@@ -4,9 +4,9 @@
  *
  * Render smoke mocks `useWallet` directly to avoid Zustand setState
  * inside test bodies, which triggers the same async-teardown race
- * seen in `NetworkBadge.test.tsx` / `Button.test.tsx`
- * (`docs/JEST-SETUP-INCIDENT.md`). Toast / Clipboard side effects are
- * exercised by the smoke-on-device matrix, not by this unit test.
+ * seen in `NetworkBadge.test.tsx` / `Button.test.tsx`. Toast /
+ * Clipboard side effects are exercised by physical-device smoke,
+ * not by this unit test.
  */
 
 import React from 'react';
@@ -107,8 +107,8 @@ describe('BalanceCard', () => {
 });
 
 // Integration coverage for the Issue #31 themed shadow path. Uses the real
-// `useThemeStore` (not a jest.mock) — `setState` is called before render so
-// no Zustand teardown race per JEST-SETUP-INCIDENT § Lessons. The store
+// `useThemeStore` (not a jest.mock) — `setState` is called before render to
+// avoid any Zustand teardown race. The store
 // default ('system') is restored in afterEach so the prior four tests are
 // unaffected by ordering.
 describe('BalanceCard themed shadow integration', () => {

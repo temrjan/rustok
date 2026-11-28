@@ -42,8 +42,7 @@ interface InputProps {
    * Visible label rendered above the field. Doubles as the screen-reader
    * label when `accessibilityLabel` is omitted.
    *
-   * @remarks One of `label` or `accessibilityLabel` MUST be provided
-   * (C1 a11y constraint — see PHASE3-DESIGN-APPSHELL.md §5).
+   * @remarks One of `label` or `accessibilityLabel` MUST be provided.
    */
   label?: string;
   accessibilityLabel?: string;

@@ -12,10 +12,6 @@
  * Mounted by `UnlockedNavigator` под `presentation: 'modal'`. Reached
  * from `HomeBanner` CTA via `navigation.navigate('BackupPhrase', {
  * screen: 'ShowPhrase' })`.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.9 (HomeBanner CTA target)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.5 (mnemonic lifecycle —
- *      backup-phrase recovery path uses этот stack identity)
  */
 
 import React from 'react';

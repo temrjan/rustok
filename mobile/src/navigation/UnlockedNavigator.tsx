@@ -12,7 +12,6 @@
  * (the modal is dismissed; Tabs surface remains).
  *
  * @see mobile/src/navigation/RootNavigator.tsx (consumer)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.9 (HomeBanner mount surface)
  */
 
 import React from 'react';

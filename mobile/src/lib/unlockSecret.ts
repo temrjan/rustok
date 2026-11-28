@@ -16,11 +16,6 @@
  *
  * F-C2 polyfill prerequisite: `react-native-get-random-values` MUST be
  * imported first line of `mobile/index.js` (verified в M0.1 smoke spike).
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 M0.2 (deliverable spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.1 (entropy + PIN-as-UI-gate)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.6 (KeyPermanentlyInvalidated → caller Recovery flow)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md ### M0 iOS error taxonomy (M5-iOS-Phase4 deferral)
  */
 
 import { Platform } from 'react-native';
@@ -142,22 +137,18 @@ function androidCodeToKind(code: string): UnlockSecretError {
 
 /**
  * Map а raw error from а react-native-keychain rejection to the typed
- * exception. Path D per Reviewer ruling 2026-05-07.
+ * exception.
  *
  * @see node_modules/react-native-keychain/android/src/main/java/com/oblador/keychain/KeychainModule.kt:92-103
  *      (`Errors` annotation companion object — pinned react-native-keychain v10.0.0)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md ### M0 iOS error taxonomy
- *      (M5-iOS-Phase4 deliverable: expand iOS branch below with errSec table)
  */
 function mapKeychainError(e: unknown): UnlockSecretException {
   const message = e instanceof Error ? e.message : undefined;
   const code = extractCode(e);
 
   if (Platform.OS === 'ios') {
-    // M5-iOS-Phase4: handle errSecItemNotFound (-25300) → return false
-    // analogous к Android instead of throwing 'unknown'. See
-    // `docs/PHASE4-DESIGN-ONBOARDING.md` ### M0 iOS error taxonomy для
-    // captured iOS errSec spectrum (deferred — no iOS test device в Phase 4).
+    // Expand iOS branch with errSecItemNotFound (-25300) mapping when
+    // iOS Keychain error taxonomy is wired on device.
     return new UnlockSecretException('unknown', code, message, e);
   }
 

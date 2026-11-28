@@ -26,7 +26,6 @@
  * Lock-back: ALLOWED per § 4.7 line 371 — back к Welcome OK (user may
  * change mind about import).
  *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.7 (spec)
  * @see crates/core/src/wallet.rs `import_from_mnemonic` + `create_wallet`
  *      remove_existing_keystores conflict — drives the walletAlreadyCreated
  *      flag through CreatePin → ConfirmPin.

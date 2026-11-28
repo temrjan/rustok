@@ -15,9 +15,6 @@
  * uses а mounted-ref flag (rather than AbortController forwarded to
  * the native Argon2 call — `react-native-argon2` doesn't expose а
  * cancellation primitive); late resolutions are discarded.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.3 (CreatePinScreen spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.1 (Argon2id params + spinner UX)
  */
 
 import React, { useEffect, useState } from 'react';

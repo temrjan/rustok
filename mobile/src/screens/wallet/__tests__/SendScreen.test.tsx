@@ -9,8 +9,8 @@
  *
  * All state-changing interactions go through `await act(async () => …)`
  * — without that wrapper React schedules the state-update microtask
- * past test teardown, hitting the "import after teardown" race
- * documented in `docs/JEST-SETUP-INCIDENT.md`.
+ * past test teardown, hitting Jest's "import after teardown" microtask
+ * race.
  */
 
 import React from 'react';

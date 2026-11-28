@@ -3,8 +3,8 @@
  * error) plus copy / share callback verification.
  *
  * Render assertions mock `useWallet` directly (same pattern as
- * `BalanceCard.test.tsx` — avoids the Zustand setState race documented
- * in `docs/JEST-SETUP-INCIDENT.md`). Bridge QR fetch is asserted via
+ * `BalanceCard.test.tsx` — avoids Zustand `setState` teardown races).
+ * Bridge QR fetch is asserted via
  * a per-test mock of `lib/walletHandle.getWalletHandle`; Clipboard /
  * Share side effects use the existing `__mocks__/` stubs.
  *

@@ -27,10 +27,6 @@
  * «phase transition didn't happen», we re-read `phase` after the
  * refresh completes; anything ≠ 'unlocked' indicates the soft-fail
  * branch where wallet IS committed but the store didn't update.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.4 (ConfirmPinScreen spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 line 152-165 (atomic + rollback)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.7 (mid-onboarding crash recovery)
  */
 
 import React, { useEffect, useRef, useState } from 'react';

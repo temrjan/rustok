@@ -15,11 +15,6 @@
  * Not encrypted: PHC string contains the Argon2id digest (not the
  * PIN itself) and the backup-pending flag is metadata; the wallet
  * unlock secret lives in the Keychain (см. `unlockSecret.ts`).
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 2 M2.1 (deliverable spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.1 (PHC self-describing format)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.7 (mid-onboarding crash recovery
- *      — consumer of phraseBackupPending)
  */
 
 import { createMMKV } from 'react-native-mmkv';

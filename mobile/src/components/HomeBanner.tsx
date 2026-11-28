@@ -25,9 +25,6 @@
  * in Tabs/Wallet) AND the parent UnlockedNavigator (which holds the
  * BackupPhrase modal group). Both segments are needed because
  * `BackupPhrase` is а route на parent, not on Tabs itself.
- *
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 4.9 (spec)
- * @see docs/PHASE4-DESIGN-ONBOARDING.md § 5.5 + § 5.7 (recovery flow)
  */
 
 import React from 'react';
