@@ -1,11 +1,11 @@
 /**
  * SettingsScreen — Phase 7.
  *
- * Production settings: Security (lock timeout, lock now), Network
- * (picker — testnet live, mainnet visible/disabled, see
- * `NetworkPicker`), Legalize (Compliance Bridge status), Privacy
- * (proxy toggle), About (version, privacy link), and Appearance (theme
- * switcher). DEV-only routes preserved under `{__DEV__}` guards.
+ * Production settings: Appearance (theme switcher), Security (lock
+ * timeout, lock now, biometric opt-in), Network (picker — see
+ * `NetworkPicker`), Smart account (EIP-7702 delegation), Privacy
+ * (proxy toggle), and About (version, privacy link). DEV-only routes
+ * preserved under `{__DEV__}` guards.
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
@@ -20,7 +20,7 @@ import * as Keychain from 'react-native-keychain';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Button, NetworkPicker, Switch, ThemeSwitcher, toast } from '../../components';
+import { Button, NetworkPicker, Switch, ThemeSwitcher } from '../../components';
 import { SmartAccountSection } from './SmartAccountSection';
 import { useWalletStore } from '../../stores/walletStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -158,25 +158,6 @@ function SettingsScreen() {
       {/* Network */}
       <Section title="Network">
         <NetworkPicker />
-      </Section>
-
-      {/* Legalize */}
-      <Section title="Legalize">
-        <Text className="text-ink-muted text-xs mb-3">
-          Rustok never holds your keys or your funds — architecturally, not
-          by promise. For fiat legalization we&apos;re building a Compliance
-          Bridge: an open integration point for a licensed provider (KYC,
-          UZS on/off-ramp, compliance reporting).
-        </Text>
-        <TouchableOpacity
-          onPress={() => toast.info('Compliance Bridge coming soon')}
-          accessibilityRole="button"
-          accessibilityLabel="Compliance Bridge, coming soon"
-          className="flex-row items-center justify-between py-2 opacity-50"
-        >
-          <Text className="text-ink-primary text-base">Connect licensed provider</Text>
-          <Text className="text-ink-muted text-xs">Architecture ready</Text>
-        </TouchableOpacity>
       </Section>
 
       {/* Smart account (EIP-7702 delegation) */}

@@ -7,9 +7,9 @@ name: Android Release Build
 # see the comments there for why each step exists. What this workflow adds is
 # JDK 17, release signing, and Gradle itself, which that job deliberately omits.
 #
-# Uploading to Play is off by default and cannot run until a package name is
-# settled: applicationId is com.rustok while the Play listing is com.rustok.app,
-# and a published package name can never be changed.
+# Uploading to Play is off by default: Google Play requires the first AAB of a
+# new com.rustok listing to be uploaded manually in Play Console, and automated
+# track uploads require GOOGLE_PLAY_SERVICE_ACCOUNT_JSON to be configured.
 
 on:
   workflow_dispatch:
@@ -24,7 +24,7 @@ on:
         default: '1.0.0'
         type: string
       upload_to_play:
-        description: 'Upload the AAB to Play Console (leave off until the package name is settled)'
+        description: 'Upload the AAB to Play Console (requires initial manual upload and service account)'
         required: false
         default: false
         type: boolean
