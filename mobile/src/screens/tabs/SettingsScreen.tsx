@@ -70,7 +70,9 @@ function SettingsScreen() {
   }, []);
 
   const handlePrivacyLink = useCallback(() => {
-    Linking.openURL('https://rustokwallet.com/privacy').catch(() => {});
+    Linking.openURL(
+      'https://github.com/temrjan/rustok/blob/main/PRIVACY.md',
+    ).catch(() => {});
   }, []);
 
   return (

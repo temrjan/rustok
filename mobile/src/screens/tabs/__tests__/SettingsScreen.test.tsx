@@ -286,7 +286,7 @@ describe('SettingsScreen', () => {
       link.props.onPress();
     });
     expect(mockOpenURL).toHaveBeenCalledWith(
-      'https://rustokwallet.com/privacy',
+      'https://github.com/temrjan/rustok/blob/main/PRIVACY.md',
     );
   });
 

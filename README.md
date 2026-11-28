@@ -4,7 +4,7 @@ Ethereum wallet with chain abstraction and transaction security engine.
 
 **Status:** `v1.0.0` — Android (`arm64-v8a`) + Rust workspace (`rustok-core`, `txguard`, CLI, HTTP API); iOS supported from source.
 
-**Website:** [rustokwallet.com](https://rustokwallet.com) | **Releases:** [GitHub Releases](https://github.com/temrjan/rustok/releases) | **X:** [@rustokwallet](https://x.com/rustokwallet) | **Agent editions:** [github.com/rustok-org](https://github.com/rustok-org)
+**Releases:** [GitHub Releases](https://github.com/temrjan/rustok/releases) | **Privacy:** [PRIVACY.md](PRIVACY.md) | **X:** [@rustokwallet](https://x.com/rustokwallet) | **Agent editions:** [github.com/rustok-org](https://github.com/rustok-org)
 
 ---
 
@@ -37,9 +37,8 @@ The mobile app (Android + iOS) is the primary interface. A public HTTP API and C
 
 Signed standalone `arm64-v8a` APKs (`v2 + v3` APK Signature Scheme) and `SHA256SUMS` are published directly:
 
-- **Direct APK + `SHA256SUMS`:** [GitHub Releases](https://github.com/temrjan/rustok/releases) and [rustokwallet.com](https://rustokwallet.com)
+- **Direct APK + `SHA256SUMS`:** [GitHub Releases](https://github.com/temrjan/rustok/releases)
 - **Automatic updates via [Obtainium](https://github.com/ImranR98/Obtainium):** add app source URL `https://github.com/temrjan/rustok`
-- **Zapstore:** package `com.rustok`
 
 See [`docs/ANDROID-RELEASE.md`](docs/ANDROID-RELEASE.md) for reproducible build steps and signature/checksum verification.
 

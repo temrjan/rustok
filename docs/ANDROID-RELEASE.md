@@ -9,9 +9,7 @@ Release builds and signing keys are kept strictly offline on the maintainer's wo
 ## 1. Distribution Channels
 
 - **GitHub Releases (`temrjan/rustok`)** — canonical `rustok-v<version>-arm64-v8a.apk` + `SHA256SUMS`.
-- **Website (`rustokwallet.com`)** — direct download link and SHA-256 fingerprint.
 - **Obtainium** — automatic verified updates directly from `https://github.com/temrjan/rustok`.
-- **Zapstore** — decentralized Android catalog verifying the developer's APK signing certificate and Nostr signature.
 
 Because Android enforces signing-certificate continuity across in-place upgrades across all channels, **the app-signing keystore is permanent**: losing it prevents users from updating without uninstalling. Maintain an encrypted offline backup before publishing the first release.
 
@@ -93,7 +91,7 @@ BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
 # 1. Verify v2 + v3 signatures and confirm non-debug certificate
 "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK"
 
-# 2. Confirm only arm64-v8a native libraries are packaged (~8.1 MiB bridge .so)
+# 2. Confirm only arm64-v8a native libraries are packaged (~7.9 MiB bridge .so)
 unzip -l "$APK" | grep 'lib/.*\.so$'
 
 # 3. Confirm zero external-storage permissions in merged manifest
@@ -110,7 +108,7 @@ cp "$APK" rustok-v1.0.0-arm64-v8a.apk
 sha256sum rustok-v1.0.0-arm64-v8a.apk > SHA256SUMS
 ```
 
-Install `rustok-v1.0.0-arm64-v8a.apk` on a physical Android device (`adb install -r rustok-v1.0.0-arm64-v8a.apk`) and complete live smoke testing (wallet creation/import, single-prompt PIN unlock, mainnet L2 + zkSync Era + Sepolia transfers, and RPC proxy toggle) before uploading `rustok-v1.0.0-arm64-v8a.apk` and `SHA256SUMS` to GitHub Releases.
+Install `rustok-v1.0.0-arm64-v8a.apk` on a physical Android device (`adb install -r rustok-v1.0.0-arm64-v8a.apk`) and complete live smoke testing (wallet creation/import, single-prompt PIN unlock, RPC proxy toggle, and Sepolia transfer) before uploading `rustok-v1.0.0-arm64-v8a.apk` and `SHA256SUMS` to GitHub Releases.
 
 ---
 
