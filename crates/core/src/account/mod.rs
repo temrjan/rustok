@@ -1070,4 +1070,85 @@ mod tests {
         assert_eq!(ok_op.status, OperationStatus::Broadcast);
         assert_eq!(state.lock().unwrap().nonce_calls, 2);
     }
+
+    #[tokio::test]
+    async fn execute_replay_clears_stale_fee_draft_and_resigns_higher_fee() {
+        use std::collections::VecDeque;
+        use std::sync::{Arc, Mutex};
+
+        let state = Arc::new(Mutex::new(MockRpcState {
+            nonce: 9,
+            base_fee_hex: "0x3b9aca00", // 1 gwei
+            nonce_calls: 0,
+            send_raw_calls: 0,
+            sent_payloads: Vec::new(),
+            send_raw_queue: VecDeque::from([
+                // Attempt 1: connection drops before reaching sequencer -> saves raw_1 (1 gwei).
+                None,
+                // Attempt 2: replay cleanly rejected due to risen base fee (`lookup_outcome == None`).
+                Some((
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"max fee per gas less than block base fee"}}"#
+                        .into(),
+                )),
+                // Attempt 3: fresh signing at higher fee succeeds!
+                Some(("200 OK", "__ACCEPT__".into())),
+            ]),
+            get_tx_queue: VecDeque::from([
+                // Attempt 1 post-lookup drops.
+                None,
+                // Attempt 2 pre-lookup confirms raw_1 is absent (`null`).
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+            ]),
+        }));
+        let url = spawn_executor_mock_rpc(Arc::clone(&state)).await;
+        let provider = single_chain_provider(url);
+        let journal = Journal::open_in_memory().unwrap();
+        let signer = test_signer();
+        let calls = vec![sample_call()];
+
+        // Attempt 1: blackout saves raw_1 at 1 gwei.
+        assert!(
+            Executor::new(&provider, &journal)
+                .execute(&signer, 8453, calls.clone())
+                .await
+                .is_err()
+        );
+        let id = journal.list_by_chain(8453, 10).unwrap()[0].id.clone();
+        assert!(journal.signed_draft(&id).unwrap().is_some());
+
+        // Base fee doubles to 2 gwei while offline.
+        state.lock().unwrap().base_fee_hex = "0x77359400";
+
+        // Attempt 2: replay fails cleanly with `max fee per gas less than block base fee`
+        // (`lookup_outcome == None`) -> must clear signed_draft!
+        let err = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls.clone())
+            .await
+            .expect_err("underpriced replay must return fee error");
+        assert!(err.to_string().contains("max fee per gas"));
+        assert_eq!(
+            journal.signed_draft(&id).unwrap(),
+            None,
+            "stale-fee replay rejection must clear signed_tx so payment cannot get stuck"
+        );
+
+        // Attempt 3: re-estimates at 2 gwei, signs distinct payload, and broadcasts!
+        let ok_op = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls)
+            .await
+            .expect("attempt 3 must re-sign with higher fee and succeed");
+        assert_eq!(ok_op.status, OperationStatus::Broadcast);
+
+        let st = state.lock().unwrap();
+        assert_eq!(st.sent_payloads.len(), 3);
+        assert_eq!(
+            st.sent_payloads[0], st.sent_payloads[1],
+            "attempt 2 replayed saved raw_1"
+        );
+        assert_ne!(
+            st.sent_payloads[0], st.sent_payloads[2],
+            "attempt 3 signed fresh payload with higher max_fee_per_gas"
+        );
+    }
 }
