@@ -735,6 +735,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn broadcast_recovers_expected_hash_after_dropped_response_without_nonce_error() {
+        use crate::provider::Chain;
+        use std::sync::{Arc, atomic::AtomicUsize};
+
+        let expected = B256::repeat_byte(0x88);
+        let calls = Arc::new(AtomicUsize::new(0));
+        // Single endpoint accepts the broadcast and drops the HTTP connection before
+        // replying (`saw_ambiguous_err == true`, `saw_nonce_too_low == false`); immediate
+        // `eth_getTransactionByHash` sees the accepted transaction.
+        let dropped_then_visible_url = spawn_method_routing_rpc_server(
+            None,
+            Some((
+                "200 OK",
+                format!(r#"{{"jsonrpc":"2.0","id":1,"result":{{"hash":"{expected}"}}}}"#),
+            )),
+            Arc::clone(&calls),
+        )
+        .await;
+
+        let provider = MultiProvider::new(vec![Chain {
+            id: 8453,
+            name: "Base".into(),
+            rpc_urls: vec![dropped_then_visible_url],
+            explorer_url: "https://basescan.org".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "base",
+        }]);
+
+        let got = broadcast_raw_with_fallback(&provider, 8453, &[0x02, 0xf8, 0x00], expected)
+            .await
+            .expect("dropped broadcast response with visible tx hash must succeed");
+        assert_eq!(got, expected);
+        assert_eq!(calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
     async fn broadcast_keeps_error_on_mismatched_hash_and_skips_lookup_on_clean_rejection() {
         use crate::provider::Chain;
         use std::sync::{Arc, atomic::AtomicUsize};
