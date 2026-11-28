@@ -35,7 +35,6 @@ pub fn default_chains() -> Vec<Chain> {
             rpc_urls: vec![
                 "https://ethereum-rpc.publicnode.com".into(),
                 "https://eth.drpc.org".into(),
-                "https://0xrpc.io/eth".into(),
             ],
             explorer_url: "https://etherscan.io".into(),
             native_symbol: "ETH".into(),
@@ -103,7 +102,6 @@ pub fn default_chains() -> Vec<Chain> {
             name: "Sepolia".into(),
             rpc_urls: vec![
                 "https://ethereum-sepolia-rpc.publicnode.com".into(),
-                "https://0xrpc.io/sep".into(),
                 "https://sepolia.gateway.tenderly.co".into(),
             ],
             explorer_url: "https://sepolia.etherscan.io".into(),
@@ -180,7 +178,8 @@ mod tests {
                         && !url.contains("rpc.sepolia.org")
                         && !url.contains("sepolia.drpc.org")
                         && !url.contains("1rpc.io")
-                        && !url.contains("cloudflare-eth.com"),
+                        && !url.contains("cloudflare-eth.com")
+                        && !url.contains("0xrpc.io"),
                     "{} retains dead or key-gated RPC {}",
                     chain.name,
                     url
