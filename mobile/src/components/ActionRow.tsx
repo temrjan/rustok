@@ -1,7 +1,7 @@
 /**
  * ActionRow — Phase 5 M2b, callback hook added in M3a, hero refactor in PR #3 C2.
  *
- * Horizontal row of three primary wallet actions: Send / Receive / Swap.
+ * Horizontal row of primary wallet actions: Send / Receive, plus optional Swap.
  * Hero refactor changes:
  *   - Form: round periwinkle buttons → rounded-xl squares on `bg-surface-alt`
  *   - Position: standalone in WalletScreen → embedded inside BalanceCard
@@ -9,9 +9,9 @@
  *   - Icon color: hard-coded white → theme-resolved `palette[scheme].ink.primary`
  *     via `useColorScheme()` from `react-native` (auto-resolves `'system'`).
  *
- * Each action takes an optional `onPress` override; when omitted the
- * default fires a "coming soon" toast (the M2b placeholder behaviour).
- * `BalanceCard` (post-refactor) forwards `onSend` / `onReceive` / `onSwap`
+ * `Send` and `Receive` take optional `onPress` overrides; `Swap` renders only
+ * when `onSwap` is supplied so screens without a swap route show no dead
+ * placeholder button. `BalanceCard` forwards `onSend` / `onReceive` / `onSwap`
  * from `WalletScreen` through to here.
  *
  * `ActionButton` is defined at module scope to keep React component
@@ -92,12 +92,14 @@ export function ActionRow({ onSend, onReceive, onSwap }: ActionRowProps = {}) {
         label="Receive"
         onPress={onReceive ?? (() => toast.info('Receive coming soon'))}
       />
-      <ActionButton
-        icon={ArrowLeftRight}
-        iconColor={iconColor}
-        label="Swap"
-        onPress={onSwap ?? (() => toast.info('Swap coming soon'))}
-      />
+      {onSwap !== undefined && (
+        <ActionButton
+          icon={ArrowLeftRight}
+          iconColor={iconColor}
+          label="Swap"
+          onPress={onSwap}
+        />
+      )}
     </View>
   );
 }

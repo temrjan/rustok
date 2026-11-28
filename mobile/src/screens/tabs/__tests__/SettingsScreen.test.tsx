@@ -289,4 +289,39 @@ describe('SettingsScreen', () => {
       'https://rustokwallet.com/privacy',
     );
   });
+
+  it('does not render coming-soon Compliance Bridge / Legalize placeholder', async () => {
+    let tr!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tr = renderer.create(<SettingsScreen />);
+      await flush();
+    });
+    const comingSoonNodes = tr.root.findAll(
+      n =>
+        typeof n.props?.accessibilityLabel === 'string' &&
+        n.props.accessibilityLabel.toLowerCase().includes('coming soon'),
+    );
+    expect(comingSoonNodes).toHaveLength(0);
+
+    const texts = tr.root
+      .findAllByType('Text' as unknown as React.ComponentType)
+      .map(n => n.props.children)
+      .filter((c): c is string => typeof c === 'string');
+    expect(texts.some(t => t.includes('Legalize') || t.includes('Compliance Bridge'))).toBe(
+      false,
+    );
+  });
+
+  it('displays app version 1.0.0 in About section', async () => {
+    let tr!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tr = renderer.create(<SettingsScreen />);
+      await flush();
+    });
+    const texts = tr.root
+      .findAllByType('Text' as unknown as React.ComponentType)
+      .map(n => n.props.children)
+      .filter((c): c is string => typeof c === 'string');
+    expect(texts).toContain('1.0.0');
+  });
 });
