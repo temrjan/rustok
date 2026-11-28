@@ -16,19 +16,20 @@
 
 const EXPLORERS: ReadonlyMap<bigint, string> = new Map([
   [1n, 'https://etherscan.io'],
-  [11155111n, 'https://sepolia.etherscan.io'],
   [42161n, 'https://arbiscan.io'],
   [8453n, 'https://basescan.org'],
   [10n, 'https://optimistic.etherscan.io'],
+  [324n, 'https://explorer.zksync.io'],
+  [11155111n, 'https://sepolia.etherscan.io'],
 ]);
 
 export const CHAIN_NAMES: ReadonlyMap<bigint, string> = new Map([
   [1n, 'Ethereum'],
-  [11155111n, 'Sepolia'],
-  [42161n, 'Arbitrum'],
+  [42161n, 'Arbitrum One'],
   [8453n, 'Base'],
   [10n, 'Optimism'],
   [324n, 'zkSync Era'],
+  [11155111n, 'Sepolia'],
 ]);
 
 /**

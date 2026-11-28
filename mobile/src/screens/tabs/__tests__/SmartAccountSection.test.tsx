@@ -100,6 +100,8 @@ describe('SmartAccountSection', () => {
     expect(text).toContain('Not enabled');
     expect(text).toContain('Enabled');
     expect(text).toContain('Foreign delegation');
+    expect(text).toContain('Arbitrum One');
+    expect(text).not.toContain('zkSync Era');
   });
 
   it('shows the foreign delegation target address (§5.2.5)', async () => {

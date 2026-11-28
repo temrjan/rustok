@@ -38,18 +38,25 @@ describe('txUrl', () => {
     );
   });
 
+  it('returns the zkSync Era URL', () => {
+    expect(txUrl(324n, SAMPLE_HASH)).toBe(
+      `https://explorer.zksync.io/tx/${SAMPLE_HASH}`,
+    );
+  });
+
   it('returns null for an unknown chain', () => {
     expect(txUrl(999999n, SAMPLE_HASH)).toBeNull();
   });
 });
 
 describe('chainName', () => {
-  it('returns canonical names for the 5 whitelisted chains', () => {
+  it('returns canonical names for all 6 supported chains', () => {
     expect(chainName(1n)).toBe('Ethereum');
-    expect(chainName(11155111n)).toBe('Sepolia');
-    expect(chainName(42161n)).toBe('Arbitrum');
+    expect(chainName(42161n)).toBe('Arbitrum One');
     expect(chainName(8453n)).toBe('Base');
     expect(chainName(10n)).toBe('Optimism');
+    expect(chainName(324n)).toBe('zkSync Era');
+    expect(chainName(11155111n)).toBe('Sepolia');
   });
 
   it('returns null for unknown chain ids', () => {

@@ -24,12 +24,10 @@
  * security validation runs on the Rust side via `parse_address` and
  * `parse_u256` inside `previewSend` / `sendEth`.
  *
- * Known UX caveat (cross-PR, not M3b regression): `NetworkBadge`
- * sources from `getChainId()` which returns the provider's `primary`
- * chain (= Ethereum mainnet by default). The router on the next screen
- * inspects per-chain balance and picks the cheapest viable route, so
- * the executed chain may differ from the badge — full chain selector
- * lands in Phase 7.
+ * Displayed balance, `insufficientFunds`, and `MAX` are scoped to the
+ * currently selected chain (`chainId ?? 1n`, matching `WalletService`'s
+ * `primary_chain_id()` fallback) from `balance.chains` so funds on one
+ * network (e.g. Sepolia) never mask an empty balance on another.
  */
 
 import React, { useCallback, useMemo, useState } from 'react';
@@ -74,18 +72,28 @@ function SendScreen() {
   const [maxApplied, setMaxApplied] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
 
+  // Match `WalletService::preview_send` fallback: when no preferred chain
+  // has been selected yet, Rust routes against `primary_chain_id()` (1n).
+  const activeChainId = chainId ?? 1n;
+
+  const selectedChainBalance = useMemo(() => {
+    if (balance === undefined) return undefined;
+    return balance.chains.find((c) => c.chainId === activeChainId);
+  }, [balance, activeChainId]);
+
   const balanceWei = useMemo<bigint | null>(() => {
-    if (balance === undefined) return null;
+    if (selectedChainBalance === undefined) return null;
     try {
-      return BigInt(balance.totalWei);
+      return BigInt(selectedChainBalance.balanceWei);
     } catch (e: unknown) {
-      // Rust U256 → decimal-string contract should make this impossible,
-      // but log in dev so a future bridge regression doesn't silently
-      // disable the insufficient-funds check.
-      if (__DEV__) console.warn('walletStore.balance.totalWei malformed', e);
+      // Rust U256 → decimal-string contract makes this unreachable unless the
+      // bridge regresses; log in dev so it cannot fail silently.
+      if (__DEV__) {
+        console.warn('walletStore.balance.chains[].balanceWei malformed', e);
+      }
       return null;
     }
-  }, [balance]);
+  }, [selectedChainBalance]);
 
   const amountWei = useMemo<bigint | null>(() => parseEthToWei(amount), [amount]);
 
@@ -102,10 +110,12 @@ function SendScreen() {
   }, []);
 
   const handleMax = useCallback(() => {
-    if (balance === undefined) return;
-    setAmount(strippedAmount(balance.totalWei));
+    if (selectedChainBalance === undefined || balanceWei === null || balanceWei === 0n) {
+      return;
+    }
+    setAmount(strippedAmount(selectedChainBalance.balanceWei));
     setMaxApplied(true);
-  }, [balance]);
+  }, [selectedChainBalance, balanceWei]);
 
   const handleReview = useCallback(() => {
     if (!canReview || amountWei === null) return;
@@ -153,9 +163,12 @@ function SendScreen() {
             <Text className="text-ink-muted text-xs uppercase tracking-wide">
               Amount
             </Text>
-            {balance !== undefined && (
-              <Text className="text-ink-muted text-xs">
-                Balance: {balance.approximateTotalFormatted}
+            {selectedChainBalance !== undefined && (
+              <Text
+                accessibilityLabel="Selected chain balance"
+                className="text-ink-muted text-xs"
+              >
+                Balance: {formatWeiToEth(selectedChainBalance.balanceWei)}
               </Text>
             )}
           </View>
@@ -175,7 +188,7 @@ function SendScreen() {
               variant="secondary"
               size="sm"
               accessibilityLabel="Use max balance"
-              disabled={balance === undefined}
+              disabled={balanceWei === null || balanceWei === 0n}
             >
               MAX
             </Button>
@@ -213,12 +226,13 @@ function SendScreen() {
           Select network
         </Text>
         {Array.from(CHAIN_NAMES.entries()).map(([id, name]) => {
-          const active = id === chainId;
+          const active = id === activeChainId;
           return (
             <Pressable
               key={id.toString()}
               onPress={() => {
                 setChainId(id);
+                setMaxApplied(false);
                 setSelectorOpen(false);
               }}
               accessibilityLabel={name}

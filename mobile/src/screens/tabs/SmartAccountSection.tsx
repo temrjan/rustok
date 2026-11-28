@@ -32,7 +32,7 @@ const DELEGATION_CHAINS: ReadonlyArray<{ id: bigint; name: string }> = [
   { id: 11155111n, name: 'Sepolia' },
   { id: 421614n, name: 'Arbitrum Sepolia' },
   { id: 1n, name: 'Ethereum' },
-  { id: 42161n, name: 'Arbitrum' },
+  { id: 42161n, name: 'Arbitrum One' },
   { id: 8453n, name: 'Base' },
   { id: 10n, name: 'Optimism' },
 ];

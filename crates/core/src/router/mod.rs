@@ -17,6 +17,25 @@ use thiserror::Error;
 
 use crate::provider::{MultiProvider, ProviderError};
 
+/// EIP-155 chain ID for zkSync Era mainnet.
+const ZKSYNC_ERA_CHAIN_ID: u64 = 324;
+
+/// Fallback gas limit when `eth_estimateGas` fails (e.g. when a near-MAX
+/// send exceeds balance before fee deduction).
+///
+/// zkSync Era (324) includes EraVM L1 pubdata overhead in `eth_estimateGas`
+/// (~177k gas for a plain EOA transfer), so 21,000 would underestimate the
+/// required fee by ~8x.
+const fn fallback_gas_limit(chain_id: u64, is_empty_calldata: bool) -> u64 {
+    if chain_id == ZKSYNC_ERA_CHAIN_ID {
+        if is_empty_calldata { 200_000 } else { 300_000 }
+    } else if is_empty_calldata {
+        21_000
+    } else {
+        65_000
+    }
+}
+
 /// Errors from routing operations.
 #[derive(Debug, Error)]
 pub enum RouterError {
@@ -101,16 +120,13 @@ pub async fn find_routes(
             }
         };
 
-        // Estimate gas (skip chain on failure, default to 21000 for simple transfers)
+        // Estimate gas (fallback to chain-appropriate gas floor on failure)
         let estimated_gas = match provider
             .estimate_gas(chain.id, from, to, calldata.clone(), value)
             .await
         {
             Ok(gas) => gas,
-            Err(_) => {
-                // Fallback: 21000 for ETH transfer, 65000 for contract call
-                if calldata.is_empty() { 21_000 } else { 65_000 }
-            }
+            Err(_) => fallback_gas_limit(chain.id, calldata.is_empty()),
         };
 
         // Total cost = gas * max_fee_per_gas
@@ -193,10 +209,7 @@ pub async fn build_route_for_chain(
         .await
     {
         Ok(gas) => gas,
-        Err(_) => {
-            // Fallback: 21000 for ETH transfer, 65000 for contract call
-            if calldata.is_empty() { 21_000 } else { 65_000 }
-        }
+        Err(_) => fallback_gas_limit(chain_id, calldata.is_empty()),
     };
 
     let estimated_cost = U256::from(estimated_gas).saturating_mul(U256::from(fees.max_fee_per_gas));
@@ -279,5 +292,14 @@ mod tests {
         assert_eq!(routes[0].chain_id, 8453); // Base cheapest
         assert_eq!(routes[1].chain_id, 42161); // Arbitrum second
         assert_eq!(routes[2].chain_id, 1); // Ethereum most expensive
+    }
+
+    #[test]
+    fn fallback_gas_limit_accounts_for_zksync_pubdata() {
+        assert_eq!(fallback_gas_limit(1, true), 21_000);
+        assert_eq!(fallback_gas_limit(8453, true), 21_000);
+        assert_eq!(fallback_gas_limit(1, false), 65_000);
+        assert_eq!(fallback_gas_limit(324, true), 200_000);
+        assert_eq!(fallback_gas_limit(324, false), 300_000);
     }
 }

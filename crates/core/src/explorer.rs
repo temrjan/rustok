@@ -1,7 +1,7 @@
 //! Block explorer API client — fetches transaction history from Etherscan-compatible APIs.
 //!
-//! Supports all chains with Etherscan-compatible APIs (Ethereum, Arbitrum, Base,
-//! Optimism, Sepolia). zkSync Era uses a different API format and is excluded.
+//! Supports all chains with public Blockscout instances (Ethereum, Arbitrum One,
+//! Base, Optimism, zkSync Era, Sepolia).
 
 use alloy_primitives::Address;
 use rustok_types::{TransactionDto, TransactionHistoryDto};
@@ -47,6 +47,7 @@ const fn api_url(chain_id: u64) -> Option<&'static str> {
         42161 => Some("https://arbitrum.blockscout.com/api"),
         8453 => Some("https://base.blockscout.com/api"),
         10 => Some("https://optimism.blockscout.com/api"),
+        324 => Some("https://zksync.blockscout.com/api"),
         11155111 => Some("https://eth-sepolia.blockscout.com/api"),
         _ => None,
     }
@@ -243,14 +244,13 @@ mod tests {
         assert!(api_url(42161).is_some());
         assert!(api_url(8453).is_some());
         assert!(api_url(10).is_some());
+        assert_eq!(api_url(324), Some("https://zksync.blockscout.com/api"));
         assert!(api_url(11155111).is_some());
     }
 
     #[test]
     fn api_url_unknown_chain() {
-        // zkSync Era — no Etherscan-compatible API.
-        assert!(api_url(324).is_none());
-        // Random chain.
+        assert!(api_url(421614).is_none());
         assert!(api_url(999999).is_none());
     }
 
