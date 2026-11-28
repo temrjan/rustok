@@ -103,7 +103,12 @@ Play отвергает загрузку, если `versionCode` не выше �
 
 ## 3. Локальная сборка
 
+Перед сборкой обязательно пересобрать нативный мост с флагом `--release` (`ubrn:android:release`),
+иначе CMake влинкует в релиз отладочный `librustok_mobile_bindings.a`, если до этого запускался
+обычный `ubrn:android`:
+
 ```bash
+npm run ubrn:android:release -w packages/react-native-rustok-bridge
 cd mobile/android
 JAVA_HOME=<путь к JDK 17> ./gradlew bundleRelease \
   -PversionCode=2 -PversionName=1.0.1
