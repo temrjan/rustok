@@ -277,23 +277,20 @@ impl<'a> Executor<'a> {
     /// the "Network too slow" bug (ADR-001 §2: the old path blocked on the
     /// receipt for 120 s inside Rust while the UI timed out at 12 s).
     ///
-    /// Residual double-broadcast window (review finding, circle 1 PR-1):
-    /// signing/broadcast happens inside
-    /// [`crate::sign::sign_and_send_transaction_with_signer`], so the
-    /// journal's dedupe guarantee does NOT cover
-    /// (a) a kill between an RPC-accepted broadcast and
-    ///     [`Journal::mark_broadcast`], nor
-    /// (b) two CONCURRENT `execute` calls with the same
-    ///     `(chain_id, from, calls)` inside one process (e.g. a UI
-    ///     double-tap): both can observe `Draft` before either reaches
-    ///     `mark_broadcast`, and both would broadcast — with distinct nonces
-    ///     both transactions could land.
+    /// Crash / blackout safety: the signed EIP-2718 payload (embedding the
+    /// exact `nonce` and deterministic `tx_hash`) is persisted on the `Draft`
+    /// row via `Journal::save_signed_draft` BEFORE the first network
+    /// broadcast attempt. If the connection drops for the entire attempt or
+    /// the process is killed before [`Journal::mark_broadcast`], a subsequent
+    /// `execute` checks `eth_getTransactionByHash` for that exact hash and
+    /// otherwise replays the identical signed bytes — never signing a second
+    /// transaction with `nonce + 1` until the saved payload is confirmed
+    /// absent on-chain and substantively rejected.
     ///
-    /// Closing this needs the signed envelope and nonce stored in the journal
-    /// BEFORE broadcast (the Executor owning signing) plus serialization per
-    /// dedupe key — that is the `send.rs`/`sign.rs` absorption PR of circle 1.
-    /// HARD GATE: until then `execute` must not be wired into the bridge/UI
-    /// (PR-3) without call-site serialization per `(chain_id, from, calls)`.
+    /// Concurrency requirement: callers sharing one [`Journal`] in-process
+    /// MUST serialize `execute` calls (enforced on mobile by
+    /// `WalletHandle::op_lock`). Two concurrent unserialized calls could both
+    /// observe `Draft` before either persists `signed_tx`.
     ///
     /// # Errors
     ///
@@ -330,6 +327,33 @@ impl<'a> Executor<'a> {
             return Ok(op);
         }
 
+        if let Some(saved_raw_tx) = self.journal.signed_draft(&op.id)? {
+            let expected_hash = alloy_primitives::keccak256(&saved_raw_tx);
+            if self
+                .provider
+                .transaction_exists(chain_id, expected_hash)
+                .await?
+            {
+                return Ok(self.journal.mark_broadcast(&op.id, expected_hash)?);
+            }
+            return match crate::sign::broadcast_raw_classified(
+                self.provider,
+                chain_id,
+                &saved_raw_tx,
+                expected_hash,
+            )
+            .await
+            {
+                Ok(tx_hash) => Ok(self.journal.mark_broadcast(&op.id, tx_hash)?),
+                Err(failure) => {
+                    if failure.clear_saved_on_replay {
+                        self.journal.clear_signed_draft(&op.id)?;
+                    }
+                    Err(AccountError::Send(failure.err))
+                }
+            };
+        }
+
         let tx = match op.path {
             SubmissionPath::DirectEoa => {
                 debug_assert_eq!(op.calls.len(), 1, "DirectEoa path implies a single call");
@@ -359,11 +383,21 @@ impl<'a> Executor<'a> {
             }
         };
 
-        let tx_hash =
-            crate::sign::sign_and_send_transaction_with_signer(signer, self.provider, tx, chain_id)
-                .await?;
+        let (raw_tx, expected_hash) =
+            crate::sign::prepare_and_sign_transaction(signer, self.provider, tx, chain_id).await?;
+        self.journal.save_signed_draft(&op.id, &raw_tx)?;
 
-        Ok(self.journal.mark_broadcast(&op.id, tx_hash)?)
+        match crate::sign::broadcast_raw_classified(self.provider, chain_id, &raw_tx, expected_hash)
+            .await
+        {
+            Ok(tx_hash) => Ok(self.journal.mark_broadcast(&op.id, tx_hash)?),
+            Err(failure) => {
+                if failure.clear_saved_on_initial {
+                    self.journal.clear_signed_draft(&op.id)?;
+                }
+                Err(AccountError::Send(failure.err))
+            }
+        }
     }
 
     /// Current status of an operation: journal state, refreshed from the
@@ -567,5 +601,473 @@ mod tests {
         assert_eq!(op.error, None);
         assert!(op.created_at > 0);
         assert_eq!(op.created_at, op.updated_at);
+    }
+
+    struct MockRpcState {
+        nonce: u64,
+        base_fee_hex: &'static str,
+        nonce_calls: usize,
+        send_raw_calls: usize,
+        sent_payloads: Vec<Vec<u8>>,
+        /// Queued outcomes for `eth_sendRawTransaction`: `None` closes TCP,
+        /// `Some((status, body))` writes HTTP response; `"__ACCEPT__"` returns the tx hash.
+        send_raw_queue: std::collections::VecDeque<Option<(&'static str, String)>>,
+        /// Queued outcomes for `eth_getTransactionByHash`: `None` closes TCP,
+        /// `Some((status, body))` writes HTTP response; `"__MATCH_FIRST__"` returns
+        /// a tx object matching `keccak256(sent_payloads[0])`.
+        get_tx_queue: std::collections::VecDeque<Option<(&'static str, String)>>,
+    }
+
+    async fn spawn_executor_mock_rpc(
+        state: std::sync::Arc<std::sync::Mutex<MockRpcState>>,
+    ) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind executor mock RPC");
+        let addr = listener.local_addr().expect("mock local_addr");
+
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 8192];
+                let n = socket.read(&mut buf).await.unwrap_or(0);
+                let req_str = String::from_utf8_lossy(&buf[..n]);
+                let body_json: Option<serde_json::Value> = req_str
+                    .split("\r\n\r\n")
+                    .nth(1)
+                    .and_then(|b| serde_json::from_str(b).ok());
+                let method = body_json
+                    .as_ref()
+                    .and_then(|v| v.get("method"))
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("");
+
+                let reply: Option<(&'static str, String)> = {
+                    let mut st = state.lock().expect("mock state lock");
+                    match method {
+                        "eth_estimateGas" => {
+                            Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":"0x5208"}"#.into()))
+                        }
+                        "eth_feeHistory" => Some((
+                            "200 OK",
+                            format!(
+                                r#"{{"jsonrpc":"2.0","id":1,"result":{{"oldestBlock":"0x1","baseFeePerGas":["{0}","{0}"],"gasUsedRatio":[0.5],"reward":[["0x5f5e100"]]}}}}"#,
+                                st.base_fee_hex
+                            ),
+                        )),
+                        "eth_getTransactionCount" => {
+                            st.nonce_calls += 1;
+                            Some((
+                                "200 OK",
+                                format!(r#"{{"jsonrpc":"2.0","id":1,"result":"0x{:x}"}}"#, st.nonce),
+                            ))
+                        }
+                        "eth_sendRawTransaction" => {
+                            st.send_raw_calls += 1;
+                            if let Some(hex_param) = body_json
+                                .as_ref()
+                                .and_then(|v| v.get("params"))
+                                .and_then(|p| p.get(0))
+                                .and_then(|s| s.as_str())
+                            {
+                                let raw = alloy_primitives::hex::decode(hex_param)
+                                    .expect("valid hex raw_tx");
+                                st.sent_payloads.push(raw);
+                            }
+                            match st.send_raw_queue.pop_front().flatten() {
+                                Some((status, body)) if body == "__ACCEPT__" => {
+                                    let hash = alloy_primitives::keccak256(
+                                        st.sent_payloads.last().expect("recorded raw_tx"),
+                                    );
+                                    Some((
+                                        status,
+                                        format!(r#"{{"jsonrpc":"2.0","id":1,"result":"{hash}"}}"#),
+                                    ))
+                                }
+                                other => other,
+                            }
+                        }
+                        "eth_getTransactionByHash" => match st.get_tx_queue.pop_front().flatten() {
+                            Some((status, body)) if body == "__MATCH_FIRST__" => {
+                                let hash = alloy_primitives::keccak256(&st.sent_payloads[0]);
+                                Some((
+                                    status,
+                                    format!(
+                                        r#"{{"jsonrpc":"2.0","id":1,"result":{{"hash":"{hash}"}}}}"#
+                                    ),
+                                ))
+                            }
+                            other => other,
+                        },
+                        _ => Some((
+                            "200 OK",
+                            r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}"#
+                                .into(),
+                        )),
+                    }
+                };
+
+                if let Some((status_line, body)) = reply {
+                    let resp = format!(
+                        "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                        body.len()
+                    );
+                    let _ = socket.write_all(resp.as_bytes()).await;
+                }
+                let _ = socket.shutdown().await;
+            }
+        });
+
+        format!("http://{addr}")
+    }
+
+    fn test_signer() -> alloy_signer_local::PrivateKeySigner {
+        alloy_primitives::b256!("0000000000000000000000000000000000000000000000000000000000000042")
+            .to_string()
+            .parse()
+            .expect("valid test private key")
+    }
+
+    fn single_chain_provider(url: String) -> MultiProvider {
+        MultiProvider::new(vec![crate::provider::Chain {
+            id: 8453,
+            name: "Base".into(),
+            rpc_urls: vec![url],
+            explorer_url: "https://basescan.org".into(),
+            native_symbol: "ETH".into(),
+            native_decimals: 18,
+            testnet: false,
+            slug: "base",
+        }])
+    }
+
+    #[tokio::test]
+    async fn execute_recovers_after_full_blackout_and_keeps_draft_across_offline_retry() {
+        use std::collections::VecDeque;
+        use std::sync::{Arc, Mutex};
+
+        let state = Arc::new(Mutex::new(MockRpcState {
+            nonce: 7,
+            base_fee_hex: "0x3b9aca00",
+            nonce_calls: 0,
+            send_raw_calls: 0,
+            sent_payloads: Vec::new(),
+            // Attempt 1 drops TCP on broadcast.
+            send_raw_queue: VecDeque::from([None]),
+            // Attempt 1 post-lookup drops TCP, Attempt 2 pre-lookup drops TCP (still offline),
+            // Attempt 3 pre-lookup sees the mined tx!
+            get_tx_queue: VecDeque::from([None, None, Some(("200 OK", "__MATCH_FIRST__".into()))]),
+        }));
+        let url = spawn_executor_mock_rpc(Arc::clone(&state)).await;
+        let provider = single_chain_provider(url);
+        let journal = Journal::open_in_memory().unwrap();
+        let signer = test_signer();
+        let calls = vec![sample_call()];
+
+        // Attempt 1: packet leaves, phone loses connectivity completely.
+        let err1 = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls.clone())
+            .await
+            .expect_err("blackout during broadcast must fail attempt 1");
+        assert!(matches!(err1, AccountError::Send(_)));
+
+        let ops = journal.list_by_chain(8453, 10).unwrap();
+        assert_eq!(ops.len(), 1);
+        assert_eq!(ops[0].status, OperationStatus::Draft);
+        assert_eq!(ops[0].tx_hash, None);
+        let saved_raw = journal
+            .signed_draft(&ops[0].id)
+            .unwrap()
+            .expect("signed_tx must remain persisted after blackout");
+        let expected_hash = alloy_primitives::keccak256(&saved_raw);
+
+        // Meanwhile on-chain the tx mined, advancing account nonce to 8.
+        state.lock().unwrap().nonce = 8;
+
+        // Attempt 2: user retries while still offline in elevator — must keep signed_tx.
+        let err2 = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls.clone())
+            .await
+            .expect_err("offline retry must return provider error");
+        assert!(matches!(err2, AccountError::Provider(_)));
+        assert!(journal.signed_draft(&ops[0].id).unwrap().is_some());
+
+        // Attempt 3: connectivity returns — recovers expected_hash without signing nonce 8!
+        let recovered = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls)
+            .await
+            .expect("retry after blackout must recover mined tx");
+        assert_eq!(recovered.id, ops[0].id);
+        assert_eq!(recovered.status, OperationStatus::Broadcast);
+        assert_eq!(recovered.tx_hash, Some(expected_hash));
+        assert_eq!(journal.signed_draft(&ops[0].id).unwrap(), None);
+
+        let st = state.lock().unwrap();
+        assert_eq!(st.nonce_calls, 1, "must never fetch nonce a second time");
+        assert_eq!(
+            st.send_raw_calls, 1,
+            "must never broadcast a second transaction"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_recovers_window2_lagging_proxy_replica_on_retry() {
+        use std::collections::VecDeque;
+        use std::sync::{Arc, Mutex};
+
+        let state = Arc::new(Mutex::new(MockRpcState {
+            nonce: 12,
+            base_fee_hex: "0x3b9aca00",
+            nonce_calls: 0,
+            send_raw_calls: 0,
+            sent_payloads: Vec::new(),
+            // Attempt 1: proxy upstream #2 returns HTTP 200 `nonce too low` (`saw_ambiguous_err == false`).
+            send_raw_queue: VecDeque::from([Some((
+                "200 OK",
+                r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}"#
+                    .into(),
+            ))]),
+            // Attempt 1 post-lookup hits lagging proxy replica (`null`);
+            // Attempt 2 pre-lookup sees caught-up replica (`__MATCH_FIRST__`).
+            get_tx_queue: VecDeque::from([
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+                Some(("200 OK", "__MATCH_FIRST__".into())),
+            ]),
+        }));
+        let url = spawn_executor_mock_rpc(Arc::clone(&state)).await;
+        let provider = single_chain_provider(url);
+        let journal = Journal::open_in_memory().unwrap();
+        let signer = test_signer();
+        let calls = vec![sample_call()];
+
+        let _err = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls.clone())
+            .await
+            .expect_err("lagging replica on attempt 1 surfaces error");
+        let draft = &journal.list_by_chain(8453, 10).unwrap()[0];
+        assert!(
+            journal.signed_draft(&draft.id).unwrap().is_some(),
+            "nonce-too-low on initial attempt must retain signed_tx against lagging replica"
+        );
+
+        state.lock().unwrap().nonce = 13;
+        let recovered = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls)
+            .await
+            .expect("caught-up replica on attempt 2 must recover without second send");
+        assert_eq!(recovered.status, OperationStatus::Broadcast);
+        let st = state.lock().unwrap();
+        assert_eq!(st.nonce_calls, 1);
+        assert_eq!(st.send_raw_calls, 1);
+    }
+
+    #[tokio::test]
+    async fn execute_clears_signed_draft_on_clean_initial_rejection_so_retry_resigns() {
+        use std::collections::VecDeque;
+        use std::sync::{Arc, Mutex};
+
+        let state = Arc::new(Mutex::new(MockRpcState {
+            nonce: 3,
+            base_fee_hex: "0x3b9aca00", // 1 gwei
+            nonce_calls: 0,
+            send_raw_calls: 0,
+            sent_payloads: Vec::new(),
+            send_raw_queue: VecDeque::from([
+                Some((
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"max fee per gas less than block base fee"}}"#
+                        .into(),
+                )),
+                Some(("200 OK", "__ACCEPT__".into())),
+            ]),
+            get_tx_queue: VecDeque::new(),
+        }));
+        let url = spawn_executor_mock_rpc(Arc::clone(&state)).await;
+        let provider = single_chain_provider(url);
+        let journal = Journal::open_in_memory().unwrap();
+        let signer = test_signer();
+        let calls = vec![sample_call()];
+
+        let err = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls.clone())
+            .await
+            .expect_err("underpriced initial broadcast must fail");
+        assert!(err.to_string().contains("max fee per gas"));
+
+        let draft = &journal.list_by_chain(8453, 10).unwrap()[0];
+        assert_eq!(
+            journal.signed_draft(&draft.id).unwrap(),
+            None,
+            "clean non-nonce initial rejection must clear signed_tx"
+        );
+
+        // Base fee doubles to 2 gwei; retry must re-estimate and sign a fresh payload.
+        state.lock().unwrap().base_fee_hex = "0x77359400";
+        let ok_op = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls)
+            .await
+            .expect("retry after clean rejection must re-sign with fresh fee and succeed");
+        assert_eq!(ok_op.status, OperationStatus::Broadcast);
+
+        let st = state.lock().unwrap();
+        assert_eq!(st.sent_payloads.len(), 2);
+        assert_ne!(
+            st.sent_payloads[0], st.sent_payloads[1],
+            "second attempt must sign fresh fee parameters"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_replays_identical_bytes_when_first_packet_never_reached_network() {
+        use std::collections::VecDeque;
+        use std::sync::{Arc, Mutex};
+
+        let state = Arc::new(Mutex::new(MockRpcState {
+            nonce: 5,
+            base_fee_hex: "0x3b9aca00",
+            nonce_calls: 0,
+            send_raw_calls: 0,
+            sent_payloads: Vec::new(),
+            send_raw_queue: VecDeque::from([None, Some(("200 OK", "__ACCEPT__".into()))]),
+            get_tx_queue: VecDeque::from([
+                None,
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+            ]),
+        }));
+        let url = spawn_executor_mock_rpc(Arc::clone(&state)).await;
+        let provider = single_chain_provider(url);
+        let journal = Journal::open_in_memory().unwrap();
+        let signer = test_signer();
+        let calls = vec![sample_call()];
+
+        let _ = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls.clone())
+            .await
+            .expect_err("attempt 1 dropped before reaching sequencer");
+
+        let ok_op = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls)
+            .await
+            .expect("attempt 2 must replay exact saved bytes and succeed");
+        assert_eq!(ok_op.status, OperationStatus::Broadcast);
+
+        let st = state.lock().unwrap();
+        assert_eq!(st.nonce_calls, 1);
+        assert_eq!(st.sent_payloads.len(), 2);
+        assert_eq!(
+            st.sent_payloads[0], st.sent_payloads[1],
+            "replay must broadcast byte-for-byte identical signed envelope"
+        );
+    }
+
+    #[tokio::test]
+    async fn execute_replay_clears_stale_draft_only_when_clean_and_lookup_succeeded() {
+        use std::collections::VecDeque;
+        use std::sync::{Arc, Mutex};
+
+        let state = Arc::new(Mutex::new(MockRpcState {
+            nonce: 7,
+            base_fee_hex: "0x3b9aca00",
+            nonce_calls: 0,
+            send_raw_calls: 0,
+            sent_payloads: Vec::new(),
+            send_raw_queue: VecDeque::from([
+                // Attempt 1: drop TCP -> saves raw_1.
+                None,
+                // Attempt 2: replay returns HTTP 200 `nonce too low`, but post-lookup drops TCP!
+                Some((
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}"#
+                        .into(),
+                )),
+                // Attempt 3: replay hits HTTP 502 Bad Gateway (`saw_ambiguous_err == true`)!
+                Some(("502 Bad Gateway", r#"{"error":"bad gateway"}"#.into())),
+                // Attempt 4: replay cleanly returns `nonce too low` AND post-lookup confirms `null`!
+                Some((
+                    "200 OK",
+                    r#"{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"nonce too low"}}"#
+                        .into(),
+                )),
+                // Attempt 5: fresh signing with nonce 8 succeeds!
+                Some(("200 OK", "__ACCEPT__".into())),
+            ]),
+            get_tx_queue: VecDeque::from([
+                // Attempt 1 post-lookup drops.
+                None,
+                // Attempt 2 pre-lookup `null`, post-lookup drops (`Some(Err)` -> must NOT clear!).
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+                None,
+                // Attempt 3 pre-lookup `null`, post-lookup `null` (but `saw_ambiguous_err` -> must NOT clear!).
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+                // Attempt 4 pre-lookup `null`, post-lookup `null` (clean + confirmed absent -> MUST clear!).
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+                Some(("200 OK", r#"{"jsonrpc":"2.0","id":1,"result":null}"#.into())),
+            ]),
+        }));
+        let url = spawn_executor_mock_rpc(Arc::clone(&state)).await;
+        let provider = single_chain_provider(url);
+        let journal = Journal::open_in_memory().unwrap();
+        let signer = test_signer();
+        let calls = vec![sample_call()];
+
+        // Attempt 1: initial drop.
+        assert!(
+            Executor::new(&provider, &journal)
+                .execute(&signer, 8453, calls.clone())
+                .await
+                .is_err()
+        );
+        let id = journal.list_by_chain(8453, 10).unwrap()[0].id.clone();
+        assert!(journal.signed_draft(&id).unwrap().is_some());
+
+        // Another wallet consumed nonce 7 while offline -> chain nonce is now 8.
+        state.lock().unwrap().nonce = 8;
+
+        // Attempt 2: post-lookup dropped -> must retain signed_draft.
+        assert!(
+            Executor::new(&provider, &journal)
+                .execute(&signer, 8453, calls.clone())
+                .await
+                .is_err()
+        );
+        assert!(
+            journal.signed_draft(&id).unwrap().is_some(),
+            "must retain signed_tx when post-replay lookup fails"
+        );
+
+        // Attempt 3: HTTP 502 on replay -> must retain signed_draft.
+        assert!(
+            Executor::new(&provider, &journal)
+                .execute(&signer, 8453, calls.clone())
+                .await
+                .is_err()
+        );
+        assert!(
+            journal.signed_draft(&id).unwrap().is_some(),
+            "must retain signed_tx when replay encounters ambiguous HTTP error"
+        );
+
+        // Attempt 4: clean `nonce too low` + confirmed `null` -> clears signed_draft!
+        assert!(
+            Executor::new(&provider, &journal)
+                .execute(&signer, 8453, calls.clone())
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            journal.signed_draft(&id).unwrap(),
+            None,
+            "confirmed stale draft must be cleared so next retry can sign nonce 8"
+        );
+
+        // Attempt 5: signs fresh with nonce 8 and succeeds!
+        let ok_op = Executor::new(&provider, &journal)
+            .execute(&signer, 8453, calls)
+            .await
+            .expect("retry after clearing stale draft must sign nonce 8 and succeed");
+        assert_eq!(ok_op.status, OperationStatus::Broadcast);
+        assert_eq!(state.lock().unwrap().nonce_calls, 2);
     }
 }

@@ -32,9 +32,9 @@ use super::{Call, Operation, OperationStatus, SubmissionPath};
 
 /// Current schema version, stored in `PRAGMA user_version` for future
 /// migrations.
-const SCHEMA_VERSION: u32 = 2;
+const SCHEMA_VERSION: u32 = 3;
 
-/// SQL to create the `operations` table (schema v2).
+/// SQL to create the `operations` table (schema v3).
 const CREATE_OPERATIONS_TABLE_SQL: &str = "
     CREATE TABLE IF NOT EXISTS operations (
         id           TEXT PRIMARY KEY,
@@ -48,7 +48,8 @@ const CREATE_OPERATIONS_TABLE_SQL: &str = "
         block_number INTEGER,
         error        TEXT,
         created_at   INTEGER NOT NULL,
-        updated_at   INTEGER NOT NULL
+        updated_at   INTEGER NOT NULL,
+        signed_tx    BLOB
     );
 ";
 
@@ -157,7 +158,11 @@ impl Journal {
             .map_err(JournalError::Sqlite)?;
         match version {
             0 => Self::create_schema(&conn)?,
-            1 => Self::migrate_v1_to_v2(&conn)?,
+            1 => {
+                Self::migrate_v1_to_v2(&conn)?;
+                Self::migrate_v2_to_v3(&conn)?;
+            }
+            2 => Self::migrate_v2_to_v3(&conn)?,
             SCHEMA_VERSION => {}
             _ => {
                 return Err(JournalError::CorruptRow(format!(
@@ -207,6 +212,16 @@ impl Journal {
              PRAGMA user_version = 2;
              COMMIT;"
         ))?;
+        Ok(())
+    }
+
+    fn migrate_v2_to_v3(conn: &Connection) -> Result<(), JournalError> {
+        conn.execute_batch(
+            "BEGIN;
+             ALTER TABLE operations ADD COLUMN signed_tx BLOB;
+             PRAGMA user_version = 3;
+             COMMIT;",
+        )?;
         Ok(())
     }
 
@@ -295,6 +310,58 @@ impl Journal {
         Self::row_by_dedupe(&conn, dedupe_key)
     }
 
+    /// Persist the EIP-2718 signed transaction bytes on a `Draft` operation
+    /// before attempting network broadcast so a lost connection or process kill
+    /// cannot cause a second transaction with a fresh nonce on retry.
+    pub(crate) fn save_signed_draft(&self, id: &str, signed_tx: &[u8]) -> Result<(), JournalError> {
+        if signed_tx.is_empty() {
+            return Err(JournalError::CorruptRow(format!(
+                "empty signed_tx for operation {id}"
+            )));
+        }
+        let _ = self.transition(
+            id,
+            "signed_tx = ?2, updated_at = ?3",
+            params![id, signed_tx, now_unix_i64()],
+            &[OperationStatus::Draft],
+            OperationStatus::Draft,
+        )?;
+        Ok(())
+    }
+
+    /// Read the pre-broadcast signed EIP-2718 transaction bytes stored on a
+    /// `Draft` operation, if any.
+    pub(crate) fn signed_draft(&self, id: &str) -> Result<Option<Vec<u8>>, JournalError> {
+        let conn = self.lock()?;
+        let stored: Option<Option<Vec<u8>>> = conn
+            .query_row(
+                "SELECT signed_tx FROM operations WHERE id = ?1 AND status = ?2",
+                params![id, OperationStatus::Draft.as_str()],
+                |row| row.get(0),
+            )
+            .optional()?;
+        match stored.flatten() {
+            Some(bytes) if bytes.is_empty() => Err(JournalError::CorruptRow(format!(
+                "empty signed_tx in operation {id}"
+            ))),
+            other => Ok(other),
+        }
+    }
+
+    /// Clear a stored signed payload from a `Draft` operation once it is
+    /// confirmed absent on-chain and substantively rejected (e.g. stale fee or
+    /// externally consumed nonce), allowing the next retry to sign fresh.
+    pub(crate) fn clear_signed_draft(&self, id: &str) -> Result<(), JournalError> {
+        let _ = self.transition(
+            id,
+            "signed_tx = NULL, updated_at = ?2",
+            params![id, now_unix_i64()],
+            &[OperationStatus::Draft],
+            OperationStatus::Draft,
+        )?;
+        Ok(())
+    }
+
     /// Mark a `Draft` operation broadcast with its transaction hash.
     ///
     /// # Errors
@@ -305,7 +372,7 @@ impl Journal {
     pub fn mark_broadcast(&self, id: &str, tx_hash: B256) -> Result<Operation, JournalError> {
         self.transition(
             id,
-            "status = ?2, tx_hash = ?3, updated_at = ?4",
+            "status = ?2, tx_hash = ?3, signed_tx = NULL, updated_at = ?4",
             params![
                 id,
                 OperationStatus::Broadcast.as_str(),
@@ -346,7 +413,7 @@ impl Journal {
     pub fn mark_failed(&self, id: &str, error: &str) -> Result<Operation, JournalError> {
         self.transition(
             id,
-            "status = ?2, error = ?3, updated_at = ?4",
+            "status = ?2, error = ?3, signed_tx = NULL, updated_at = ?4",
             params![id, OperationStatus::Failed.as_str(), error, now_unix_i64()],
             &[OperationStatus::Draft, OperationStatus::Broadcast],
             OperationStatus::Failed,
@@ -999,5 +1066,68 @@ mod tests {
         assert_ne!(base, dedupe_key(1, Address::ZERO, "[]"));
         assert_ne!(base, dedupe_key(1, from_addr(), "[{}]"));
         assert_eq!(base, dedupe_key(1, from_addr(), "[]"), "deterministic");
+    }
+
+    #[test]
+    fn migration_from_v2_adds_signed_tx_and_preserves_rows() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("journal-v2.db");
+
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE operations (
+                    id           TEXT PRIMARY KEY,
+                    dedupe_key   TEXT NOT NULL,
+                    chain_id     INTEGER NOT NULL,
+                    from_address TEXT NOT NULL,
+                    calls_json   TEXT NOT NULL,
+                    path         TEXT NOT NULL,
+                    status       TEXT NOT NULL,
+                    tx_hash      TEXT,
+                    block_number INTEGER,
+                    error        TEXT,
+                    created_at   INTEGER NOT NULL,
+                    updated_at   INTEGER NOT NULL
+                );
+                PRAGMA user_version = 2;",
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO operations
+                    (id, dedupe_key, chain_id, from_address, calls_json, path, status,
+                     tx_hash, block_number, error, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, NULL, NULL, ?8, ?8)",
+                params![
+                    "0xv2draft000000000000000000000000000000000000000000000000000000000",
+                    "dedupe_v2",
+                    8453i64,
+                    from_addr().to_string(),
+                    serde_json::to_string(&[sample_call()]).unwrap(),
+                    SubmissionPath::DirectEoa.as_str(),
+                    OperationStatus::Draft.as_str(),
+                    1700i64,
+                ],
+            )
+            .unwrap();
+        }
+
+        let journal = Journal::open(&path).unwrap();
+        let id = "0xv2draft000000000000000000000000000000000000000000000000000000000";
+        assert_eq!(journal.signed_draft(id).unwrap(), None);
+
+        journal.save_signed_draft(id, &[0x02, 0xf8, 0x01]).unwrap();
+        assert_eq!(
+            journal.signed_draft(id).unwrap(),
+            Some(vec![0x02, 0xf8, 0x01])
+        );
+
+        let hash = b256!("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc");
+        journal.mark_broadcast(id, hash).unwrap();
+        assert_eq!(
+            journal.signed_draft(id).unwrap(),
+            None,
+            "mark_broadcast must clear signed_tx and leave Draft"
+        );
     }
 }
