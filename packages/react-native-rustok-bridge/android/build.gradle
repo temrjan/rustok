@@ -74,7 +74,11 @@ android {
     }
     externalNativeBuild {
       cmake {
-        arguments '-DANDROID_STL=c++_shared'
+        // Hide internal Rust staticlib symbols (~84k exports + relocation tables)
+        // from libreact-native-rustok-bridge.so while keeping C++/JNI entry points
+        // and CMakeLists.txt's 16 KB page-alignment linker flag intact.
+        arguments '-DANDROID_STL=c++_shared',
+                  '-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--exclude-libs,librustok_mobile_bindings.a'
         abiFilters (*reactNativeArchitectures())
       }
     }
